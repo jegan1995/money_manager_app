@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "678119502568",
+    "project_id": "money-manager-jegan-2026",
+    "storage_bucket": "money-manager-jegan-2026.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:678119502568:android:e316fe5241f6a874eacf5d",
+        "android_client_info": {
+          "package_name": "com.jegan.money_manager_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCzZ5ySZ5XuF6YlcV6VUDp8WXsAELGpEGM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -4,6 +4,7 @@ import '../models/transaction.dart' as app_transaction;
 import '../models/transaction_filter.dart';
 import '../services/firestore_service.dart';
 import 'add_transaction_screen.dart';
+import 'edit_transaction_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -694,7 +695,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildTransactionTile(app_transaction.Transaction transaction) {
+Widget _buildTransactionTile(app_transaction.Transaction transaction) {
     final isIncome = transaction.type == 'income';
     final color = isIncome ? Colors.green : Colors.red;
     final icon = isIncome ? Icons.arrow_upward : Icons.arrow_downward;
@@ -723,8 +724,24 @@ class _HomeScreenState extends State<HomeScreen> {
           transaction.title,
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-        subtitle: Text(
-          '${transaction.category} • ${DateFormat('dd MMM yyyy').format(transaction.date)}',
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${transaction.category} • ${DateFormat('dd MMM yyyy').format(transaction.date)}',
+            ),
+            if (transaction.notes != null && transaction.notes!.isNotEmpty)
+              Text(
+                transaction.notes!,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                  fontStyle: FontStyle.italic,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+          ],
         ),
         trailing: Text(
           '${isIncome ? '+' : '-'}₹${transaction.amount.toStringAsFixed(2)}',
@@ -734,6 +751,14 @@ class _HomeScreenState extends State<HomeScreen> {
             fontWeight: FontWeight.bold,
           ),
         ),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => EditTransactionScreen(transaction: transaction),
+            ),
+          );
+        },
       ),
     );
   }

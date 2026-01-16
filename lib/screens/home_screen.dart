@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/transaction.dart' as app_transaction;
+import '../models/transaction_filter.dart';
 import '../services/firestore_service.dart';
 import 'add_transaction_screen.dart';
 
@@ -13,6 +14,298 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final FirestoreService _firestoreService = FirestoreService();
+  final TextEditingController _searchController = TextEditingController();
+  
+  TransactionFilter _filter = TransactionFilter();
+  
+  final List<String> _allCategories = [
+    'Food',
+    'Transport',
+    'Shopping',
+    'Bills',
+    'Entertainment',
+    'Health',
+    'Education',
+    'Salary',
+    'Business',
+    'Investment',
+    'Gift',
+    'Other'
+  ];
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<app_transaction.Transaction> _applyFilters(
+      List<app_transaction.Transaction> transactions) {
+    List<app_transaction.Transaction> filtered = transactions;
+
+    // Filter by search query
+    if (_filter.searchQuery.isNotEmpty) {
+      filtered = filtered
+          .where((t) => t.title
+              .toLowerCase()
+              .contains(_filter.searchQuery.toLowerCase()))
+          .toList();
+    }
+
+    // Filter by type (income/expense)
+    if (_filter.type != FilterType.all) {
+      String typeString =
+          _filter.type == FilterType.income ? 'income' : 'expense';
+      filtered = filtered.where((t) => t.type == typeString).toList();
+    }
+
+    // Filter by category
+    if (_filter.category != null) {
+      filtered = filtered.where((t) => t.category == _filter.category).toList();
+    }
+
+    // Filter by date
+    if (_filter.dateFilter != DateFilter.all) {
+      DateTime now = DateTime.now();
+      DateTime startOfDay = DateTime(now.year, now.month, now.day);
+
+      switch (_filter.dateFilter) {
+        case DateFilter.today:
+          filtered = filtered
+              .where((t) =>
+                  t.date.isAfter(startOfDay.subtract(const Duration(days: 1))))
+              .toList();
+          break;
+        case DateFilter.last7days:
+          filtered = filtered
+              .where((t) =>
+                  t.date.isAfter(startOfDay.subtract(const Duration(days: 7))))
+              .toList();
+          break;
+        case DateFilter.last30days:
+          filtered = filtered
+              .where((t) =>
+                  t.date.isAfter(startOfDay.subtract(const Duration(days: 30))))
+              .toList();
+          break;
+        case DateFilter.custom:
+          if (_filter.startDate != null && _filter.endDate != null) {
+            filtered = filtered
+                .where((t) =>
+                    t.date.isAfter(_filter.startDate!) &&
+                    t.date.isBefore(_filter.endDate!.add(const Duration(days: 1))))
+                .toList();
+          }
+          break;
+        default:
+          break;
+      }
+    }
+
+    return filtered;
+  }
+
+  void _showFilterDialog() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Filter Transactions',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (_filter.hasActiveFilters)
+                      TextButton(
+                        onPressed: () {
+                          setState(() {
+                            _filter = TransactionFilter();
+                            _searchController.clear();
+                          });
+                          Navigator.pop(context);
+                        },
+                        child: const Text('Clear All'),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+
+                // Type Filter
+                const Text(
+                  'Type',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    FilterChip(
+                      label: const Text('All'),
+                      selected: _filter.type == FilterType.all,
+                      onSelected: (selected) {
+                        setModalState(() {
+                          setState(() {
+                            _filter = _filter.copyWith(type: FilterType.all);
+                          });
+                        });
+                      },
+                    ),
+                    FilterChip(
+                      label: const Text('Income'),
+                      selected: _filter.type == FilterType.income,
+                      selectedColor: Colors.green.shade100,
+                      onSelected: (selected) {
+                        setModalState(() {
+                          setState(() {
+                            _filter = _filter.copyWith(type: FilterType.income);
+                          });
+                        });
+                      },
+                    ),
+                    FilterChip(
+                      label: const Text('Expense'),
+                      selected: _filter.type == FilterType.expense,
+                      selectedColor: Colors.red.shade100,
+                      onSelected: (selected) {
+                        setModalState(() {
+                          setState(() {
+                            _filter = _filter.copyWith(type: FilterType.expense);
+                          });
+                        });
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // Date Filter
+                const Text(
+                  'Date Range',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    FilterChip(
+                      label: const Text('All Time'),
+                      selected: _filter.dateFilter == DateFilter.all,
+                      onSelected: (selected) {
+                        setModalState(() {
+                          setState(() {
+                            _filter = _filter.copyWith(dateFilter: DateFilter.all);
+                          });
+                        });
+                      },
+                    ),
+                    FilterChip(
+                      label: const Text('Today'),
+                      selected: _filter.dateFilter == DateFilter.today,
+                      onSelected: (selected) {
+                        setModalState(() {
+                          setState(() {
+                            _filter = _filter.copyWith(dateFilter: DateFilter.today);
+                          });
+                        });
+                      },
+                    ),
+                    FilterChip(
+                      label: const Text('Last 7 Days'),
+                      selected: _filter.dateFilter == DateFilter.last7days,
+                      onSelected: (selected) {
+                        setModalState(() {
+                          setState(() {
+                            _filter =
+                                _filter.copyWith(dateFilter: DateFilter.last7days);
+                          });
+                        });
+                      },
+                    ),
+                    FilterChip(
+                      label: const Text('Last 30 Days'),
+                      selected: _filter.dateFilter == DateFilter.last30days,
+                      onSelected: (selected) {
+                        setModalState(() {
+                          setState(() {
+                            _filter =
+                                _filter.copyWith(dateFilter: DateFilter.last30days);
+                          });
+                        });
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // Category Filter
+                const Text(
+                  'Category',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    FilterChip(
+                      label: const Text('All Categories'),
+                      selected: _filter.category == null,
+                      onSelected: (selected) {
+                        setModalState(() {
+                          setState(() {
+                            _filter = _filter.copyWith(category: null);
+                          });
+                        });
+                      },
+                    ),
+                    ..._allCategories.map((category) {
+                      return FilterChip(
+                        label: Text(category),
+                        selected: _filter.category == category,
+                        onSelected: (selected) {
+                          setModalState(() {
+                            setState(() {
+                              _filter = _filter.copyWith(
+                                  category: selected ? category : null);
+                            });
+                          });
+                        },
+                      );
+                    }).toList(),
+                  ],
+                ),
+                const SizedBox(height: 20),
+
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.all(16),
+                  ),
+                  child: const Text('Apply Filters'),
+                ),
+                const SizedBox(height: 10),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -20,9 +313,107 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('Money Manager'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        actions: [
+          if (_filter.hasActiveFilters)
+            IconButton(
+              icon: const Icon(Icons.filter_alt_off),
+              tooltip: 'Clear Filters',
+              onPressed: () {
+                setState(() {
+                  _filter = TransactionFilter();
+                  _searchController.clear();
+                });
+              },
+            ),
+          IconButton(
+            icon: const Icon(Icons.filter_list),
+            tooltip: 'Filter',
+            onPressed: _showFilterDialog,
+          ),
+        ],
       ),
       body: Column(
         children: [
+          // Search Bar
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Search transactions...',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          setState(() {
+                            _searchController.clear();
+                            _filter = _filter.copyWith(searchQuery: '');
+                          });
+                        },
+                      )
+                    : null,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                filled: true,
+                fillColor: Colors.grey.shade100,
+              ),
+              onChanged: (value) {
+                setState(() {
+                  _filter = _filter.copyWith(searchQuery: value);
+                });
+              },
+            ),
+          ),
+
+          // Active Filters Display
+          if (_filter.hasActiveFilters)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (_filter.type != FilterType.all)
+                    Chip(
+                      label: Text(_filter.type == FilterType.income
+                          ? 'Income'
+                          : 'Expense'),
+                      backgroundColor: _filter.type == FilterType.income
+                          ? Colors.green.shade100
+                          : Colors.red.shade100,
+                      deleteIcon: const Icon(Icons.close, size: 18),
+                      onDeleted: () {
+                        setState(() {
+                          _filter = _filter.copyWith(type: FilterType.all);
+                        });
+                      },
+                    ),
+                  if (_filter.category != null)
+                    Chip(
+                      label: Text(_filter.category!),
+                      deleteIcon: const Icon(Icons.close, size: 18),
+                      onDeleted: () {
+                        setState(() {
+                          _filter = _filter.copyWith(category: null);
+                        });
+                      },
+                    ),
+                  if (_filter.dateFilter != DateFilter.all)
+                    Chip(
+                      label: Text(_getDateFilterLabel()),
+                      deleteIcon: const Icon(Icons.close, size: 18),
+                      onDeleted: () {
+                        setState(() {
+                          _filter = _filter.copyWith(dateFilter: DateFilter.all);
+                        });
+                      },
+                    ),
+                ],
+              ),
+            ),
+
           // Balance card
           _buildBalanceCard(),
 
@@ -60,13 +451,73 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 }
 
-                final transactions = snapshot.data!;
+                final allTransactions = snapshot.data!;
+                final filteredTransactions = _applyFilters(allTransactions);
 
-                return ListView.builder(
-                  itemCount: transactions.length,
-                  itemBuilder: (context, index) {
-                    return _buildTransactionTile(transactions[index]);
-                  },
+                if (filteredTransactions.isEmpty && _filter.hasActiveFilters) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.search_off, size: 80, color: Colors.grey),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'No transactions found',
+                          style: TextStyle(fontSize: 18, color: Colors.grey),
+                        ),
+                        const SizedBox(height: 8),
+                        TextButton(
+                          onPressed: () {
+                            setState(() {
+                              _filter = TransactionFilter();
+                              _searchController.clear();
+                            });
+                          },
+                          child: const Text('Clear filters'),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                return Column(
+                  children: [
+                    // Transaction count
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '${filteredTransactions.length} transaction${filteredTransactions.length != 1 ? 's' : ''}',
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          if (_filter.hasActiveFilters)
+                            Text(
+                              'of ${allTransactions.length} total',
+                              style: TextStyle(
+                                color: Colors.grey.shade600,
+                                fontSize: 12,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    // Transaction list
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: filteredTransactions.length,
+                        itemBuilder: (context, index) {
+                          return _buildTransactionTile(
+                              filteredTransactions[index]);
+                        },
+                      ),
+                    ),
+                  ],
                 );
               },
             ),
@@ -85,6 +536,21 @@ class _HomeScreenState extends State<HomeScreen> {
         child: const Icon(Icons.add),
       ),
     );
+  }
+
+  String _getDateFilterLabel() {
+    switch (_filter.dateFilter) {
+      case DateFilter.today:
+        return 'Today';
+      case DateFilter.last7days:
+        return 'Last 7 Days';
+      case DateFilter.last30days:
+        return 'Last 30 Days';
+      case DateFilter.custom:
+        return 'Custom Range';
+      default:
+        return 'All Time';
+    }
   }
 
   Widget _buildBalanceCard() {
@@ -126,10 +592,12 @@ class _HomeScreenState extends State<HomeScreen> {
             );
           }
 
+          final filteredTransactions = _applyFilters(snapshot.data!);
+
           double totalIncome = 0;
           double totalExpense = 0;
 
-          for (var transaction in snapshot.data!) {
+          for (var transaction in filteredTransactions) {
             if (transaction.type == 'income') {
               totalIncome += transaction.amount;
             } else {
@@ -141,12 +609,33 @@ class _HomeScreenState extends State<HomeScreen> {
 
           return Column(
             children: [
-              const Text(
-                'Total Balance',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 16,
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Balance',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 16,
+                    ),
+                  ),
+                  if (_filter.hasActiveFilters)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Text(
+                        'Filtered',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                ],
               ),
               const SizedBox(height: 8),
               Text(

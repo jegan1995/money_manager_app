@@ -5,9 +5,12 @@ class Transaction {
   final String title;
   final double amount;
   final String category;
-  final String type; // 'income' or 'expense'
+  final String type;
   final DateTime date;
   final String? notes;
+  final String? paymentMethod;
+  final String? accountId;
+  final List<String>? tags;
 
   Transaction({
     required this.id,
@@ -17,9 +20,11 @@ class Transaction {
     required this.type,
     required this.date,
     this.notes,
+    this.paymentMethod,
+    this.accountId,
+    this.tags,
   });
 
-  // Convert Transaction to Map for Firestore
   Map<String, dynamic> toMap() {
     return {
       'title': title,
@@ -28,10 +33,12 @@ class Transaction {
       'type': type,
       'date': Timestamp.fromDate(date),
       'notes': notes,
+      'paymentMethod': paymentMethod,
+      'accountId': accountId,
+      'tags': tags,
     };
   }
 
-  // Create Transaction from Firestore document
   factory Transaction.fromFirestore(DocumentSnapshot doc) {
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
     return Transaction(
@@ -42,6 +49,9 @@ class Transaction {
       type: data['type'] ?? 'expense',
       date: (data['date'] as Timestamp).toDate(),
       notes: data['notes'],
+      paymentMethod: data['paymentMethod'],
+      accountId: data['accountId'],
+      tags: data['tags'] != null ? List<String>.from(data['tags']) : null,
     );
   }
 }

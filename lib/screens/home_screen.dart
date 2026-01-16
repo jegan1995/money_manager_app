@@ -6,6 +6,8 @@ import '../services/firestore_service.dart';
 import 'add_transaction_screen.dart';
 import 'edit_transaction_screen.dart';
 import 'reports_screen.dart';
+import '../utils/category_icons.dart';
+import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -317,6 +319,18 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
           IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: 'Settings',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const SettingsScreen(),
+                ),
+              );
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.insert_chart),
             tooltip: 'Reports',
             onPressed: () {
@@ -430,6 +444,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
           // Balance card
           _buildBalanceCard(),
+          
+          // Quick stats
+          StreamBuilder<List<app_transaction.Transaction>>(
+            stream: _firestoreService.getTransactions(),
+            builder: (context, snapshot) {
+              if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+                return _buildQuickStats(snapshot.data!);
+              }
+              return const SizedBox.shrink();
+            },
+          ),
 
           // Transaction list
           Expanded(
@@ -711,7 +736,6 @@ class _HomeScreenState extends State<HomeScreen> {
 Widget _buildTransactionTile(app_transaction.Transaction transaction) {
     final isIncome = transaction.type == 'income';
     final color = isIncome ? Colors.green : Colors.red;
-    final icon = isIncome ? Icons.arrow_upward : Icons.arrow_downward;
 
     return Dismissible(
       key: Key(transaction.id),
@@ -730,8 +754,11 @@ Widget _buildTransactionTile(app_transaction.Transaction transaction) {
       },
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: color.withOpacity(0.1),
-          child: Icon(icon, color: color),
+          backgroundColor: CategoryIcons.getColor(transaction.category).withOpacity(0.2),
+          child: Icon(
+            CategoryIcons.getIcon(transaction.category),
+            color: CategoryIcons.getColor(transaction.category),
+          ),
         ),
         title: Text(
           transaction.title,

@@ -21,6 +21,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   String _selectedCategory = 'Food';
   DateTime _selectedDate = DateTime.now();
   bool _isLoading = false;
+  
+  // ✅ NEW: Payment method variables
+  String? _selectedPaymentMethod;
+  final List<String> _paymentMethods = ['Cash', 'Card', 'UPI', 'Bank Transfer'];
 
   final List<String> _expenseCategories = [
     'Food',
@@ -70,6 +74,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       });
 
       try {
+        // ✅ UPDATED: Added paymentMethod parameter
         final transaction = app_transaction.Transaction(
           id: '',
           title: _titleController.text,
@@ -78,6 +83,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           type: _selectedType,
           date: _selectedDate,
           notes: _notesController.text.isEmpty ? null : _notesController.text,
+          paymentMethod: _selectedPaymentMethod,  // ✅ NEW LINE
         );
 
         await _firestoreService.addTransaction(transaction);
@@ -225,6 +231,28 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   side: BorderSide(color: Colors.grey.shade400),
                 ),
                 onTap: () => _selectDate(context),
+              ),
+              const SizedBox(height: 16),
+
+              // ✅ NEW: Payment method dropdown
+              DropdownButtonFormField<String>(
+                value: _selectedPaymentMethod,
+                decoration: const InputDecoration(
+                  labelText: 'Payment Method (Optional)',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.payment),
+                ),
+                items: _paymentMethods.map((String method) {
+                  return DropdownMenuItem<String>(
+                    value: method,
+                    child: Text(method),
+                  );
+                }).toList(),
+                onChanged: (String? newValue) {
+                  setState(() {
+                    _selectedPaymentMethod = newValue;
+                  });
+                },
               ),
               const SizedBox(height: 16),
 

@@ -29,7 +29,7 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyBiBHhxyIkL2-5cpjn7P796x4LI4iNF1NM',
+    apiKey: 'AIzaSyCzZ5ySZ5XuF6YlcV6VUDp8WXsAELGpEGM',
     appId: '1:678119502568:android:e316fe5241f6a874eacf5d',
     messagingSenderId: '678119502568',
     projectId: 'money-manager-jegan-2026',

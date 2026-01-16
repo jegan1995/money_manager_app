@@ -5,6 +5,7 @@ import '../models/transaction_filter.dart';
 import '../services/firestore_service.dart';
 import 'add_transaction_screen.dart';
 import 'edit_transaction_screen.dart';
+import 'reports_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -315,6 +316,18 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text('Money Manager'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.insert_chart),
+            tooltip: 'Reports',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ReportsScreen(),
+                ),
+              );
+            },
+          ),
           if (_filter.hasActiveFilters)
             IconButton(
               icon: const Icon(Icons.filter_alt_off),

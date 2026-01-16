@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
 import '../providers/theme_provider.dart';
 import '../services/firestore_service.dart';
 import '../services/export_service.dart';
@@ -23,7 +22,6 @@ class SettingsScreen extends StatelessWidget {
         children: [
           const SizedBox(height: 10),
           
-          // Appearance Section
           _buildSectionHeader('Appearance'),
           SwitchListTile(
             title: const Text('Dark Mode'),
@@ -38,7 +36,6 @@ class SettingsScreen extends StatelessWidget {
           ),
           const Divider(),
           
-          // Data Section
           _buildSectionHeader('Data'),
           ListTile(
             leading: const Icon(Icons.download),
@@ -63,10 +60,6 @@ class SettingsScreen extends StatelessWidget {
                   SnackBar(
                     content: Text('Exported to: $path'),
                     duration: const Duration(seconds: 5),
-                    action: SnackBarAction(
-                      label: 'OK',
-                      onPressed: () {},
-                    ),
                   ),
                 );
               } catch (e) {
@@ -79,22 +72,21 @@ class SettingsScreen extends StatelessWidget {
           ),
           const Divider(),
           
-          // About Section
           _buildSectionHeader('About'),
-          ListTile(
-            leading: const Icon(Icons.info),
-            title: const Text('Version'),
-            subtitle: const Text('1.0.0'),
+          const ListTile(
+            leading: Icon(Icons.info),
+            title: Text('Version'),
+            subtitle: Text('1.0.0'),
           ),
-          ListTile(
-            leading: const Icon(Icons.account_balance_wallet),
-            title: const Text('Money Manager'),
-            subtitle: const Text('Track your income and expenses'),
+          const ListTile(
+            leading: Icon(Icons.account_balance_wallet),
+            title: Text('Money Manager'),
+            subtitle: Text('Track your income and expenses'),
           ),
-          ListTile(
-            leading: const Icon(Icons.person),
-            title: const Text('Developer'),
-            subtitle: const Text('Built by Jegan'),
+          const ListTile(
+            leading: Icon(Icons.person),
+            title: Text('Developer'),
+            subtitle: Text('Built by Jegan'),
           ),
           const SizedBox(height: 20),
         ],

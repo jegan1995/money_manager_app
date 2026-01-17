@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
-import 'screens/home_screen.dart';
+import 'screens/main_navigation.dart';
 import 'providers/theme_provider.dart';
+import 'services/recurring_service.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
   runApp(
     ChangeNotifierProvider(
       create: (_) => ThemeProvider(),
@@ -46,14 +49,19 @@ class _FirebaseInitializerState extends State<FirebaseInitializer> {
   @override
   void initState() {
     super.initState();
-    initializeFirebase();
+    initializeApp();
   }
 
-  Future<void> initializeFirebase() async {
+  Future<void> initializeApp() async {
     try {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
+      
+      // Generate recurring transactions on app start
+      final recurringService = RecurringService();
+      await recurringService.generateDueTransactions();
+      
       setState(() {
         _initialized = true;
       });
@@ -75,13 +83,23 @@ class _FirebaseInitializerState extends State<FirebaseInitializer> {
     }
 
     if (!_initialized) {
-      return const Scaffold(
+      return Scaffold(
         body: Center(
-          child: CircularProgressIndicator(),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text(
+                'Loading Money Manager...',
+                style: TextStyle(color: Colors.grey.shade600),
+              ),
+            ],
+          ),
         ),
       );
     }
 
-    return const HomeScreen();
+    return const MainNavigation();
   }
 }

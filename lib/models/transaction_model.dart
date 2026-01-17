@@ -6,7 +6,7 @@ class TransactionModel {
   final double amount;
   final String category;
   final String? subcategory;
-  final String paymentMethod; // Mandatory - only payment field
+  final String paymentMethod; // This is what we need (mandatory)
   final DateTime date;
   final String? note;
   final String? imageUrl;
@@ -25,6 +25,7 @@ class TransactionModel {
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
+  // Convert to Firestore
   Map<String, dynamic> toMap() {
     return {
       'type': type,
@@ -39,6 +40,7 @@ class TransactionModel {
     };
   }
 
+  // Create from Firestore
   factory TransactionModel.fromMap(Map<String, dynamic> map, String id) {
     return TransactionModel(
       id: id,
@@ -56,6 +58,7 @@ class TransactionModel {
     );
   }
 
+  // Copy with modifications
   TransactionModel copyWith({
     String? id,
     String? type,

@@ -22,6 +22,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   final _formKey = GlobalKey<FormState>();
   final TransactionService _transactionService = TransactionService();
 
+  // Form fields
   String _type = 'expense';
   final TextEditingController _amountController = TextEditingController();
   String _category = 'Food & Dining';
@@ -31,6 +32,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   final TextEditingController _noteController = TextEditingController();
   bool _isLoading = false;
 
+  // Category lists
   final List<String> _expenseCategories = [
     'Food & Dining',
     'Transportation',
@@ -170,7 +172,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               decoration: const InputDecoration(
                 labelText: 'Subcategory (Optional)',
                 border: OutlineInputBorder(),
-                hintText: 'Select subcategory',
               ),
               items: Subcategories.getSubcategories(_type, _category)
                   .map((sub) => DropdownMenuItem(value: sub, child: Text(sub)))
@@ -202,7 +203,18 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             const SizedBox(height: 16),
 
             // Date Picker
-            InkWell(
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(4),
+                side: BorderSide(color: Colors.grey[400]!),
+              ),
+              title: const Text('Date *', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              subtitle: Text(
+                DateFormat('EEEE, MMM d, yyyy').format(_selectedDate),
+                style: const TextStyle(fontSize: 16, color: Colors.black87),
+              ),
+              trailing: const Icon(Icons.calendar_today),
               onTap: () async {
                 final date = await showDatePicker(
                   context: context,
@@ -216,17 +228,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   });
                 }
               },
-              child: InputDecorator(
-                decoration: const InputDecoration(
-                  labelText: 'Date *',
-                  border: OutlineInputBorder(),
-                  suffixIcon: Icon(Icons.calendar_today),
-                ),
-                child: Text(
-                  DateFormat('EEEE, MMM d, yyyy').format(_selectedDate),
-                  style: const TextStyle(fontSize: 16),
-                ),
-              ),
             ),
             const SizedBox(height: 16),
 
@@ -255,7 +256,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : Text(
-                      isEdit ? 'UPDATE' : 'SAVE',
+                      isEdit ? 'UPDATE TRANSACTION' : 'SAVE TRANSACTION',
                       style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
             ),
@@ -299,8 +300,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(widget.isCopy
-                ? 'Transaction copied'
-                : (widget.transaction != null ? 'Updated' : 'Added')),
+                ? 'Transaction copied successfully'
+                : (widget.transaction != null
+                    ? 'Transaction updated successfully'
+                    : 'Transaction added successfully')),
             backgroundColor: Colors.green,
           ),
         );
@@ -308,7 +311,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {

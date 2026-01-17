@@ -24,9 +24,14 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('Money Manager'),
         actions: [
+          // Period Selector
           PopupMenuButton<String>(
             initialValue: _selectedPeriod,
-            onSelected: (value) => setState(() => _selectedPeriod = value),
+            onSelected: (value) {
+              setState(() {
+                _selectedPeriod = value;
+              });
+            },
             itemBuilder: (context) => [
               const PopupMenuItem(value: 'Today', child: Text('Today')),
               const PopupMenuItem(value: 'This Week', child: Text('This Week')),
@@ -38,7 +43,10 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
                 children: [
-                  Text(_selectedPeriod, style: const TextStyle(fontSize: 14)),
+                  Text(
+                    _selectedPeriod,
+                    style: const TextStyle(fontSize: 14),
+                  ),
                   const Icon(Icons.arrow_drop_down, size: 20),
                 ],
               ),
@@ -48,15 +56,24 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: Column(
         children: [
+          // Balance Cards
           _buildBalanceCards(),
-          Expanded(child: _buildTransactionsList()),
+          
+          // Transactions List
+          Expanded(
+            child: _buildTransactionsList(),
+          ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const AddTransactionScreen()),
-        ),
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const AddTransactionScreen(),
+            ),
+          );
+        },
         child: const Icon(Icons.add),
       ),
     );
@@ -73,7 +90,9 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
 
-        if (!snapshot.hasData) return const SizedBox.shrink();
+        if (!snapshot.hasData) {
+          return const SizedBox.shrink();
+        }
 
         final transactions = snapshot.data!.docs
             .map((doc) => TransactionModel.fromMap(
@@ -82,35 +101,56 @@ class _HomeScreenState extends State<HomeScreen> {
                 ))
             .toList();
 
-        final filtered = _filterByPeriod(transactions);
+        final filteredTransactions = _filterByPeriod(transactions);
 
-        double income = 0, expense = 0;
-        for (var txn in filtered) {
+        double totalIncome = 0;
+        double totalExpense = 0;
+
+        for (var txn in filteredTransactions) {
           if (txn.type == 'income') {
-            income += txn.amount;
+            totalIncome += txn.amount;
           } else {
-            expense += txn.amount;
+            totalExpense += txn.amount;
           }
         }
+
+        final balance = totalIncome - totalExpense;
 
         return Container(
           padding: const EdgeInsets.all(16),
           color: Colors.white,
           child: Row(
             children: [
-              Expanded(
-                child: _buildStatCard('Balance', income - expense,
-                    Icons.account_balance_wallet_outlined, Colors.blue),
-              ),
-              const SizedBox(width: 12),
+              // Balance
               Expanded(
                 child: _buildStatCard(
-                    'Income', income, Icons.arrow_downward, Colors.green),
+                  'Balance',
+                  balance,
+                  Icons.account_balance_wallet_outlined,
+                  Colors.blue,
+                ),
               ),
               const SizedBox(width: 12),
+              
+              // Income
               Expanded(
                 child: _buildStatCard(
-                    'Expense', expense, Icons.arrow_upward, Colors.red),
+                  'Income',
+                  totalIncome,
+                  Icons.arrow_downward,
+                  Colors.green,
+                ),
+              ),
+              const SizedBox(width: 12),
+              
+              // Expense
+              Expanded(
+                child: _buildStatCard(
+                  'Expense',
+                  totalExpense,
+                  Icons.arrow_upward,
+                  Colors.red,
+                ),
               ),
             ],
           ),
@@ -178,11 +218,15 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Icon(Icons.receipt_long, size: 64, color: Colors.grey[400]),
                 const SizedBox(height: 16),
-                Text('No transactions yet',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 16)),
+                Text(
+                  'No transactions yet',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 16),
+                ),
                 const SizedBox(height: 8),
-                Text('Tap + to add your first transaction',
-                    style: TextStyle(color: Colors.grey[500], fontSize: 14)),
+                Text(
+                  'Tap + to add your first transaction',
+                  style: TextStyle(color: Colors.grey[500], fontSize: 14),
+                ),
               ],
             ),
           );
@@ -195,30 +239,33 @@ class _HomeScreenState extends State<HomeScreen> {
                 ))
             .toList();
 
-        final filtered = _filterByPeriod(transactions);
+        final filteredTransactions = _filterByPeriod(transactions);
 
-        if (filtered.isEmpty) {
+        if (filteredTransactions.isEmpty) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
                 const SizedBox(height: 16),
-                Text('No transactions in $_selectedPeriod',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 16)),
+                Text(
+                  'No transactions in $_selectedPeriod',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 16),
+                ),
               ],
             ),
           );
         }
 
         // Group by date
-        final grouped = <String, List<TransactionModel>>{};
-        for (var txn in filtered) {
-          final key = DateFormat('yyyy-MM-dd').format(txn.date);
-          grouped.putIfAbsent(key, () => []).add(txn);
+        final groupedTransactions = <String, List<TransactionModel>>{};
+        for (var txn in filteredTransactions) {
+          final dateKey = DateFormat('yyyy-MM-dd').format(txn.date);
+          groupedTransactions.putIfAbsent(dateKey, () => []).add(txn);
         }
 
-        final sortedDates = grouped.keys.toList()..sort((a, b) => b.compareTo(a));
+        final sortedDates = groupedTransactions.keys.toList()
+          ..sort((a, b) => b.compareTo(a));
 
         return Container(
           color: Colors.white,
@@ -226,11 +273,13 @@ class _HomeScreenState extends State<HomeScreen> {
             itemCount: sortedDates.length,
             itemBuilder: (context, index) {
               final dateKey = sortedDates[index];
-              final dayTxns = grouped[dateKey]!;
+              final dayTransactions = groupedTransactions[dateKey]!;
               final date = DateTime.parse(dateKey);
 
-              double dayIncome = 0, dayExpense = 0;
-              for (var txn in dayTxns) {
+              // Calculate day total
+              double dayIncome = 0;
+              double dayExpense = 0;
+              for (var txn in dayTransactions) {
                 if (txn.type == 'income') {
                   dayIncome += txn.amount;
                 } else {
@@ -239,28 +288,38 @@ class _HomeScreenState extends State<HomeScreen> {
               }
 
               return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Date Header
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     color: Colors.grey[100],
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(_formatDateHeader(date),
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w600, fontSize: 14)),
-                        Text('₹${(dayIncome - dayExpense).toStringAsFixed(0)}',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14,
-                              color: (dayIncome - dayExpense) >= 0
-                                  ? Colors.green
-                                  : Colors.red,
-                            )),
+                        Text(
+                          _formatDateHeader(date),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                        ),
+                        Text(
+                          '₹${(dayIncome - dayExpense).toStringAsFixed(0)}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                            color: (dayIncome - dayExpense) >= 0
+                                ? Colors.green
+                                : Colors.red,
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                  ...dayTxns.map((txn) => _buildTransactionTile(txn)),
+                  
+                  // Transactions for this date
+                  ...dayTransactions.map((txn) => _buildTransactionTile(txn)),
                   const Divider(height: 1),
                 ],
               );
@@ -273,14 +332,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildTransactionTile(TransactionModel transaction) {
     final isExpense = transaction.type == 'expense';
-
+    
     return ListTile(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => TransactionDetailScreen(transaction: transaction),
-        ),
-      ),
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => TransactionDetailScreen(transaction: transaction),
+          ),
+        );
+      },
       leading: CircleAvatar(
         backgroundColor: isExpense ? Colors.red[50] : Colors.green[50],
         radius: 20,
@@ -290,10 +351,17 @@ class _HomeScreenState extends State<HomeScreen> {
           size: 20,
         ),
       ),
-      title: Text(transaction.category,
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-      subtitle: Text(transaction.subcategory ?? transaction.paymentMethod,
-          style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+      title: Text(
+        transaction.category,
+        style: const TextStyle(
+          fontWeight: FontWeight.w600,
+          fontSize: 15,
+        ),
+      ),
+      subtitle: Text(
+        transaction.subcategory ?? transaction.paymentMethod,
+        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+      ),
       trailing: Text(
         '${isExpense ? '-' : '+'}₹${transaction.amount.toStringAsFixed(0)}',
         style: TextStyle(
@@ -307,7 +375,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<TransactionModel> _filterByPeriod(List<TransactionModel> transactions) {
     final now = DateTime.now();
-
+    
     return transactions.where((txn) {
       switch (_selectedPeriod) {
         case 'Today':

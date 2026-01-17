@@ -1,7 +1,6 @@
-// Predefined subcategories for each category
-class Subcategories {
-  // Expense Subcategories
-  static const Map<String, List<String>> expenseSubcategories = {
+class Categories {
+  // Expense Categories with Subcategories
+  static const Map<String, List<String>> expenseCategories = {
     'Food & Dining': [
       'Breakfast',
       'Lunch',
@@ -75,8 +74,8 @@ class Subcategories {
     ],
   };
 
-  // Income Subcategories
-  static const Map<String, List<String>> incomeSubcategories = {
+  // Income Categories with Subcategories
+  static const Map<String, List<String>> incomeCategories = {
     'Salary': [
       'Monthly Salary',
       'Bonus',
@@ -106,12 +105,23 @@ class Subcategories {
     ],
   };
 
+  // Get main categories based on type
+  static List<String> getMainCategories(String type) {
+    if (type == 'expense') {
+      return expenseCategories.keys.toList();
+    } else if (type == 'income') {
+      return incomeCategories.keys.toList();
+    }
+    return [];
+  }
+
   // Get subcategories for a category
   static List<String> getSubcategories(String type, String category) {
     if (type == 'expense') {
-      return expenseSubcategories[category] ?? ['Miscellaneous'];
-    } else {
-      return incomeSubcategories[category] ?? ['Miscellaneous'];
+      return expenseCategories[category] ?? [];
+    } else if (type == 'income') {
+      return incomeCategories[category] ?? [];
     }
+    return [];
   }
 }

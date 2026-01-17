@@ -1,24 +1,66 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../models/account.dart';
+import '../models/account_model.dart';
 
 class AccountService {
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final String _collection = 'accounts';
 
-  Future<void> addAccount(Account account) async {
-    await _db.collection('accounts').add(account.toMap());
+  // Get all accounts
+  Stream<QuerySnapshot> getAccounts() {
+    return _firestore
+        .collection(_collection)
+        .orderBy('createdAt', descending: false)
+        .snapshots();
   }
 
-  Stream<List<Account>> getAccounts() {
-    return _db.collection('accounts').snapshots().map(
-      (snapshot) => snapshot.docs.map((doc) => Account.fromFirestore(doc)).toList(),
-    );
+  // Add account
+  Future<void> addAccount(AccountModel account) async {
+    try {
+      await _firestore.collection(_collection).add(account.toMap());
+    } catch (e) {
+      throw Exception('Failed to add account: $e');
+    }
   }
 
-  Future<void> updateAccountBalance(String id, double newBalance) async {
-    await _db.collection('accounts').doc(id).update({'balance': newBalance});
+  // Update account
+  Future<void> updateAccount(String id, AccountModel account) async {
+    try {
+      await _firestore.collection(_collection).doc(id).update(account.toMap());
+    } catch (e) {
+      throw Exception('Failed to update account: $e');
+    }
   }
 
+  // Delete account
   Future<void> deleteAccount(String id) async {
-    await _db.collection('accounts').doc(id).delete();
+    try {
+      await _firestore.collection(_collection).doc(id).delete();
+    } catch (e) {
+      throw Exception('Failed to delete account: $e');
+    }
+  }
+
+  // Get accounts by type
+  Stream<QuerySnapshot> getAccountsByType(String type) {
+    return _firestore
+        .collection(_collection)
+        .where('type', isEqualTo: type)
+        .orderBy('createdAt', descending: false)
+        .snapshots();
+  }
+
+  // Update account balance (for transactions)
+  Future<void> updateAccountBalance(String accountId, double amount) async {
+    try {
+      final doc = await _firestore.collection(_collection).doc(accountId).get();
+      if (doc.exists) {
+        final currentBalance = (doc.data()!['balance'] ?? 0).toDouble();
+        await _firestore.collection(_collection).doc(accountId).update({
+          'balance': currentBalance + amount,
+        });
+      }
+    } catch (e) {
+      throw Exception('Failed to update balance: $e');
+    }
   }
 }

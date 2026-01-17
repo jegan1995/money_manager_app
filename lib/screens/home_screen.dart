@@ -513,30 +513,30 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text('Money Manager'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.settings),
-            tooltip: 'Settings',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const SettingsScreen(),
-                ),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.insert_chart),
-            tooltip: 'Reports',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const ReportsScreen(),
-                ),
-              );
-            },
-          ),
+          // IconButton(
+          //   icon: const Icon(Icons.settings),
+          //   tooltip: 'Settings',
+          //   onPressed: () {
+          //     Navigator.push(
+          //       context,
+          //       MaterialPageRoute(
+          //         builder: (context) => const SettingsScreen(),
+          //       ),
+          //     );
+          //   },
+          // ),
+          // IconButton(
+          //   icon: const Icon(Icons.insert_chart),
+          //   tooltip: 'Reports',
+          //   onPressed: () {
+          //     Navigator.push(
+          //       context,
+          //       MaterialPageRoute(
+          //         builder: (context) => const ReportsScreen(),
+          //       ),
+          //     );
+          //   },
+          // ),
           if (_filter.hasActiveFilters)
             IconButton(
               icon: const Icon(Icons.filter_alt_off),

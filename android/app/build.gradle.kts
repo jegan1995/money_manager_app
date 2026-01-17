@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.jegan.money_manager_app"
-    compileSdk = 35
+    compileSdk = 34
     ndkVersion = "27.0.12077973"
 
     compileOptions {
@@ -22,7 +22,7 @@ android {
     defaultConfig {
         applicationId = "com.jegan.money_manager_app"
         minSdk = 21
-        targetSdk = 35
+        targetSdk = 34
         versionCode = flutter.versionCode()
         versionName = flutter.versionName()
         multiDexEnabled = true

@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../models/transaction.dart' as app_transaction;
-import '../services/firestore_service.dart';
+import '../models/transaction_model.dart';
+import '../services/transaction_service.dart';
+import '../utils/subcategories.dart';
 
 class AddTransactionScreen extends StatefulWidget {
-  const AddTransactionScreen({super.key});
+  final TransactionModel? transaction;
+  final bool isCopy;
+
+  const AddTransactionScreen({
+    super.key,
+    this.transaction,
+    this.isCopy = false,
+  });
 
   @override
   State<AddTransactionScreen> createState() => _AddTransactionScreenState();
@@ -12,290 +20,323 @@ class AddTransactionScreen extends StatefulWidget {
 
 class _AddTransactionScreenState extends State<AddTransactionScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _titleController = TextEditingController();
-  final _amountController = TextEditingController();
-  final _notesController = TextEditingController();
-  final FirestoreService _firestoreService = FirestoreService();
+  final TransactionService _transactionService = TransactionService();
 
-  String _selectedType = 'expense';
-  String _selectedCategory = 'Food';
+  // Form fields
+  String _type = 'expense';
+  final TextEditingController _amountController = TextEditingController();
+  String _category = 'Food & Dining';
+  String? _subcategory;
+  String _account = 'Cash';
+  String _paymentMethod = 'Cash';
   DateTime _selectedDate = DateTime.now();
+  final TextEditingController _noteController = TextEditingController();
   bool _isLoading = false;
-  
-  // ✅ NEW: Payment method variables
-  String? _selectedPaymentMethod;
-  final List<String> _paymentMethods = ['Cash', 'Card', 'UPI', 'Bank Transfer'];
 
+  // Category lists
   final List<String> _expenseCategories = [
-    'Food',
-    'Transport',
+    'Food & Dining',
+    'Transportation',
     'Shopping',
-    'Bills',
     'Entertainment',
-    'Health',
+    'Bills & Utilities',
+    'Healthcare',
     'Education',
-    'Other'
+    'Personal Care',
+    'Travel',
+    'Others',
   ];
 
   final List<String> _incomeCategories = [
     'Salary',
     'Business',
-    'Investment',
-    'Gift',
-    'Other'
+    'Investments',
+    'Gifts',
+    'Others',
+  ];
+
+  final List<String> _accounts = [
+    'Cash',
+    'Bank Account',
+    'Credit Card',
+    'Debit Card',
+    'Wallet',
+  ];
+
+  final List<String> _paymentMethods = [
+    'Cash',
+    'Credit Card',
+    'Debit Card',
+    'UPI',
+    'Net Banking',
+    'Wallet',
   ];
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.transaction != null) {
+      _type = widget.transaction!.type;
+      _amountController.text = widget.transaction!.amount.toString();
+      _category = widget.transaction!.category;
+      _subcategory = widget.transaction!.subcategory;
+      _account = widget.transaction!.account;
+      _paymentMethod = widget.transaction!.paymentMethod;
+      _selectedDate = widget.transaction!.date;
+      _noteController.text = widget.transaction!.note ?? '';
+    }
+  }
+
+  @override
   void dispose() {
-    _titleController.dispose();
     _amountController.dispose();
-    _notesController.dispose();
+    _noteController.dispose();
     super.dispose();
-  }
-
-  Future<void> _selectDate(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-    );
-    if (picked != null && picked != _selectedDate) {
-      setState(() {
-        _selectedDate = picked;
-      });
-    }
-  }
-
-  Future<void> _saveTransaction() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isLoading = true;
-      });
-
-      try {
-        // ✅ UPDATED: Added paymentMethod parameter
-        final transaction = app_transaction.Transaction(
-          id: '',
-          title: _titleController.text,
-          amount: double.parse(_amountController.text),
-          category: _selectedCategory,
-          type: _selectedType,
-          date: _selectedDate,
-          notes: _notesController.text.isEmpty ? null : _notesController.text,
-          paymentMethod: _selectedPaymentMethod,  // ✅ NEW LINE
-        );
-
-        await _firestoreService.addTransaction(transaction);
-
-        if (mounted) {
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Transaction added successfully!')),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e')),
-          );
-        }
-      } finally {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-        }
-      }
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    List<String> categories =
-        _selectedType == 'expense' ? _expenseCategories : _incomeCategories;
-
-    if (!categories.contains(_selectedCategory)) {
-      _selectedCategory = categories[0];
-    }
+    final isEdit = widget.transaction != null && !widget.isCopy;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Add Transaction'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        title: Text(widget.isCopy
+            ? 'Copy Transaction'
+            : (isEdit ? 'Edit Transaction' : 'Add Transaction')),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Type selector (Income/Expense)
-              Row(
-                children: [
-                  Expanded(
-                    child: RadioListTile<String>(
-                      title: const Text('Expense'),
-                      value: 'expense',
-                      groupValue: _selectedType,
-                      onChanged: (value) {
-                        setState(() {
-                          _selectedType = value!;
-                        });
-                      },
-                    ),
-                  ),
-                  Expanded(
-                    child: RadioListTile<String>(
-                      title: const Text('Income'),
-                      value: 'income',
-                      groupValue: _selectedType,
-                      onChanged: (value) {
-                        setState(() {
-                          _selectedType = value!;
-                        });
-                      },
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              // Title field
-              TextFormField(
-                controller: _titleController,
-                decoration: const InputDecoration(
-                  labelText: 'Title',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.title),
+      body: Form(
+        key: _formKey,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            // Type Selector
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(
+                  value: 'expense',
+                  label: Text('Expense'),
+                  icon: Icon(Icons.arrow_upward),
                 ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter a title';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Amount field
-              TextFormField(
-                controller: _amountController,
-                decoration: const InputDecoration(
-                  labelText: 'Amount',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.currency_rupee),
+                ButtonSegment(
+                  value: 'income',
+                  label: Text('Income'),
+                  icon: Icon(Icons.arrow_downward),
                 ),
-                keyboardType: TextInputType.number,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter an amount';
-                  }
-                  if (double.tryParse(value) == null) {
-                    return 'Please enter a valid number';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
+              ],
+              selected: {_type},
+              onSelectionChanged: (Set<String> newSelection) {
+                setState(() {
+                  _type = newSelection.first;
+                  _category = _type == 'expense'
+                      ? _expenseCategories.first
+                      : _incomeCategories.first;
+                  _subcategory = null;
+                });
+              },
+            ),
+            const SizedBox(height: 20),
 
-              // Category dropdown
-              DropdownButtonFormField<String>(
-                value: _selectedCategory,
-                decoration: const InputDecoration(
-                  labelText: 'Category',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.category),
-                ),
-                items: categories.map((String category) {
-                  return DropdownMenuItem<String>(
-                    value: category,
-                    child: Text(category),
-                  );
-                }).toList(),
-                onChanged: (String? newValue) {
+            // Amount
+            TextFormField(
+              controller: _amountController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Amount *',
+                prefixText: '₹ ',
+                border: OutlineInputBorder(),
+              ),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Please enter amount';
+                }
+                if (double.tryParse(value) == null) {
+                  return 'Please enter valid amount';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 16),
+
+            // Category
+            DropdownButtonFormField<String>(
+              value: _category,
+              decoration: const InputDecoration(
+                labelText: 'Category *',
+                border: OutlineInputBorder(),
+              ),
+              items: (_type == 'expense' ? _expenseCategories : _incomeCategories)
+                  .map((cat) => DropdownMenuItem(value: cat, child: Text(cat)))
+                  .toList(),
+              onChanged: (value) {
+                setState(() {
+                  _category = value!;
+                  _subcategory = null; // Reset subcategory
+                });
+              },
+            ),
+            const SizedBox(height: 16),
+
+            // Subcategory
+            DropdownButtonFormField<String>(
+              value: _subcategory,
+              decoration: const InputDecoration(
+                labelText: 'Subcategory',
+                border: OutlineInputBorder(),
+              ),
+              items: Subcategories.getSubcategories(_type, _category)
+                  .map((sub) => DropdownMenuItem(value: sub, child: Text(sub)))
+                  .toList(),
+              onChanged: (value) {
+                setState(() {
+                  _subcategory = value;
+                });
+              },
+            ),
+            const SizedBox(height: 16),
+
+            // Account
+            DropdownButtonFormField<String>(
+              value: _account,
+              decoration: const InputDecoration(
+                labelText: 'Account *',
+                border: OutlineInputBorder(),
+              ),
+              items: _accounts
+                  .map((acc) => DropdownMenuItem(value: acc, child: Text(acc)))
+                  .toList(),
+              onChanged: (value) {
+                setState(() {
+                  _account = value!;
+                });
+              },
+            ),
+            const SizedBox(height: 16),
+
+            // Payment Method (Mandatory)
+            DropdownButtonFormField<String>(
+              value: _paymentMethod,
+              decoration: const InputDecoration(
+                labelText: 'Payment Method *',
+                border: OutlineInputBorder(),
+              ),
+              items: _paymentMethods
+                  .map((pm) => DropdownMenuItem(value: pm, child: Text(pm)))
+                  .toList(),
+              onChanged: (value) {
+                setState(() {
+                  _paymentMethod = value!;
+                });
+              },
+            ),
+            const SizedBox(height: 16),
+
+            // Date Picker
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Date *'),
+              subtitle: Text(DateFormat('EEEE, MMM d, yyyy').format(_selectedDate)),
+              trailing: const Icon(Icons.calendar_today),
+              onTap: () async {
+                final date = await showDatePicker(
+                  context: context,
+                  initialDate: _selectedDate,
+                  firstDate: DateTime(2000),
+                  lastDate: DateTime(2100),
+                );
+                if (date != null) {
                   setState(() {
-                    _selectedCategory = newValue!;
+                    _selectedDate = date;
                   });
-                },
-              ),
-              const SizedBox(height: 16),
+                }
+              },
+            ),
+            const Divider(),
 
-              // Date picker
-              ListTile(
-                title: Text('Date: ${DateFormat('dd/MM/yyyy').format(_selectedDate)}'),
-                leading: const Icon(Icons.calendar_today),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  side: BorderSide(color: Colors.grey.shade400),
-                ),
-                onTap: () => _selectDate(context),
+            // Note
+            TextFormField(
+              controller: _noteController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Note',
+                border: OutlineInputBorder(),
               ),
-              const SizedBox(height: 16),
+            ),
+            const SizedBox(height: 24),
 
-              // ✅ NEW: Payment method dropdown
-              DropdownButtonFormField<String>(
-                value: _selectedPaymentMethod,
-                decoration: const InputDecoration(
-                  labelText: 'Payment Method (Optional)',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.payment),
-                ),
-                items: _paymentMethods.map((String method) {
-                  return DropdownMenuItem<String>(
-                    value: method,
-                    child: Text(method),
-                  );
-                }).toList(),
-                onChanged: (String? newValue) {
-                  setState(() {
-                    _selectedPaymentMethod = newValue;
-                  });
-                },
+            // Save Button
+            ElevatedButton(
+              onPressed: _isLoading ? null : _saveTransaction,
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.all(16),
               ),
-              const SizedBox(height: 16),
-
-              // Notes field
-              TextFormField(
-                controller: _notesController,
-                decoration: const InputDecoration(
-                  labelText: 'Notes (Optional)',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.note),
-                ),
-                maxLines: 3,
-              ),
-              const SizedBox(height: 24),
-
-              // Save button
-              ElevatedButton(
-                onPressed: _isLoading ? null : _saveTransaction,
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.all(16),
-                  backgroundColor: _selectedType == 'income'
-                      ? Colors.green
-                      : Colors.red,
-                  foregroundColor: Colors.white,
-                ),
-                child: _isLoading
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : Text(
-                        'Add ${_selectedType == 'income' ? 'Income' : 'Expense'}',
-                        style: const TextStyle(fontSize: 16),
-                      ),
-              ),
-            ],
-          ),
+              child: _isLoading
+                  ? const CircularProgressIndicator()
+                  : Text(isEdit ? 'Update' : 'Save'),
+            ),
+          ],
         ),
       ),
     );
+  }
+
+  Future<void> _saveTransaction() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final transaction = TransactionModel(
+        id: widget.transaction?.id,
+        type: _type,
+        amount: double.parse(_amountController.text),
+        category: _category,
+        subcategory: _subcategory,
+        account: _account,
+        paymentMethod: _paymentMethod,
+        date: _selectedDate,
+        note: _noteController.text.isEmpty ? null : _noteController.text,
+        imageUrl: widget.transaction?.imageUrl,
+      );
+
+      if (widget.transaction != null && !widget.isCopy) {
+        await _transactionService.updateTransaction(
+          widget.transaction!.id!,
+          transaction,
+        );
+      } else {
+        await _transactionService.addTransaction(transaction);
+      }
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(widget.isCopy
+                ? 'Transaction copied'
+                : (widget.transaction != null
+                    ? 'Transaction updated'
+                    : 'Transaction added')),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 }

@@ -5,9 +5,9 @@ import '../models/transaction_filter.dart';
 import '../services/firestore_service.dart';
 import 'add_transaction_screen.dart';
 import 'edit_transaction_screen.dart';
-import 'reports_screen.dart';
+// import 'reports_screen.dart';
 import '../utils/category_icons.dart';
-import 'settings_screen.dart';
+// import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -387,7 +387,125 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-
+  Widget _buildEnhancedStats(List<app_transaction.Transaction> allTransactions) {
+    DateTime now = DateTime.now();
+    DateTime startOfMonth = DateTime(now.year, now.month, 1);
+    DateTime lastMonth = DateTime(now.year, now.month - 1, 1);
+    DateTime endOfLastMonth = DateTime(now.year, now.month, 1);
+    
+    double monthIncome = 0;
+    double monthExpense = 0;
+    double lastMonthExpense = 0;
+    
+    for (var t in allTransactions) {
+      if (t.date.isAfter(startOfMonth)) {
+        if (t.type == 'income') {
+          monthIncome += t.amount;
+        } else {
+          monthExpense += t.amount;
+        }
+      }
+      
+      if (t.date.isAfter(lastMonth) && t.date.isBefore(endOfLastMonth)) {
+        if (t.type == 'expense') {
+          lastMonthExpense += t.amount;
+        }
+      }
+    }
+    
+    double changePercent = lastMonthExpense > 0 
+        ? ((monthExpense - lastMonthExpense) / lastMonthExpense) * 100 
+        : 0;
+    
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.indigo.shade300, Colors.indigo.shade600],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'This Month',
+            style: TextStyle(color: Colors.white70, fontSize: 14),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Income',
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                  Text(
+                    '₹${monthIncome.toStringAsFixed(0)}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Expense',
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                  Text(
+                    '₹${monthExpense.toStringAsFixed(0)}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              if (lastMonthExpense > 0)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'vs Last Month',
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                    Row(
+                      children: [
+                        Icon(
+                          changePercent > 0 ? Icons.arrow_upward : Icons.arrow_downward,
+                          color: changePercent > 0 ? Colors.red : Colors.green,
+                          size: 16,
+                        ),
+                        Text(
+                          '${changePercent.abs().toStringAsFixed(1)}%',
+                          style: TextStyle(
+                            color: changePercent > 0 ? Colors.red : Colors.green,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -522,12 +640,23 @@ class _HomeScreenState extends State<HomeScreen> {
           // Balance card
           _buildBalanceCard(),
           
-          // Quick stats
+// Quick stats
           StreamBuilder<List<app_transaction.Transaction>>(
             stream: _firestoreService.getTransactions(),
             builder: (context, snapshot) {
               if (snapshot.hasData && snapshot.data!.isNotEmpty) {
                 return _buildQuickStats(snapshot.data!);
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+          
+          // Enhanced monthly stats
+          StreamBuilder<List<app_transaction.Transaction>>(
+            stream: _firestoreService.getTransactions(),
+            builder: (context, snapshot) {
+              if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+                return _buildEnhancedStats(snapshot.data!);
               }
               return const SizedBox.shrink();
             },

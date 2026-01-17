@@ -62,21 +62,27 @@ class _MainScreenState extends State<MainScreen> {
         type: BottomNavigationBarType.fixed,
         selectedItemColor: Colors.blue,
         unselectedItemColor: Colors.grey,
+        selectedFontSize: 12,
+        unselectedFontSize: 12,
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.home),
+            icon: Icon(Icons.home_outlined),
+            activeIcon: Icon(Icons.home),
             label: 'Home',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.account_balance_wallet),
+            icon: Icon(Icons.account_balance_wallet_outlined),
+            activeIcon: Icon(Icons.account_balance_wallet),
             label: 'Accounts',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.bar_chart),
+            icon: Icon(Icons.bar_chart_outlined),
+            activeIcon: Icon(Icons.bar_chart),
             label: 'Reports',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.more_horiz),
+            icon: Icon(Icons.menu),
+            activeIcon: Icon(Icons.menu),
             label: 'More',
           ),
         ],

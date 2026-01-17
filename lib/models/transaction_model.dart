@@ -2,11 +2,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class TransactionModel {
   final String? id;
-  final String type; // 'income' or 'expense'
+  final String type; // 'income', 'expense', or 'transfer'
   final double amount;
   final String category;
   final String? subcategory;
-  final String paymentMethod; // This is what we need (mandatory)
+  final String? paymentMethod;
+  final String? fromAccount; // For transfers
+  final String? toAccount; // For transfers
   final DateTime date;
   final String? note;
   final String? imageUrl;
@@ -18,14 +20,15 @@ class TransactionModel {
     required this.amount,
     required this.category,
     this.subcategory,
-    required this.paymentMethod,
+    this.paymentMethod,
+    this.fromAccount,
+    this.toAccount,
     required this.date,
     this.note,
     this.imageUrl,
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
-  // Convert to Firestore
   Map<String, dynamic> toMap() {
     return {
       'type': type,
@@ -33,6 +36,8 @@ class TransactionModel {
       'category': category,
       'subcategory': subcategory,
       'paymentMethod': paymentMethod,
+      'fromAccount': fromAccount,
+      'toAccount': toAccount,
       'date': Timestamp.fromDate(date),
       'note': note,
       'imageUrl': imageUrl,
@@ -40,7 +45,6 @@ class TransactionModel {
     };
   }
 
-  // Create from Firestore
   factory TransactionModel.fromMap(Map<String, dynamic> map, String id) {
     return TransactionModel(
       id: id,
@@ -48,17 +52,18 @@ class TransactionModel {
       amount: (map['amount'] ?? 0).toDouble(),
       category: map['category'] ?? 'Other',
       subcategory: map['subcategory'],
-      paymentMethod: map['paymentMethod'] ?? 'Cash',
+      paymentMethod: map['paymentMethod'],
+      fromAccount: map['fromAccount'],
+      toAccount: map['toAccount'],
       date: (map['date'] as Timestamp).toDate(),
       note: map['note'],
       imageUrl: map['imageUrl'],
-      createdAt: map['createdAt'] != null 
+      createdAt: map['createdAt'] != null
           ? (map['createdAt'] as Timestamp).toDate()
           : DateTime.now(),
     );
   }
 
-  // Copy with modifications
   TransactionModel copyWith({
     String? id,
     String? type,
@@ -66,6 +71,8 @@ class TransactionModel {
     String? category,
     String? subcategory,
     String? paymentMethod,
+    String? fromAccount,
+    String? toAccount,
     DateTime? date,
     String? note,
     String? imageUrl,
@@ -78,6 +85,8 @@ class TransactionModel {
       category: category ?? this.category,
       subcategory: subcategory ?? this.subcategory,
       paymentMethod: paymentMethod ?? this.paymentMethod,
+      fromAccount: fromAccount ?? this.fromAccount,
+      toAccount: toAccount ?? this.toAccount,
       date: date ?? this.date,
       note: note ?? this.note,
       imageUrl: imageUrl ?? this.imageUrl,

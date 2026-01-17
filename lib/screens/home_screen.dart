@@ -19,20 +19,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Scaffold(
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: const Text('Money Manager'),
         actions: [
-          // Period Selector
           PopupMenuButton<String>(
             initialValue: _selectedPeriod,
-            onSelected: (value) {
-              setState(() {
-                _selectedPeriod = value;
-              });
-            },
+            onSelected: (value) => setState(() => _selectedPeriod = value),
             itemBuilder: (context) => [
               const PopupMenuItem(value: 'Today', child: Text('Today')),
               const PopupMenuItem(value: 'This Week', child: Text('This Week')),
@@ -44,10 +38,7 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
                 children: [
-                  Text(
-                    _selectedPeriod,
-                    style: const TextStyle(fontSize: 14),
-                  ),
+                  Text(_selectedPeriod, style: const TextStyle(fontSize: 14)),
                   const Icon(Icons.arrow_drop_down, size: 20),
                 ],
               ),
@@ -57,38 +48,32 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: Column(
         children: [
-          // Balance Cards (Simple & Clean)
           _buildBalanceCards(),
-          const Divider(height: 1),
-          
-          // Transactions List
-          Expanded(
-            child: _buildTransactionsList(),
-          ),
+          Expanded(child: _buildTransactionsList()),
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const AddTransactionScreen(),
-            ),
-          );
-        },
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const AddTransactionScreen()),
+        ),
         child: const Icon(Icons.add),
       ),
     );
   }
 
-  // Simple Balance Cards (Money Manager Style)
   Widget _buildBalanceCards() {
     return StreamBuilder<QuerySnapshot>(
       stream: _transactionService.getTransactions(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Center(child: CircularProgressIndicator()),
+          );
         }
+
+        if (!snapshot.hasData) return const SizedBox.shrink();
 
         final transactions = snapshot.data!.docs
             .map((doc) => TransactionModel.fromMap(
@@ -97,56 +82,35 @@ class _HomeScreenState extends State<HomeScreen> {
                 ))
             .toList();
 
-        // Filter by period
-        final filteredTransactions = _filterByPeriod(transactions);
+        final filtered = _filterByPeriod(transactions);
 
-        double totalIncome = 0;
-        double totalExpense = 0;
-
-        for (var txn in filteredTransactions) {
+        double income = 0, expense = 0;
+        for (var txn in filtered) {
           if (txn.type == 'income') {
-            totalIncome += txn.amount;
+            income += txn.amount;
           } else {
-            totalExpense += txn.amount;
+            expense += txn.amount;
           }
         }
 
-        final balance = totalIncome - totalExpense;
-
         return Container(
           padding: const EdgeInsets.all(16),
+          color: Colors.white,
           child: Row(
             children: [
-              // Balance
               Expanded(
-                child: _buildStatCard(
-                  'Balance',
-                  balance,
-                  Icons.account_balance_wallet_outlined,
-                  Colors.blue,
-                ),
+                child: _buildStatCard('Balance', income - expense,
+                    Icons.account_balance_wallet_outlined, Colors.blue),
               ),
               const SizedBox(width: 12),
-              
-              // Income
               Expanded(
                 child: _buildStatCard(
-                  'Income',
-                  totalIncome,
-                  Icons.arrow_downward,
-                  Colors.green,
-                ),
+                    'Income', income, Icons.arrow_downward, Colors.green),
               ),
               const SizedBox(width: 12),
-              
-              // Expense
               Expanded(
                 child: _buildStatCard(
-                  'Expense',
-                  totalExpense,
-                  Icons.arrow_upward,
-                  Colors.red,
-                ),
+                    'Expense', expense, Icons.arrow_upward, Colors.red),
               ),
             ],
           ),
@@ -170,23 +134,28 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               Icon(icon, size: 16, color: color),
               const SizedBox(width: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                  fontWeight: FontWeight.w500,
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey[700],
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 6),
-          Text(
-            '₹${amount.toStringAsFixed(0)}',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: color,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              '₹${amount.toStringAsFixed(0)}',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
             ),
           ),
         ],
@@ -194,7 +163,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Transactions List
   Widget _buildTransactionsList() {
     return StreamBuilder<QuerySnapshot>(
       stream: _transactionService.getTransactions(),
@@ -210,10 +178,11 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Icon(Icons.receipt_long, size: 64, color: Colors.grey[400]),
                 const SizedBox(height: 16),
-                Text(
-                  'No transactions yet',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 16),
-                ),
+                Text('No transactions yet',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 16)),
+                const SizedBox(height: 8),
+                Text('Tap + to add your first transaction',
+                    style: TextStyle(color: Colors.grey[500], fontSize: 14)),
               ],
             ),
           );
@@ -226,46 +195,77 @@ class _HomeScreenState extends State<HomeScreen> {
                 ))
             .toList();
 
-        final filteredTransactions = _filterByPeriod(transactions);
+        final filtered = _filterByPeriod(transactions);
 
-        // Group by date
-        final groupedTransactions = <String, List<TransactionModel>>{};
-        for (var txn in filteredTransactions) {
-          final dateKey = DateFormat('yyyy-MM-dd').format(txn.date);
-          groupedTransactions.putIfAbsent(dateKey, () => []).add(txn);
+        if (filtered.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
+                const SizedBox(height: 16),
+                Text('No transactions in $_selectedPeriod',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 16)),
+              ],
+            ),
+          );
         }
 
-        final sortedDates = groupedTransactions.keys.toList()
-          ..sort((a, b) => b.compareTo(a));
+        // Group by date
+        final grouped = <String, List<TransactionModel>>{};
+        for (var txn in filtered) {
+          final key = DateFormat('yyyy-MM-dd').format(txn.date);
+          grouped.putIfAbsent(key, () => []).add(txn);
+        }
 
-        return ListView.builder(
-          itemCount: sortedDates.length,
-          itemBuilder: (context, index) {
-            final dateKey = sortedDates[index];
-            final dayTransactions = groupedTransactions[dateKey]!;
-            final date = DateTime.parse(dateKey);
+        final sortedDates = grouped.keys.toList()..sort((a, b) => b.compareTo(a));
 
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Date Header
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  color: Colors.grey[200],
-                  child: Text(
-                    _formatDateHeader(date),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
+        return Container(
+          color: Colors.white,
+          child: ListView.builder(
+            itemCount: sortedDates.length,
+            itemBuilder: (context, index) {
+              final dateKey = sortedDates[index];
+              final dayTxns = grouped[dateKey]!;
+              final date = DateTime.parse(dateKey);
+
+              double dayIncome = 0, dayExpense = 0;
+              for (var txn in dayTxns) {
+                if (txn.type == 'income') {
+                  dayIncome += txn.amount;
+                } else {
+                  dayExpense += txn.amount;
+                }
+              }
+
+              return Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    color: Colors.grey[100],
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(_formatDateHeader(date),
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w600, fontSize: 14)),
+                        Text('₹${(dayIncome - dayExpense).toStringAsFixed(0)}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                              color: (dayIncome - dayExpense) >= 0
+                                  ? Colors.green
+                                  : Colors.red,
+                            )),
+                      ],
                     ),
                   ),
-                ),
-                
-                // Transactions for this date
-                ...dayTransactions.map((txn) => _buildTransactionTile(txn)),
-              ],
-            );
-          },
+                  ...dayTxns.map((txn) => _buildTransactionTile(txn)),
+                  const Divider(height: 1),
+                ],
+              );
+            },
+          ),
         );
       },
     );
@@ -273,32 +273,27 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildTransactionTile(TransactionModel transaction) {
     final isExpense = transaction.type == 'expense';
-    
+
     return ListTile(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => TransactionDetailScreen(transaction: transaction),
-          ),
-        );
-      },
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => TransactionDetailScreen(transaction: transaction),
+        ),
+      ),
       leading: CircleAvatar(
         backgroundColor: isExpense ? Colors.red[50] : Colors.green[50],
+        radius: 20,
         child: Icon(
           _getCategoryIcon(transaction.category),
           color: isExpense ? Colors.red : Colors.green,
           size: 20,
         ),
       ),
-      title: Text(
-        transaction.category,
-        style: const TextStyle(fontWeight: FontWeight.w600),
-      ),
-      subtitle: Text(
-        transaction.subcategory ?? transaction.paymentMethod,
-        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-      ),
+      title: Text(transaction.category,
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+      subtitle: Text(transaction.subcategory ?? transaction.paymentMethod,
+          style: TextStyle(fontSize: 12, color: Colors.grey[600])),
       trailing: Text(
         '${isExpense ? '-' : '+'}₹${transaction.amount.toStringAsFixed(0)}',
         style: TextStyle(
@@ -310,10 +305,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Filter transactions by period
   List<TransactionModel> _filterByPeriod(List<TransactionModel> transactions) {
     final now = DateTime.now();
-    
+
     return transactions.where((txn) {
       switch (_selectedPeriod) {
         case 'Today':
@@ -345,7 +339,7 @@ class _HomeScreenState extends State<HomeScreen> {
         date.day == yesterday.day) {
       return 'Yesterday';
     } else {
-      return DateFormat('EEEE, MMM d, yyyy').format(date);
+      return DateFormat('EEEE, MMM d').format(date);
     }
   }
 
@@ -365,12 +359,18 @@ class _HomeScreenState extends State<HomeScreen> {
         return Icons.local_hospital;
       case 'Education':
         return Icons.school;
+      case 'Personal Care':
+        return Icons.spa;
+      case 'Travel':
+        return Icons.flight;
       case 'Salary':
         return Icons.account_balance_wallet;
       case 'Business':
         return Icons.business;
       case 'Investments':
         return Icons.trending_up;
+      case 'Gifts':
+        return Icons.card_giftcard;
       default:
         return Icons.category;
     }

@@ -22,18 +22,15 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   final _formKey = GlobalKey<FormState>();
   final TransactionService _transactionService = TransactionService();
 
-  // Form fields
   String _type = 'expense';
   final TextEditingController _amountController = TextEditingController();
   String _category = 'Food & Dining';
   String? _subcategory;
-  String _account = 'Cash';
   String _paymentMethod = 'Cash';
   DateTime _selectedDate = DateTime.now();
   final TextEditingController _noteController = TextEditingController();
   bool _isLoading = false;
 
-  // Category lists
   final List<String> _expenseCategories = [
     'Food & Dining',
     'Transportation',
@@ -55,14 +52,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     'Others',
   ];
 
-  final List<String> _accounts = [
-    'Cash',
-    'Bank Account',
-    'Credit Card',
-    'Debit Card',
-    'Wallet',
-  ];
-
   final List<String> _paymentMethods = [
     'Cash',
     'Credit Card',
@@ -80,7 +69,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       _amountController.text = widget.transaction!.amount.toString();
       _category = widget.transaction!.category;
       _subcategory = widget.transaction!.subcategory;
-      _account = widget.transaction!.account;
       _paymentMethod = widget.transaction!.paymentMethod;
       _selectedDate = widget.transaction!.date;
       _noteController.text = widget.transaction!.note ?? '';
@@ -139,7 +127,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             // Amount
             TextFormField(
               controller: _amountController,
-              keyboardType: TextInputType.number,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(
                 labelText: 'Amount *',
                 prefixText: '₹ ',
@@ -170,7 +158,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               onChanged: (value) {
                 setState(() {
                   _category = value!;
-                  _subcategory = null; // Reset subcategory
+                  _subcategory = null;
                 });
               },
             ),
@@ -180,8 +168,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             DropdownButtonFormField<String>(
               value: _subcategory,
               decoration: const InputDecoration(
-                labelText: 'Subcategory',
+                labelText: 'Subcategory (Optional)',
                 border: OutlineInputBorder(),
+                hintText: 'Select subcategory',
               ),
               items: Subcategories.getSubcategories(_type, _category)
                   .map((sub) => DropdownMenuItem(value: sub, child: Text(sub)))
@@ -189,24 +178,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               onChanged: (value) {
                 setState(() {
                   _subcategory = value;
-                });
-              },
-            ),
-            const SizedBox(height: 16),
-
-            // Account
-            DropdownButtonFormField<String>(
-              value: _account,
-              decoration: const InputDecoration(
-                labelText: 'Account *',
-                border: OutlineInputBorder(),
-              ),
-              items: _accounts
-                  .map((acc) => DropdownMenuItem(value: acc, child: Text(acc)))
-                  .toList(),
-              onChanged: (value) {
-                setState(() {
-                  _account = value!;
                 });
               },
             ),
@@ -231,11 +202,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             const SizedBox(height: 16),
 
             // Date Picker
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Date *'),
-              subtitle: Text(DateFormat('EEEE, MMM d, yyyy').format(_selectedDate)),
-              trailing: const Icon(Icons.calendar_today),
+            InkWell(
               onTap: () async {
                 final date = await showDatePicker(
                   context: context,
@@ -249,16 +216,28 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   });
                 }
               },
+              child: InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'Date *',
+                  border: OutlineInputBorder(),
+                  suffixIcon: Icon(Icons.calendar_today),
+                ),
+                child: Text(
+                  DateFormat('EEEE, MMM d, yyyy').format(_selectedDate),
+                  style: const TextStyle(fontSize: 16),
+                ),
+              ),
             ),
-            const Divider(),
+            const SizedBox(height: 16),
 
             // Note
             TextFormField(
               controller: _noteController,
               maxLines: 3,
               decoration: const InputDecoration(
-                labelText: 'Note',
+                labelText: 'Note (Optional)',
                 border: OutlineInputBorder(),
+                hintText: 'Add a note...',
               ),
             ),
             const SizedBox(height: 24),
@@ -270,8 +249,15 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 padding: const EdgeInsets.all(16),
               ),
               child: _isLoading
-                  ? const CircularProgressIndicator()
-                  : Text(isEdit ? 'Update' : 'Save'),
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text(
+                      isEdit ? 'UPDATE' : 'SAVE',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
             ),
           ],
         ),
@@ -293,7 +279,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         amount: double.parse(_amountController.text),
         category: _category,
         subcategory: _subcategory,
-        account: _account,
         paymentMethod: _paymentMethod,
         date: _selectedDate,
         note: _noteController.text.isEmpty ? null : _noteController.text,
@@ -315,9 +300,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           SnackBar(
             content: Text(widget.isCopy
                 ? 'Transaction copied'
-                : (widget.transaction != null
-                    ? 'Transaction updated'
-                    : 'Transaction added')),
+                : (widget.transaction != null ? 'Updated' : 'Added')),
             backgroundColor: Colors.green,
           ),
         );
@@ -325,10 +308,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {

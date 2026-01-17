@@ -5,12 +5,11 @@ class TransactionModel {
   final String type; // 'income' or 'expense'
   final double amount;
   final String category;
-  final String? subcategory; // NEW: Subcategory
-  final String account; // NEW: Account name
-  final String paymentMethod; // Now mandatory
+  final String? subcategory;
+  final String paymentMethod; // Mandatory - only payment field
   final DateTime date;
   final String? note;
-  final String? imageUrl; // NEW: Receipt/bill image
+  final String? imageUrl;
   final DateTime createdAt;
 
   TransactionModel({
@@ -19,7 +18,6 @@ class TransactionModel {
     required this.amount,
     required this.category,
     this.subcategory,
-    required this.account,
     required this.paymentMethod,
     required this.date,
     this.note,
@@ -27,14 +25,12 @@ class TransactionModel {
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
-  // Convert to Firestore
   Map<String, dynamic> toMap() {
     return {
       'type': type,
       'amount': amount,
       'category': category,
       'subcategory': subcategory,
-      'account': account,
       'paymentMethod': paymentMethod,
       'date': Timestamp.fromDate(date),
       'note': note,
@@ -43,7 +39,6 @@ class TransactionModel {
     };
   }
 
-  // Create from Firestore
   factory TransactionModel.fromMap(Map<String, dynamic> map, String id) {
     return TransactionModel(
       id: id,
@@ -51,23 +46,22 @@ class TransactionModel {
       amount: (map['amount'] ?? 0).toDouble(),
       category: map['category'] ?? 'Other',
       subcategory: map['subcategory'],
-      account: map['account'] ?? 'Cash',
       paymentMethod: map['paymentMethod'] ?? 'Cash',
       date: (map['date'] as Timestamp).toDate(),
       note: map['note'],
       imageUrl: map['imageUrl'],
-      createdAt: (map['createdAt'] as Timestamp).toDate(),
+      createdAt: map['createdAt'] != null 
+          ? (map['createdAt'] as Timestamp).toDate()
+          : DateTime.now(),
     );
   }
 
-  // Copy with modifications
   TransactionModel copyWith({
     String? id,
     String? type,
     double? amount,
     String? category,
     String? subcategory,
-    String? account,
     String? paymentMethod,
     DateTime? date,
     String? note,
@@ -80,7 +74,6 @@ class TransactionModel {
       amount: amount ?? this.amount,
       category: category ?? this.category,
       subcategory: subcategory ?? this.subcategory,
-      account: account ?? this.account,
       paymentMethod: paymentMethod ?? this.paymentMethod,
       date: date ?? this.date,
       note: note ?? this.note,

@@ -21,14 +21,6 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   final TextEditingController _noteController = TextEditingController();
   bool _isLoading = false;
 
-  final List<Map<String, dynamic>> _accountTypes = [
-    {'value': 'cash', 'label': 'Cash', 'icon': Icons.money},
-    {'value': 'bank', 'label': 'Bank Account', 'icon': Icons.account_balance},
-    {'value': 'credit_card', 'label': 'Credit Card', 'icon': Icons.credit_card},
-    {'value': 'loan', 'label': 'Loan', 'icon': Icons.receipt_long},
-    {'value': 'other', 'label': 'Other', 'icon': Icons.wallet},
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -93,18 +85,58 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                 labelText: 'Account Type *',
                 border: OutlineInputBorder(),
               ),
-              items: _accountTypes
-                  .map((type) => DropdownMenuItem(
-                        value: type['value'],
-                        child: Row(
-                          children: [
-                            Icon(type['icon'], size: 20),
-                            const SizedBox(width: 12),
-                            Text(type['label']),
-                          ],
-                        ),
-                      ))
-                  .toList(),
+              items: [
+                DropdownMenuItem(
+                  value: 'cash',
+                  child: Row(
+                    children: const [
+                      Icon(Icons.money, size: 20),
+                      SizedBox(width: 12),
+                      Text('Cash'),
+                    ],
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'bank',
+                  child: Row(
+                    children: const [
+                      Icon(Icons.account_balance, size: 20),
+                      SizedBox(width: 12),
+                      Text('Bank Account'),
+                    ],
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'credit_card',
+                  child: Row(
+                    children: const [
+                      Icon(Icons.credit_card, size: 20),
+                      SizedBox(width: 12),
+                      Text('Credit Card'),
+                    ],
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'loan',
+                  child: Row(
+                    children: const [
+                      Icon(Icons.receipt_long, size: 20),
+                      SizedBox(width: 12),
+                      Text('Loan'),
+                    ],
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'other',
+                  child: Row(
+                    children: const [
+                      Icon(Icons.wallet, size: 20),
+                      SizedBox(width: 12),
+                      Text('Other'),
+                    ],
+                  ),
+                ),
+              ],
               onChanged: (value) {
                 setState(() {
                   _type = value!;

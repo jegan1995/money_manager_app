@@ -15,7 +15,13 @@ class TransactionDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isExpense = transaction.type == 'expense';
+    final isIncome = transaction.type == 'income';
+    final isTransfer = transaction.type == 'transfer';
     final TransactionService transactionService = TransactionService();
+
+    Color typeColor = Colors.blue;
+    if (isExpense) typeColor = Colors.red;
+    if (isIncome) typeColor = Colors.green;
 
     return Scaffold(
       appBar: AppBar(
@@ -118,21 +124,25 @@ class TransactionDetailScreen extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(
-                color: isExpense ? Colors.red[50] : Colors.green[50],
+                color: typeColor.withOpacity(0.1),
               ),
               child: Column(
                 children: [
                   Icon(
-                    isExpense ? Icons.arrow_upward : Icons.arrow_downward,
-                    color: isExpense ? Colors.red : Colors.green,
+                    isTransfer
+                        ? Icons.swap_horiz
+                        : (isExpense ? Icons.arrow_upward : Icons.arrow_downward),
+                    color: typeColor,
                     size: 48,
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    isExpense ? 'Expense' : 'Income',
+                    isTransfer
+                        ? 'Transfer'
+                        : (isExpense ? 'Expense' : 'Income'),
                     style: TextStyle(
                       fontSize: 16,
-                      color: isExpense ? Colors.red[700] : Colors.green[700],
+                      color: typeColor,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -142,7 +152,7 @@ class TransactionDetailScreen extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 40,
                       fontWeight: FontWeight.bold,
-                      color: isExpense ? Colors.red : Colors.green,
+                      color: typeColor,
                     ),
                   ),
                 ],
@@ -165,11 +175,26 @@ class TransactionDetailScreen extends StatelessWidget {
                 value: transaction.subcategory!,
               ),
 
-            _buildDetailItem(
-              icon: Icons.payment,
-              label: 'Payment Method',
-              value: transaction.paymentMethod,
-            ),
+            if (transaction.paymentMethod != null)
+              _buildDetailItem(
+                icon: Icons.payment,
+                label: 'Payment Method',
+                value: transaction.paymentMethod!,
+              ),
+
+            if (transaction.fromAccount != null)
+              _buildDetailItem(
+                icon: Icons.account_balance_wallet,
+                label: 'From Account',
+                value: transaction.fromAccount!,
+              ),
+
+            if (transaction.toAccount != null)
+              _buildDetailItem(
+                icon: Icons.account_balance,
+                label: 'To Account',
+                value: transaction.toAccount!,
+              ),
 
             _buildDetailItem(
               icon: Icons.calendar_today,

@@ -1,24 +1,56 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../models/goal.dart';
+import '../models/goal_model.dart';
 
 class GoalService {
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final String _collection = 'goals';
 
-  Future<void> addGoal(Goal goal) async {
-    await _db.collection('goals').add(goal.toMap());
+  Stream<QuerySnapshot> getGoals() {
+    return _firestore
+        .collection(_collection)
+        .orderBy('createdAt', descending: false)
+        .snapshots();
   }
 
-  Stream<List<Goal>> getGoals() {
-    return _db.collection('goals').snapshots().map(
-      (snapshot) => snapshot.docs.map((doc) => Goal.fromFirestore(doc)).toList(),
-    );
+  Future<void> addGoal(GoalModel goal) async {
+    try {
+      await _firestore.collection(_collection).add(goal.toMap());
+    } catch (e) {
+      throw Exception('Failed to add goal: $e');
+    }
   }
 
-  Future<void> updateGoalSaved(String id, double amount) async {
-    await _db.collection('goals').doc(id).update({'savedAmount': amount});
+  Future<void> updateGoal(String id, GoalModel goal) async {
+    try {
+      await _firestore.collection(_collection).doc(id).update(goal.toMap());
+    } catch (e) {
+      throw Exception('Failed to update goal: $e');
+    }
   }
 
   Future<void> deleteGoal(String id) async {
-    await _db.collection('goals').doc(id).delete();
+    try {
+      await _firestore.collection(_collection).doc(id).delete();
+    } catch (e) {
+      throw Exception('Failed to delete goal: $e');
+    }
+  }
+
+  Future<void> addAmountToGoal(String id, double amount) async {
+    try {
+      final doc = await _firestore.collection(_collection).doc(id).get();
+      if (doc.exists) {
+        final goal = GoalModel.fromMap(doc.data()!, doc.id);
+        final newAmount = goal.currentAmount + amount;
+        final isCompleted = newAmount >= goal.targetAmount;
+
+        await _firestore.collection(_collection).doc(id).update({
+          'currentAmount': newAmount,
+          'isCompleted': isCompleted,
+        });
+      }
+    } catch (e) {
+      throw Exception('Failed to add amount to goal: $e');
+    }
   }
 }

@@ -5,6 +5,7 @@ import '../models/transaction_model.dart';
 import '../services/transaction_service.dart';
 import 'add_transaction_screen.dart';
 import 'transaction_detail_screen.dart';
+import 'search_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -24,6 +25,17 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('Money Manager'),
         actions: [
+          // Search Button
+          IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SearchScreen()),
+              );
+            },
+          ),
+          // Period Selector
           PopupMenuButton<String>(
             initialValue: _selectedPeriod,
             onSelected: (value) => setState(() => _selectedPeriod = value),
@@ -91,7 +103,6 @@ class _HomeScreenState extends State<HomeScreen> {
           } else if (txn.type == 'expense') {
             expense += txn.amount;
           }
-          // Transfers don't affect income/expense
         }
 
         return Container(
@@ -212,7 +223,6 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
 
-        // Group by date
         final grouped = <String, List<TransactionModel>>{};
         for (var txn in filtered) {
           final key = DateFormat('yyyy-MM-dd').format(txn.date);

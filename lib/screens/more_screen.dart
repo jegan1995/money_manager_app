@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/transaction_service.dart';
+import '../services/export_service.dart';
+import '../models/transaction_model.dart';
 import 'transfers_screen.dart';
 import 'budget_management_screen.dart';
 import 'recurring_transactions_screen.dart';
+import 'goals_screen.dart';
+import 'filter_screen.dart';
 import 'settings_screen.dart';
 
 class MoreScreen extends StatelessWidget {
@@ -44,11 +50,24 @@ class MoreScreen extends StatelessWidget {
               );
             },
           ),
+          _buildMenuItem(
+            context,
+            icon: Icons.filter_list,
+            title: 'Advanced Filter',
+            subtitle: 'Filter by multiple criteria',
+            color: Colors.indigo,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const FilterScreen()),
+              );
+            },
+          ),
 
           const Divider(height: 32),
 
           // Section: Planning
-          _buildSectionHeader('Planning'),
+          _buildSectionHeader('Planning & Goals'),
           _buildMenuItem(
             context,
             icon: Icons.pie_chart,
@@ -63,6 +82,32 @@ class MoreScreen extends StatelessWidget {
               );
             },
           ),
+          _buildMenuItem(
+            context,
+            icon: Icons.emoji_events,
+            title: 'Financial Goals',
+            subtitle: 'Track your savings goals',
+            color: Colors.amber,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const GoalsScreen()),
+              );
+            },
+          ),
+
+          const Divider(height: 32),
+
+          // Section: Data
+          _buildSectionHeader('Data Management'),
+          _buildMenuItem(
+            context,
+            icon: Icons.download,
+            title: 'Export to CSV',
+            subtitle: 'Download your transactions',
+            color: Colors.green,
+            onTap: () => _exportTransactions(context),
+          ),
 
           const Divider(height: 32),
 
@@ -72,7 +117,7 @@ class MoreScreen extends StatelessWidget {
             context,
             icon: Icons.settings,
             title: 'App Settings',
-            subtitle: 'Preferences & configurations',
+            subtitle: 'Theme, currency & preferences',
             color: Colors.grey,
             onTap: () {
               Navigator.push(
@@ -97,11 +142,14 @@ class MoreScreen extends StatelessWidget {
                 context: context,
                 applicationName: 'Money Manager',
                 applicationVersion: '1.0.0',
-                applicationIcon: const Icon(Icons.account_balance_wallet, size: 48),
-                children: [
-                  const Text('A comprehensive money management app'),
-                  const SizedBox(height: 8),
-                  const Text('Built with Flutter & Firebase'),
+                applicationIcon:
+                    const Icon(Icons.account_balance_wallet, size: 48),
+                children: const [
+                  Text('A comprehensive money management app'),
+                  SizedBox(height: 8),
+                  Text('Built with Flutter & Firebase'),
+                  SizedBox(height: 8),
+                  Text('Features: Budgets, Goals, Analytics & More'),
                 ],
               );
             },
@@ -151,5 +199,57 @@ class MoreScreen extends StatelessWidget {
       trailing: const Icon(Icons.chevron_right),
       onTap: onTap,
     );
+  }
+
+  Future<void> _exportTransactions(BuildContext context) async {
+    try {
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
+      );
+
+      final TransactionService transactionService = TransactionService();
+      final ExportService exportService = ExportService();
+
+      // Get all transactions
+      final snapshot = await transactionService.getTransactions().first;
+      final transactions = snapshot.docs
+          .map((doc) => TransactionModel.fromMap(
+                doc.data() as Map<String, dynamic>,
+                doc.id,
+              ))
+          .toList();
+
+      // Export to CSV
+      final filePath = await exportService.exportTransactionsToCSV(transactions);
+
+      if (context.mounted) {
+        Navigator.pop(context); // Close loading
+
+        if (filePath != null) {
+          // Show share dialog
+          await exportService.shareCSV(filePath);
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Transactions exported successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context); // Close loading
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error exporting: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }

@@ -215,49 +215,6 @@ class TransactionDetailScreen extends StatelessWidget {
                 value: transaction.note!,
               ),
 
-            if (transaction.imageUrl != null && transaction.imageUrl!.isNotEmpty)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.image, color: Colors.grey[600], size: 20),
-                        const SizedBox(width: 12),
-                        Text(
-                          'Receipt/Image',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[600],
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.network(
-                        transaction.imageUrl!,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            height: 200,
-                            color: Colors.grey[300],
-                            child: const Center(
-                              child: Icon(Icons.broken_image, size: 48),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
             const SizedBox(height: 16),
           ],
         ),

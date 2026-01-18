@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
@@ -6,7 +5,6 @@ import '../models/transaction_model.dart';
 import '../models/account_model.dart';
 import '../services/transaction_service.dart';
 import '../services/account_service.dart';
-import '../services/image_service.dart';
 import '../utils/subcategories.dart';
 
 class AddTransactionScreen extends StatefulWidget {
@@ -27,7 +25,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   final _formKey = GlobalKey<FormState>();
   final TransactionService _transactionService = TransactionService();
   final AccountService _accountService = AccountService();
-  final ImageService _imageService = ImageService();
 
   String _type = 'expense';
   final TextEditingController _amountController = TextEditingController();
@@ -39,8 +36,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   DateTime _selectedDate = DateTime.now();
   final TextEditingController _noteController = TextEditingController();
   bool _isLoading = false;
-  File? _imageFile;
-  String? _existingImageUrl;
 
   List<AccountModel> _accounts = [];
 
@@ -67,7 +62,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       _toAccount = widget.transaction!.toAccount;
       _selectedDate = widget.transaction!.date;
       _noteController.text = widget.transaction!.note ?? '';
-      _existingImageUrl = widget.transaction!.imageUrl;
     }
   }
 
@@ -207,10 +201,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 hintText: 'Add a note...',
               ),
             ),
-            const SizedBox(height: 16),
-
-            // Image Upload Section
-            _buildImageSection(),
             const SizedBox(height: 24),
 
             // Save Button
@@ -448,97 +438,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     );
   }
 
-  Widget _buildImageSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Receipt/Image (Optional)',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-        ),
-        const SizedBox(height: 12),
-        
-        // Show existing image or selected image
-        if (_existingImageUrl != null || _imageFile != null)
-          Stack(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: _imageFile != null
-                    ? Image.file(
-                        _imageFile!,
-                        height: 200,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                      )
-                    : Image.network(
-                        _existingImageUrl!,
-                        height: 200,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                      ),
-              ),
-              Positioned(
-                top: 8,
-                right: 8,
-                child: IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white),
-                  style: IconButton.styleFrom(
-                    backgroundColor: Colors.black54,
-                  ),
-                  onPressed: () {
-                    setState(() {
-                      _imageFile = null;
-                      _existingImageUrl = null;
-                    });
-                  },
-                ),
-              ),
-            ],
-          ),
-        
-        const SizedBox(height: 12),
-        
-        // Image picker buttons
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () async {
-                  final file = await _imageService.pickImageFromCamera();
-                  if (file != null) {
-                    setState(() {
-                      _imageFile = file;
-                      _existingImageUrl = null;
-                    });
-                  }
-                },
-                icon: const Icon(Icons.camera_alt),
-                label: const Text('Camera'),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () async {
-                  final file = await _imageService.pickImageFromGallery();
-                  if (file != null) {
-                    setState(() {
-                      _imageFile = file;
-                      _existingImageUrl = null;
-                    });
-                  }
-                },
-                icon: const Icon(Icons.photo_library),
-                label: const Text('Gallery'),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
   Future<void> _saveTransaction() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -557,13 +456,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     });
 
     try {
-      String? imageUrl = _existingImageUrl;
-
-      // Upload new image if selected
-      if (_imageFile != null) {
-        imageUrl = await _imageService.uploadImage(_imageFile!, 'receipts');
-      }
-
       final transaction = TransactionModel(
         id: widget.transaction?.id,
         type: _type,
@@ -575,7 +467,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         toAccount: _type == 'transfer' ? _toAccount : null,
         date: _selectedDate,
         note: _noteController.text.isEmpty ? null : _noteController.text,
-        imageUrl: imageUrl,
       );
 
       if (widget.transaction != null && !widget.isCopy) {

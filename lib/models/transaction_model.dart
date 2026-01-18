@@ -7,11 +7,10 @@ class TransactionModel {
   final String category;
   final String? subcategory;
   final String? paymentMethod;
-  final String? fromAccount; // For transfers
-  final String? toAccount; // For transfers
+  final String? fromAccount;
+  final String? toAccount;
   final DateTime date;
   final String? note;
-  final String? imageUrl;
   final DateTime createdAt;
 
   TransactionModel({
@@ -25,7 +24,6 @@ class TransactionModel {
     this.toAccount,
     required this.date,
     this.note,
-    this.imageUrl,
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
@@ -40,7 +38,6 @@ class TransactionModel {
       'toAccount': toAccount,
       'date': Timestamp.fromDate(date),
       'note': note,
-      'imageUrl': imageUrl,
       'createdAt': Timestamp.fromDate(createdAt),
     };
   }
@@ -57,7 +54,6 @@ class TransactionModel {
       toAccount: map['toAccount'],
       date: (map['date'] as Timestamp).toDate(),
       note: map['note'],
-      imageUrl: map['imageUrl'],
       createdAt: map['createdAt'] != null
           ? (map['createdAt'] as Timestamp).toDate()
           : DateTime.now(),
@@ -75,7 +71,6 @@ class TransactionModel {
     String? toAccount,
     DateTime? date,
     String? note,
-    String? imageUrl,
     DateTime? createdAt,
   }) {
     return TransactionModel(
@@ -89,7 +84,6 @@ class TransactionModel {
       toAccount: toAccount ?? this.toAccount,
       date: date ?? this.date,
       note: note ?? this.note,
-      imageUrl: imageUrl ?? this.imageUrl,
       createdAt: createdAt ?? this.createdAt,
     );
   }

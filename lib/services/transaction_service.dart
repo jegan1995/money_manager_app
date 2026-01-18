@@ -1,9 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/transaction_model.dart';
+import 'account_service.dart';
 
 class TransactionService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final String _collection = 'transactions';
+  final AccountService _accountService = AccountService();
 
   // Get all transactions (ordered by date descending)
   Stream<QuerySnapshot> getTransactions() {
@@ -13,10 +15,24 @@ class TransactionService {
         .snapshots();
   }
 
-  // Add new transaction
+  // Add new transaction (with account balance update)
   Future<void> addTransaction(TransactionModel transaction) async {
     try {
       await _firestore.collection(_collection).add(transaction.toMap());
+
+      // Update account balance if transfer
+      if (transaction.type == 'transfer' &&
+          transaction.fromAccount != null &&
+          transaction.toAccount != null) {
+        await _accountService.updateAccountBalance(
+          transaction.fromAccount!,
+          -transaction.amount,
+        );
+        await _accountService.updateAccountBalance(
+          transaction.toAccount!,
+          transaction.amount,
+        );
+      }
     } catch (e) {
       throw Exception('Failed to add transaction: $e');
     }
@@ -64,7 +80,7 @@ class TransactionService {
         .snapshots();
   }
 
-  // Get transactions by type (income/expense)
+  // Get transactions by type (income/expense/transfer)
   Stream<QuerySnapshot> getTransactionsByType(String type) {
     return _firestore
         .collection(_collection)
@@ -82,23 +98,54 @@ class TransactionService {
         .snapshots();
   }
 
-  // Get transactions by account
-  Stream<QuerySnapshot> getTransactionsByAccount(String account) {
-    return _firestore
-        .collection(_collection)
-        .where('account', isEqualTo: account)
-        .orderBy('date', descending: true)
-        .snapshots();
+  // Search transactions
+  Future<List<TransactionModel>> searchTransactions(String query) async {
+    try {
+      final snapshot = await _firestore.collection(_collection).get();
+      
+      final allTransactions = snapshot.docs
+          .map((doc) => TransactionModel.fromMap(
+                doc.data(),
+                doc.id,
+              ))
+          .toList();
+
+      // Filter by query (category, note, amount)
+      return allTransactions.where((txn) {
+        final queryLower = query.toLowerCase();
+        return txn.category.toLowerCase().contains(queryLower) ||
+            (txn.subcategory?.toLowerCase().contains(queryLower) ?? false) ||
+            (txn.note?.toLowerCase().contains(queryLower) ?? false) ||
+            txn.amount.toString().contains(query);
+      }).toList();
+    } catch (e) {
+      throw Exception('Failed to search transactions: $e');
+    }
   }
 
-  // Search transactions
-  Stream<QuerySnapshot> searchTransactions(String query) {
-    return _firestore
-        .collection(_collection)
-        .where('note', isGreaterThanOrEqualTo: query)
-        .where('note', isLessThanOrEqualTo: '$query\uf8ff')
-        .orderBy('note')
-        .orderBy('date', descending: true)
-        .snapshots();
+  // Get spending by category for a month
+  Future<Map<String, double>> getSpendingByCategory(int month, int year) async {
+    try {
+      final startDate = DateTime(year, month, 1);
+      final endDate = DateTime(year, month + 1, 0, 23, 59, 59);
+
+      final snapshot = await _firestore
+          .collection(_collection)
+          .where('type', isEqualTo: 'expense')
+          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
+          .where('date', isLessThanOrEqualTo: Timestamp.fromDate(endDate))
+          .get();
+
+      final Map<String, double> spending = {};
+
+      for (var doc in snapshot.docs) {
+        final txn = TransactionModel.fromMap(doc.data(), doc.id);
+        spending[txn.category] = (spending[txn.category] ?? 0) + txn.amount;
+      }
+
+      return spending;
+    } catch (e) {
+      throw Exception('Failed to get spending by category: $e');
+    }
   }
 }

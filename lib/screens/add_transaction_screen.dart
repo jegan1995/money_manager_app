@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../models/transaction_model.dart';
 import '../models/account_model.dart';
+import '../models/account_model.dart';
 import '../services/transaction_service.dart';
+import '../services/account_service.dart';
 import '../services/account_service.dart';
 import '../utils/subcategories.dart';
 
@@ -25,17 +28,24 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   final _formKey = GlobalKey<FormState>();
   final TransactionService _transactionService = TransactionService();
   final AccountService _accountService = AccountService();
+  final AccountService _accountService = AccountService();
 
-  String _type = 'expense';
+  String _type = 'income'; // Income first
   final TextEditingController _amountController = TextEditingController();
+  String? _selectedCategory;
+  String? _selectedSubcategory;
   String? _selectedCategory;
   String? _selectedSubcategory;
   String _paymentMethod = 'Cash';
   String? _fromAccount;
   String? _toAccount;
+  String? _fromAccount;
+  String? _toAccount;
   DateTime _selectedDate = DateTime.now();
   final TextEditingController _noteController = TextEditingController();
   bool _isLoading = false;
+  bool _isRecurring = false;
+  String _recurringFrequency = 'monthly';
 
   List<AccountModel> _accounts = [];
 
@@ -52,6 +62,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   void initState() {
     super.initState();
     _loadAccounts();
+    _loadAccounts();
     if (widget.transaction != null) {
       _type = widget.transaction!.type;
       _amountController.text = widget.transaction!.amount.toString();
@@ -60,9 +71,27 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       _paymentMethod = widget.transaction!.paymentMethod ?? 'Cash';
       _fromAccount = widget.transaction!.fromAccount;
       _toAccount = widget.transaction!.toAccount;
+      _selectedCategory = widget.transaction!.category;
+      _selectedSubcategory = widget.transaction!.subcategory;
+      _paymentMethod = widget.transaction!.paymentMethod ?? 'Cash';
+      _fromAccount = widget.transaction!.fromAccount;
+      _toAccount = widget.transaction!.toAccount;
       _selectedDate = widget.transaction!.date;
       _noteController.text = widget.transaction!.note ?? '';
     }
+  }
+
+  void _loadAccounts() {
+    _accountService.getAccounts().listen((snapshot) {
+      setState(() {
+        _accounts = snapshot.docs
+            .map((doc) => AccountModel.fromMap(
+                  doc.data() as Map<String, dynamic>,
+                  doc.id,
+                ))
+            .toList();
+      });
+    });
   }
 
   void _loadAccounts() {
@@ -100,18 +129,19 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // Type Selector (Income/Expense/Transfer)
+            // Type Selector (Income/Expense/Transfer) - Income first
             SegmentedButton<String>(
               segments: const [
-                ButtonSegment(
-                  value: 'expense',
-                  label: Text('Expense'),
-                  icon: Icon(Icons.remove_circle_outline),
-                ),
                 ButtonSegment(
                   value: 'income',
                   label: Text('Income'),
                   icon: Icon(Icons.add_circle_outline),
+                ),
+                ButtonSegment(
+                  value: 'expense',
+                  label: Text('Expense'),
+                  icon: Icon(Icons.remove_circle_outline),
+                  icon: Icon(Icons.remove_circle_outline),
                 ),
                 ButtonSegment(
                   value: 'transfer',
@@ -123,6 +153,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               onSelectionChanged: (Set<String> newSelection) {
                 setState(() {
                   _type = newSelection.first;
+                  _selectedCategory = null;
+                  _selectedSubcategory = null;
                   _selectedCategory = null;
                   _selectedSubcategory = null;
                 });
@@ -151,6 +183,97 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             ),
             const SizedBox(height: 16),
 
+            // Date Picker (Moved to top)
+            Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: () async {
+                      final date = await showDatePicker(
+                        context: context,
+                        initialDate: _selectedDate,
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime(2100),
+                      );
+                      if (date != null) {
+                        setState(() {
+                          _selectedDate = date;
+                        });
+                      }
+                    },
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'Date *',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.calendar_today),
+                      ),
+                      child: Text(
+                        DateFormat('MMM d, yyyy').format(_selectedDate),
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Repeat toggle
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      _isRecurring = !_isRecurring;
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey[400]!),
+                      borderRadius: BorderRadius.circular(4),
+                      color: _isRecurring ? Colors.blue[50] : null,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.repeat,
+                          color: _isRecurring ? Colors.blue : Colors.grey[600],
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Repeat',
+                          style: TextStyle(
+                            color: _isRecurring ? Colors.blue : Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Show recurring frequency if enabled
+            if (_isRecurring) ...[
+              DropdownButtonFormField<String>(
+                value: _recurringFrequency,
+                decoration: const InputDecoration(
+                  labelText: 'Repeat Frequency',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.loop),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'daily', child: Text('Daily')),
+                  DropdownMenuItem(value: 'weekly', child: Text('Weekly')),
+                  DropdownMenuItem(value: 'monthly', child: Text('Monthly')),
+                  DropdownMenuItem(value: 'yearly', child: Text('Yearly')),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _recurringFrequency = value!;
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
+
             // Show different fields based on type
             if (_type == 'transfer') ...[
               _buildTransferFields(),
@@ -160,35 +283,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               _buildPaymentMethodField(),
             ],
 
-            const SizedBox(height: 16),
-
-            // Date Picker
-            InkWell(
-              onTap: () async {
-                final date = await showDatePicker(
-                  context: context,
-                  initialDate: _selectedDate,
-                  firstDate: DateTime(2000),
-                  lastDate: DateTime(2100),
-                );
-                if (date != null) {
-                  setState(() {
-                    _selectedDate = date;
-                  });
-                }
-              },
-              child: InputDecorator(
-                decoration: const InputDecoration(
-                  labelText: 'Date *',
-                  border: OutlineInputBorder(),
-                  suffixIcon: Icon(Icons.calendar_today),
-                ),
-                child: Text(
-                  DateFormat('EEEE, MMM d, yyyy').format(_selectedDate),
-                  style: const TextStyle(fontSize: 16),
-                ),
-              ),
-            ),
             const SizedBox(height: 16),
 
             // Note
@@ -219,6 +313,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       isEdit ? 'UPDATE' : 'SAVE',
                       style: const TextStyle(
                           fontSize: 16, fontWeight: FontWeight.bold),
+                      isEdit ? 'UPDATE' : 'SAVE',
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.bold),
                     ),
             ),
           ],
@@ -228,12 +325,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   }
 
   Widget _buildCategoryFields() {
-    final categories = Categories.getMainCategories(_type);
-
     return Column(
       children: [
         InkWell(
-          onTap: () => _showCategoryPicker(categories),
+          onTap: () => _showCategoryPicker(),
           child: InputDecorator(
             decoration: const InputDecoration(
               labelText: 'Category *',
@@ -257,18 +352,21 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     );
   }
 
-  void _showCategoryPicker(List<String> categories) {
+  void _showCategoryPicker() {
+    final categories = Categories.getMainCategories(_type);
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.7,
+        initialChildSize: 0.9,
         minChildSize: 0.5,
         maxChildSize: 0.95,
         expand: false,
         builder: (context, scrollController) {
           return Column(
             children: [
+              // Header
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -285,13 +383,24 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.pop(context),
+                    Row(
+                      children: [
+                        TextButton.icon(
+                          onPressed: () => _showAddCategoryDialog(),
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text('Add New'),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
+
+              // Categories Grid (3 per row like Money Manager)
               Expanded(
                 child: ListView.builder(
                   controller: scrollController,
@@ -301,33 +410,106 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                     final subcategories =
                         Categories.getSubcategories(_type, category);
 
-                    return ExpansionTile(
-                      leading: Icon(
-                        _getCategoryIcon(category),
-                        color: _type == 'expense' ? Colors.red : Colors.green,
-                      ),
-                      title: Text(
-                        category,
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      children: subcategories.map((sub) {
-                        return ListTile(
-                          contentPadding:
-                              const EdgeInsets.only(left: 72, right: 16),
-                          title: Text(sub),
-                          onTap: () {
-                            setState(() {
-                              _selectedCategory = category;
-                              _selectedSubcategory = sub;
-                            });
-                            Navigator.pop(context);
-                          },
-                          trailing: _selectedCategory == category &&
-                                  _selectedSubcategory == sub
-                              ? const Icon(Icons.check, color: Colors.blue)
-                              : null,
-                        );
-                      }).toList(),
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Main Category Header
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          color: Colors.grey[200],
+                          child: Row(
+                            children: [
+                              Icon(
+                                _getCategoryIcon(category),
+                                color: _type == 'expense'
+                                    ? Colors.red
+                                    : Colors.green,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                category,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Subcategories Grid (3 per row)
+                        Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: GridView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 3,
+                              childAspectRatio: 2.5,
+                              crossAxisSpacing: 8,
+                              mainAxisSpacing: 8,
+                            ),
+                            itemCount: subcategories.length + 1,
+                            itemBuilder: (context, subIndex) {
+                              // Add new subcategory button
+                              if (subIndex == subcategories.length) {
+                                return OutlinedButton.icon(
+                                  onPressed: () =>
+                                      _showAddSubcategoryDialog(category),
+                                  icon: const Icon(Icons.add, size: 16),
+                                  label: const Text('Add',
+                                      style: TextStyle(fontSize: 12)),
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 4),
+                                  ),
+                                );
+                              }
+
+                              final sub = subcategories[subIndex];
+                              final isSelected =
+                                  _selectedCategory == category &&
+                                      _selectedSubcategory == sub;
+
+                              return OutlinedButton(
+                                onPressed: () {
+                                  setState(() {
+                                    _selectedCategory = category;
+                                    _selectedSubcategory = sub;
+                                  });
+                                  Navigator.pop(context);
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  backgroundColor:
+                                      isSelected ? Colors.blue[50] : null,
+                                  side: BorderSide(
+                                    color: isSelected
+                                        ? Colors.blue
+                                        : Colors.grey[300]!,
+                                    width: isSelected ? 2 : 1,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 4),
+                                ),
+                                child: Text(
+                                  sub,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color:
+                                        isSelected ? Colors.blue : Colors.black,
+                                    fontWeight: isSelected
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
                     );
                   },
                 ),
@@ -335,6 +517,83 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             ],
           );
         },
+      ),
+    );
+  }
+
+  void _showAddCategoryDialog() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add New Category'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'Category Name',
+            border: OutlineInputBorder(),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              if (controller.text.isNotEmpty) {
+                // Add to categories (you'll need to implement storage)
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Custom categories coming soon'),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+              }
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddSubcategoryDialog(String category) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Add Subcategory to $category'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'Subcategory Name',
+            border: OutlineInputBorder(),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              if (controller.text.isNotEmpty) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Custom subcategories coming soon'),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+              }
+            },
+            child: const Text('Add'),
+          ),
+        ],
       ),
     );
   }
@@ -451,6 +710,16 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       return;
     }
 
+    if (_type != 'transfer' && _selectedCategory == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a category'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     setState(() {
       _isLoading = true;
     });
@@ -460,6 +729,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         id: widget.transaction?.id,
         type: _type,
         amount: double.parse(_amountController.text),
+        category: _type == 'transfer' ? 'Transfer' : _selectedCategory!,
+        subcategory: _selectedSubcategory,
+        paymentMethod: _type == 'transfer' ? null : _paymentMethod,
+        fromAccount: _type == 'transfer' ? _fromAccount : null,
+        toAccount: _type == 'transfer' ? _toAccount : null,
         category: _type == 'transfer' ? 'Transfer' : _selectedCategory!,
         subcategory: _selectedSubcategory,
         paymentMethod: _type == 'transfer' ? null : _paymentMethod,
@@ -487,6 +761,17 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             transaction.amount,
           );
         }
+
+        if (_type == 'transfer') {
+          await _accountService.updateAccountBalance(
+            _fromAccount!,
+            -transaction.amount,
+          );
+          await _accountService.updateAccountBalance(
+            _toAccount!,
+            transaction.amount,
+          );
+        }
       }
 
       if (mounted) {
@@ -496,6 +781,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             content: Text(widget.isCopy
                 ? 'Transaction copied'
                 : (widget.transaction != null ? 'Updated' : 'Added')),
+                ? 'Transaction copied'
+                : (widget.transaction != null ? 'Updated' : 'Added')),
             backgroundColor: Colors.green,
           ),
         );
@@ -503,6 +790,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
           SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
       }

@@ -7,8 +7,8 @@ class TransactionModel {
   final String category;
   final String? subcategory;
   final String? paymentMethod;
-  final String? fromAccount;
-  final String? toAccount;
+  final String? fromAccount; // For transfers
+  final String? toAccount; // For transfers
   final DateTime date;
   final String? note;
   final DateTime createdAt;

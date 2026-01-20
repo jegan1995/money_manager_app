@@ -175,7 +175,6 @@ class TransactionDetailScreen extends StatelessWidget {
                 value: transaction.subcategory!,
               ),
 
-<<<<<<< HEAD
             if (transaction.paymentMethod != null)
               _buildDetailItem(
                 icon: Icons.payment,
@@ -196,13 +195,6 @@ class TransactionDetailScreen extends StatelessWidget {
                 label: 'To Account',
                 value: transaction.toAccount!,
               ),
-=======
-            _buildDetailItem(
-              icon: Icons.payment,
-              label: 'Payment Method',
-              value: transaction.paymentMethod ?? '',
-            ),
->>>>>>> 27a1685 (updated subcatogories)
 
             _buildDetailItem(
               icon: Icons.calendar_today,

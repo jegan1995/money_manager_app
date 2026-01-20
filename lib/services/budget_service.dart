@@ -16,6 +16,18 @@ class BudgetService {
             .toList());
   }
 
+  // Get budgets for specific month/year
+  Stream<List<BudgetModel>> getBudgetsForMonth(int month, int year) {
+    return _firestore
+        .collection(_collection)
+        .where('month', isEqualTo: month)
+        .where('year', isEqualTo: year)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => BudgetModel.fromFirestore(doc))
+            .toList());
+  }
+
   // Add budget
   Future<void> addBudget(BudgetModel budget) async {
     try {
@@ -56,15 +68,3 @@ class BudgetService {
     }
   }
 }
-
-  // Get budgets for specific month/year
-  Stream<List<BudgetModel>> getBudgetsForMonth(int month, int year) {
-    return _firestore
-        .collection(_collection)
-        .where('month', isEqualTo: month)
-        .where('year', isEqualTo: year)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => BudgetModel.fromFirestore(doc))
-            .toList());
-  }

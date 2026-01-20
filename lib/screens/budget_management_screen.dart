@@ -65,7 +65,7 @@ class _BudgetManagementScreenState extends State<BudgetManagementScreen> {
           }
 
           final budgets = budgetSnapshot.data?.docs
-                  .map((doc) => BudgetModel.fromMap(
+                  .map((doc) => BudgetModel.fromFirestore(
                         doc.data() as Map<String, dynamic>,
                         doc.id,
                       ))
@@ -448,6 +448,7 @@ class _BudgetManagementScreenState extends State<BudgetManagementScreen> {
                     }
 
                     final budget = BudgetModel(
+                      id: '',
                       category: selectedCategory!,
                       amount: double.parse(amountController.text),
                       month: _selectedMonth,

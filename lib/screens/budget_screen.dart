@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/budget_model.dart';
-import '../models/transaction.dart' as app_transaction;
+import '../models/transaction_model.dart';
 import '../services/budget_service.dart';
-import '../services/firestore_service.dart';
+import '../services/transaction_service.dart';
 
 class BudgetScreen extends StatefulWidget {
   const BudgetScreen({super.key});
@@ -14,7 +14,7 @@ class BudgetScreen extends StatefulWidget {
 
 class _BudgetScreenState extends State<BudgetScreen> {
   final BudgetService _budgetService = BudgetService();
-  final FirestoreService _firestoreService = FirestoreService();
+  final TransactionService _transactionService = TransactionService();
 
   @override
   Widget build(BuildContext context) {
@@ -25,37 +25,37 @@ class _BudgetScreenState extends State<BudgetScreen> {
         automaticallyImplyLeading: false,
       ),
       body: StreamBuilder<QuerySnapshot>(
-  stream: _budgetService.getBudgets(),
-  builder: (context, snapshot) {
-    if (snapshot.connectionState == ConnectionState.waiting) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    
-    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.account_balance_wallet, size: 80, color: Colors.grey),
-            const SizedBox(height: 16),
-            const Text('No budgets set', style: TextStyle(fontSize: 18, color: Colors.grey)),
-            const SizedBox(height: 8),
-            ElevatedButton.icon(
-              onPressed: () => _showAddBudgetDialog(context),
-              icon: const Icon(Icons.add),
-              label: const Text('Add Budget'),
-            ),
-          ],
-        ),
-      );
-    }
+        stream: _budgetService.getBudgets(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-    final budgets = snapshot.data!.docs
-        .map((doc) => BudgetModel.fromFirestore(doc))
-        .toList();
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.account_balance_wallet, size: 80, color: Colors.grey),
+                  const SizedBox(height: 16),
+                  const Text('No budgets set', style: TextStyle(fontSize: 18, color: Colors.grey)),
+                  const SizedBox(height: 8),
+                  ElevatedButton.icon(
+                    onPressed: () => _showAddBudgetDialog(context),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add Budget'),
+                  ),
+                ],
+              ),
+            );
+          }
 
-          return StreamBuilder<List<app_transaction.Transaction>>(
-            stream: _firestoreService.getTransactions(),
+          final budgets = snapshot.data!.docs
+              .map((doc) => BudgetModel.fromFirestore(doc))
+              .toList();
+
+          return FutureBuilder<List<TransactionModel>>(
+            future: _transactionService.getTransactionsList(),
             builder: (context, transactionSnapshot) {
               if (!transactionSnapshot.hasData) {
                 return const Center(child: CircularProgressIndicator());
@@ -67,9 +67,9 @@ class _BudgetScreenState extends State<BudgetScreen> {
 
               return ListView.builder(
                 padding: const EdgeInsets.all(16),
-                itemCount: budgetSnapshot.data!.length,
+                itemCount: budgets.length,
                 itemBuilder: (context, index) {
-                  final budget = budgetSnapshot.data![index];
+                  final budget = budgets[index];
                   
                   final spent = transactions
                       .where((t) =>
@@ -78,7 +78,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                           t.date.isAfter(currentMonth))
                       .fold(0.0, (sum, t) => sum + t.amount);
 
-                  final percentage = (spent / budget.amount) * 100;
+                  final percentage = budget.amount > 0 ? (spent / budget.amount) * 100 : 0;
                   final remaining = budget.amount - spent;
 
                   return Card(
@@ -165,7 +165,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
   }
 
   void _showAddBudgetDialog(BuildContext context) {
-    final categories = ['Food', 'Transport', 'Shopping', 'Bills', 'Entertainment', 'Health', 'Education', 'Other'];
+    final categories = ['Food & Dining', 'Shopping', 'Transportation', 'Entertainment', 'Bills & Utilities', 'Healthcare', 'Education', 'Personal Care', 'Travel', 'Other'];
     String selectedCategory = categories[0];
     final amountController = TextEditingController();
 
@@ -200,16 +200,17 @@ class _BudgetScreenState extends State<BudgetScreen> {
               onPressed: () async {
                 final amount = double.tryParse(amountController.text);
                 if (amount != null && amount > 0) {
+                  final now = DateTime.now();
                   final budget = BudgetModel(
                     id: '',
                     category: selectedCategory,
                     amount: amount,
-                    month: DateTime.now().month,
-                    year: DateTime.now().year,
-                    createdAt: DateTime.now(),
+                    month: now.month,
+                    year: now.year,
+                    createdAt: now,
                   );
                   await _budgetService.addBudget(budget);
-                  Navigator.pop(context);
+                  if (context.mounted) Navigator.pop(context);
                 }
               },
               child: const Text('Add'),

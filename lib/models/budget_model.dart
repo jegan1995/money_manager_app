@@ -1,19 +1,17 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class BudgetModel {
-  final String? id;
+  final String id;
   final String category;
   final double amount;
-  final String period; // 'monthly', 'weekly', 'yearly'
-  final int month; // 1-12
+  final int month;
   final int year;
   final DateTime createdAt;
 
   BudgetModel({
-    this.id,
+    required this.id,
     required this.category,
     required this.amount,
-    this.period = 'monthly',
     required this.month,
     required this.year,
     DateTime? createdAt,
@@ -23,24 +21,41 @@ class BudgetModel {
     return {
       'category': category,
       'amount': amount,
-      'period': period,
       'month': month,
       'year': year,
       'createdAt': Timestamp.fromDate(createdAt),
     };
   }
 
-  factory BudgetModel.fromMap(Map<String, dynamic> map, String id) {
+  factory BudgetModel.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
     return BudgetModel(
-      id: id,
-      category: map['category'] ?? '',
-      amount: (map['amount'] ?? 0).toDouble(),
-      period: map['period'] ?? 'monthly',
-      month: map['month'] ?? DateTime.now().month,
-      year: map['year'] ?? DateTime.now().year,
-      createdAt: map['createdAt'] != null
-          ? (map['createdAt'] as Timestamp).toDate()
+      id: doc.id,
+      category: data['category'] ?? '',
+      amount: (data['amount'] ?? 0.0).toDouble(),
+      month: data['month'] ?? DateTime.now().month,
+      year: data['year'] ?? DateTime.now().year,
+      createdAt: data['createdAt'] != null
+          ? (data['createdAt'] as Timestamp).toDate()
           : DateTime.now(),
+    );
+  }
+
+  BudgetModel copyWith({
+    String? id,
+    String? category,
+    double? amount,
+    int? month,
+    int? year,
+    DateTime? createdAt,
+  }) {
+    return BudgetModel(
+      id: id ?? this.id,
+      category: category ?? this.category,
+      amount: amount ?? this.amount,
+      month: month ?? this.month,
+      year: year ?? this.year,
+      createdAt: createdAt ?? this.createdAt,
     );
   }
 }

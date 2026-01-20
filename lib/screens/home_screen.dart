@@ -88,10 +88,7 @@ class _HomeScreenState extends State<HomeScreen> {
         if (!snapshot.hasData) return const SizedBox.shrink();
 
         final transactions = snapshot.data!.docs
-            .map((doc) => TransactionModel.fromMap(
-                  doc.data() as Map<String, dynamic>,
-                  doc.id,
-                ))
+            .map((doc) => TransactionModel.fromFirestore(doc))
             .toList();
 
         final filtered = _filterByPeriod(transactions);
@@ -201,10 +198,7 @@ class _HomeScreenState extends State<HomeScreen> {
         }
 
         final transactions = snapshot.data!.docs
-            .map((doc) => TransactionModel.fromMap(
-                  doc.data() as Map<String, dynamic>,
-                  doc.id,
-                ))
+            .map((doc) => TransactionModel.fromFirestore(doc))
             .toList();
 
         final filtered = _filterByPeriod(transactions);

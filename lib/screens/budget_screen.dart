@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import "../models/budget_model.dart";';
+import '../models/budget_model.dart';
 import '../models/transaction.dart' as app_transaction;
 import '../services/budget_service.dart';
 import '../services/firestore_service.dart';
@@ -96,7 +96,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                               ),
                               IconButton(
                                 icon: const Icon(Icons.delete, color: Colors.red),
-                                onPressed: () => _budgetService.deleteBudgetModel(budget.id),
+                                onPressed: () => _budgetService.deleteBudget(budget.id),
                               ),
                             ],
                           ),
@@ -200,10 +200,11 @@ class _BudgetScreenState extends State<BudgetScreen> {
                     id: '',
                     category: selectedCategory,
                     amount: amount,
-                    period: 'monthly',
-                    createdDate: DateTime.now(),
+                    month: DateTime.now().month,
+                    year: DateTime.now().year,
+                    createdAt: DateTime.now(),
                   );
-                  await _budgetService.addBudgetModel(budget);
+                  await _budgetService.addBudget(budget);
                   Navigator.pop(context);
                 }
               },

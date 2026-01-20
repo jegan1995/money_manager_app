@@ -243,10 +243,7 @@ class _FilterScreenState extends State<FilterScreen> {
     try {
       final snapshot = await _transactionService.getTransactions().first;
       final allTransactions = snapshot.docs
-          .map((doc) => TransactionModel.fromMap(
-                doc.data() as Map<String, dynamic>,
-                doc.id,
-              ))
+          .map((doc) => TransactionModel.fromFirestore(doc))
           .toList();
 
       final filtered = allTransactions.where((txn) {

@@ -5,21 +5,15 @@ class BudgetService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final String _collection = 'budgets';
 
-  // Get all budgets
-  Stream<QuerySnapshot> getBudgets() {
+  // Get budgets as Stream
+  Stream<List<BudgetModel>> getBudgets() {
     return _firestore
         .collection(_collection)
         .orderBy('createdAt', descending: true)
-        .snapshots();
-  }
-
-  // Get budgets for specific month/year
-  Stream<QuerySnapshot> getBudgetsForMonth(int month, int year) {
-    return _firestore
-        .collection(_collection)
-        .where('month', isEqualTo: month)
-        .where('year', isEqualTo: year)
-        .snapshots();
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => BudgetModel.fromFirestore(doc))
+            .toList());
   }
 
   // Add budget
@@ -49,22 +43,12 @@ class BudgetService {
     }
   }
 
-  // Get budget for specific category
-  Future<BudgetModel?> getBudgetForCategory(String category, int month, int year) async {
+  // Get budget by ID
+  Future<BudgetModel?> getBudgetById(String id) async {
     try {
-      final snapshot = await _firestore
-          .collection(_collection)
-          .where('category', isEqualTo: category)
-          .where('month', isEqualTo: month)
-          .where('year', isEqualTo: year)
-          .limit(1)
-          .get();
-
-      if (snapshot.docs.isNotEmpty) {
-        return BudgetModel.fromMap(
-          snapshot.docs.first.data(),
-          snapshot.docs.first.id,
-        );
+      final doc = await _firestore.collection(_collection).doc(id).get();
+      if (doc.exists) {
+        return BudgetModel.fromFirestore(doc);
       }
       return null;
     } catch (e) {
@@ -72,3 +56,15 @@ class BudgetService {
     }
   }
 }
+
+  // Get budgets for specific month/year
+  Stream<List<BudgetModel>> getBudgetsForMonth(int month, int year) {
+    return _firestore
+        .collection(_collection)
+        .where('month', isEqualTo: month)
+        .where('year', isEqualTo: year)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => BudgetModel.fromFirestore(doc))
+            .toList());
+  }

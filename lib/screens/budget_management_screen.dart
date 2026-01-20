@@ -73,8 +73,10 @@ class _BudgetManagementScreenState extends State<BudgetManagementScreen> {
               [];
 
           return FutureBuilder<Map<String, double>>(
-            future: _transactionService.getSpendingByCategory(startDate: DateTime.now().subtract(const Duration(days: 30)), endDate: DateTime.now(),
-                _selectedMonth, _selectedYear),
+            future: _transactionService.getSpendingByCategory(
+              startDate: DateTime.now().subtract(const Duration(days: 30)),
+              endDate: DateTime.now(),
+            ),
             builder: (context, spendingSnapshot) {
               if (!spendingSnapshot.hasData) {
                 return const Center(child: CircularProgressIndicator());

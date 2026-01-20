@@ -179,7 +179,7 @@ class TransactionDetailScreen extends StatelessWidget {
               _buildDetailItem(
                 icon: Icons.payment,
                 label: 'Payment Method',
-                value: transaction.paymentMethod!,
+                value: transaction.paymentMethod ?? '',
               ),
 
             if (transaction.fromAccount != null)

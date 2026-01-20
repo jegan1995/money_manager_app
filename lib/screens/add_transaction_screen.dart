@@ -9,7 +9,7 @@ import '../models/account_model.dart';
 import '../services/transaction_service.dart';
 import '../services/account_service.dart';
 import '../services/account_service.dart';
-import '../utils/subcategories.dart';
+// import '../utils/subcategories.dart';
 
 class AddTransactionScreen extends StatefulWidget {
   final TransactionModel? transaction;
@@ -29,19 +29,15 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   final _formKey = GlobalKey<FormState>();
   final TransactionService _transactionService = TransactionService();
   final AccountService _accountService = AccountService();
-  final AccountService _accountService = AccountService();
 
   String _type = 'income'; // Income first
   final TextEditingController _amountController = TextEditingController();
   String? _selectedCategory;
   String? _selectedSubcategory;
-  String? _selectedCategory;
-  String? _selectedSubcategory;
   String _paymentMethod = 'Cash';
   String? _fromAccount;
   String? _toAccount;
-  String? _fromAccount;
-  String? _toAccount;
+
   DateTime _selectedDate = DateTime.now();
   final TextEditingController _noteController = TextEditingController();
   bool _isLoading = false;
@@ -72,27 +68,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       _paymentMethod = widget.transaction!.paymentMethod ?? 'Cash';
       _fromAccount = widget.transaction!.fromAccount;
       _toAccount = widget.transaction!.toAccount;
-      _selectedCategory = widget.transaction!.category;
-      _selectedSubcategory = widget.transaction!.subcategory;
-      _paymentMethod = widget.transaction!.paymentMethod ?? 'Cash';
-      _fromAccount = widget.transaction!.fromAccount;
-      _toAccount = widget.transaction!.toAccount;
       _selectedDate = widget.transaction!.date;
       _noteController.text = widget.transaction!.note ?? '';
     }
-  }
-
-  void _loadAccounts() {
-    _accountService.getAccounts().listen((snapshot) {
-      setState(() {
-        _accounts = snapshot.docs
-            .map((doc) => AccountModel.fromMap(
-                  doc.data() as Map<String, dynamic>,
-                  doc.id,
-                ))
-            .toList();
-      });
-    });
   }
 
   void _loadAccounts() {
@@ -142,7 +120,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   value: 'expense',
                   label: Text('Expense'),
                   icon: Icon(Icons.remove_circle_outline),
-                  icon: Icon(Icons.remove_circle_outline),
                 ),
                 ButtonSegment(
                   value: 'transfer',
@@ -154,8 +131,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               onSelectionChanged: (Set<String> newSelection) {
                 setState(() {
                   _type = newSelection.first;
-                  _selectedCategory = null;
-                  _selectedSubcategory = null;
                   _selectedCategory = null;
                   _selectedSubcategory = null;
                 });
@@ -311,9 +286,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : Text(
-                      isEdit ? 'UPDATE' : 'SAVE',
-                      style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.bold),
                       isEdit ? 'UPDATE' : 'SAVE',
                       style: const TextStyle(
                           fontSize: 16, fontWeight: FontWeight.bold),
@@ -711,16 +683,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       return;
     }
 
-    if (_type != 'transfer' && _selectedCategory == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select a category'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
     setState(() {
       _isLoading = true;
     });
@@ -730,11 +692,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         id: widget.transaction?.id,
         type: _type,
         amount: double.parse(_amountController.text),
-        category: _type == 'transfer' ? 'Transfer' : _selectedCategory!,
-        subcategory: _selectedSubcategory,
-        paymentMethod: _type == 'transfer' ? null : _paymentMethod,
-        fromAccount: _type == 'transfer' ? _fromAccount : null,
-        toAccount: _type == 'transfer' ? _toAccount : null,
         category: _type == 'transfer' ? 'Transfer' : _selectedCategory!,
         subcategory: _selectedSubcategory,
         paymentMethod: _type == 'transfer' ? null : _paymentMethod,
@@ -752,16 +709,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       } else {
         await _transactionService.addTransaction(transaction);
 
-        if (_type == 'transfer') {
-          await _accountService.updateAccountBalance(
-            _fromAccount!,
-            -transaction.amount,
-          );
-          await _accountService.updateAccountBalance(
-            _toAccount!,
-            transaction.amount,
-          );
-        }
 
         if (_type == 'transfer') {
           await _accountService.updateAccountBalance(
@@ -782,8 +729,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             content: Text(widget.isCopy
                 ? 'Transaction copied'
                 : (widget.transaction != null ? 'Updated' : 'Added')),
-                ? 'Transaction copied'
-                : (widget.transaction != null ? 'Updated' : 'Added')),
             backgroundColor: Colors.green,
           ),
         );
@@ -791,7 +736,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
           SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
       }

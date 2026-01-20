@@ -4,7 +4,8 @@ import 'package:intl/intl.dart';
 import '../models/budget_model.dart';
 import '../services/budget_service.dart';
 import '../services/transaction_service.dart';
-import '../utils/subcategories.dart';
+// import '../utils/subcategories.dart';
+import '../utils/categories.dart';
 
 class BudgetManagementScreen extends StatefulWidget {
   const BudgetManagementScreen({super.key});

@@ -3,7 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../models/recurring_transaction_model.dart';
 import '../services/recurring_transaction_service.dart';
-import '../utils/subcategories.dart';
+// import '../utils/subcategories.dart';
+import '../utils/categories.dart';
 
 class RecurringTransactionsScreen extends StatefulWidget {
   const RecurringTransactionsScreen({super.key});

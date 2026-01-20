@@ -3,7 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../models/transaction_model.dart';
 import '../services/transaction_service.dart';
-import '../utils/subcategories.dart';
+// import '../utils/subcategories.dart';
+import '../utils/categories.dart';
 import 'transaction_detail_screen.dart';
 
 class FilterScreen extends StatefulWidget {

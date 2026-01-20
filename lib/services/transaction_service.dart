@@ -148,4 +148,37 @@ class TransactionService {
       throw Exception('Failed to get spending by category: $e');
     }
   }
+<<<<<<< HEAD
 }
+=======
+
+  // Get spending by category for a date range (NEW METHOD)
+  Future<Map<String, double>> getSpendingByCategory({
+    required DateTime startDate,
+    required DateTime endDate,
+    String type = 'expense',
+  }) async {
+    try {
+      final snapshot = await _firestore
+          .collection(_collection)
+          .where('type', isEqualTo: type)
+          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
+          .where('date', isLessThanOrEqualTo: Timestamp.fromDate(endDate))
+          .get();
+
+      final Map<String, double> categoryTotals = {};
+
+      for (var doc in snapshot.docs) {
+        final transaction = TransactionModel.fromFirestore(doc);
+        final category = transaction.category;
+        categoryTotals[category] = (categoryTotals[category] ?? 0) + transaction.amount;
+      }
+
+      return categoryTotals;
+    } catch (e) {
+      print('Error getting spending by category: $e');
+      return {};
+    }
+  }
+}
+>>>>>>> 27a1685 (updated subcatogories)

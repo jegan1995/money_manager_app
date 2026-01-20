@@ -147,16 +147,16 @@ class _AccountsScreenState extends State<AccountsScreen> {
           );
         },
       ),
-      // floatingActionButton: FloatingActionButton.extended(
-      //   onPressed: () {
-      //     Navigator.push(
-      //       context,
-      //       MaterialPageRoute(builder: (context) => const AddAccountScreen()),
-      //     );
-      //   },
-      //   icon: const Icon(Icons.add),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const AddAccountScreen()),
+          );
+        },
+        icon: const Icon(Icons.add),
         label: const Text('Add Account'),
-      // ),
+      ),
     );
   }
 

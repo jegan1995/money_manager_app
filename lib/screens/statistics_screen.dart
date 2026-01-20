@@ -33,7 +33,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         ],
       ),
       body: FutureBuilder<Map<String, double>>(
-        future: _transactionService.getSpendingByCategory(
+        future: _transactionService.getSpendingByCategory(startDate: DateTime.now().subtract(const Duration(days: 30)), endDate: DateTime.now(),
           DateTime.now().month,
           DateTime.now().year,
         ),

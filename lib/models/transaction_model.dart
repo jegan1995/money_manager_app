@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class TransactionModel {
   final String id;
-  final String type; // 'income', 'expense', 'transfer'
+  final String type;
   final double amount;
   final String category;
   final String? subcategory;
@@ -13,7 +13,7 @@ class TransactionModel {
   final String? toAccount;
   final bool isRecurring;
   final String? recurringFrequency;
-  final String? imageUrl; // Added for receipt images
+  final String? imageUrl;
   final DateTime createdAt;
 
   TransactionModel({
@@ -33,39 +33,6 @@ class TransactionModel {
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
-
-  factory TransactionModel.fromMap(Map<String, dynamic> map, String id) {
-    return TransactionModel(
-      id: id,
-      type: map['type'] ?? 'expense',
-      amount: (map['amount'] ?? 0).toDouble(),
-      category: map['category'] ?? '',
-      subcategory: map['subcategory'],
-      paymentMethod: map['paymentMethod'],
-      fromAccount: map['fromAccount'],
-      toAccount: map['toAccount'],
-      date: (map['date'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      note: map['note'],
-      createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-    );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'type': type,
-      'amount': amount,
-      'category': category,
-      'subcategory': subcategory,
-      'paymentMethod': paymentMethod,
-      'fromAccount': fromAccount,
-      'toAccount': toAccount,
-      'date': Timestamp.fromDate(date),
-      'note': note,
-      'createdAt': Timestamp.fromDate(createdAt),
-    };
-  }
-
-  // Convert to Firestore document
   Map<String, dynamic> toMap() {
     return {
       'type': type,
@@ -84,7 +51,6 @@ class TransactionModel {
     };
   }
 
-  // Create from Firestore document
   factory TransactionModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     return TransactionModel(
@@ -107,7 +73,6 @@ class TransactionModel {
     );
   }
 
-  // Copy with method for creating modified copies
   TransactionModel copyWith({
     String? id,
     String? type,

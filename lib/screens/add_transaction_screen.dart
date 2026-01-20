@@ -689,7 +689,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
     try {
       final transaction = TransactionModel(
-        id: widget.transaction?.id,
+        id: widget.transaction?.id ?? '',
         type: _type,
         amount: double.parse(_amountController.text),
         category: _type == 'transfer' ? 'Transfer' : _selectedCategory!,

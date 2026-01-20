@@ -62,6 +62,7 @@ class RecurringTransactionService {
 
         if (_shouldGenerateTransaction(recurring, now)) {
           final transaction = TransactionModel(
+          id: "",
             type: recurring.type,
             amount: recurring.amount,
             category: recurring.category,

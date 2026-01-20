@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../models/budget.dart';
+import "../models/budget_model.dart";';
 import '../models/transaction.dart' as app_transaction;
 import '../services/budget_service.dart';
 import '../services/firestore_service.dart';
@@ -24,7 +24,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         automaticallyImplyLeading: false,
       ),
-      body: StreamBuilder<List<Budget>>(
+      body: StreamBuilder<List<BudgetModel>>(
         stream: _budgetService.getBudgets(),
         builder: (context, budgetSnapshot) {
           if (budgetSnapshot.connectionState == ConnectionState.waiting) {
@@ -96,7 +96,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                               ),
                               IconButton(
                                 icon: const Icon(Icons.delete, color: Colors.red),
-                                onPressed: () => _budgetService.deleteBudget(budget.id),
+                                onPressed: () => _budgetService.deleteBudgetModel(budget.id),
                               ),
                             ],
                           ),
@@ -196,14 +196,14 @@ class _BudgetScreenState extends State<BudgetScreen> {
               onPressed: () async {
                 final amount = double.tryParse(amountController.text);
                 if (amount != null && amount > 0) {
-                  final budget = Budget(
+                  final budget = BudgetModel(
                     id: '',
                     category: selectedCategory,
                     amount: amount,
                     period: 'monthly',
                     createdDate: DateTime.now(),
                   );
-                  await _budgetService.addBudget(budget);
+                  await _budgetService.addBudgetModel(budget);
                   Navigator.pop(context);
                 }
               },

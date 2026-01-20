@@ -37,10 +37,12 @@ class _SearchScreenState extends State<SearchScreen> {
     });
 
     try {
-      final results = await _transactionService.searchTransactions(query);
+      final snapshot = await _transactionService.searchTransactions(query).first;
+      final results = snapshot.docs
+          .map((doc) => TransactionModel.fromFirestore(doc))
+          .toList();
       setState(() {
         _searchResults = results;
-        _isSearching = false;
       });
     } catch (e) {
       setState(() {

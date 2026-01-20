@@ -5,66 +5,41 @@ class BudgetService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final String _collection = 'budgets';
 
-  // Get budgets as Stream
-  Stream<List<BudgetModel>> getBudgets() {
+  // Get budgets as QuerySnapshot Stream
+  Stream<QuerySnapshot> getBudgets() {
     return _firestore
         .collection(_collection)
         .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => BudgetModel.fromFirestore(doc))
-            .toList());
+        .snapshots();
   }
 
-  // Get budgets for specific month/year
-  Stream<List<BudgetModel>> getBudgetsForMonth(int month, int year) {
+  // Get budgets for specific month/year as QuerySnapshot
+  Stream<QuerySnapshot> getBudgetsForMonth(int month, int year) {
     return _firestore
         .collection(_collection)
         .where('month', isEqualTo: month)
         .where('year', isEqualTo: year)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => BudgetModel.fromFirestore(doc))
-            .toList());
+        .snapshots();
   }
 
   // Add budget
   Future<void> addBudget(BudgetModel budget) async {
-    try {
-      await _firestore.collection(_collection).add(budget.toMap());
-    } catch (e) {
-      throw Exception('Failed to add budget: $e');
-    }
+    await _firestore.collection(_collection).add(budget.toMap());
   }
 
   // Update budget
   Future<void> updateBudget(String id, BudgetModel budget) async {
-    try {
-      await _firestore.collection(_collection).doc(id).update(budget.toMap());
-    } catch (e) {
-      throw Exception('Failed to update budget: $e');
-    }
+    await _firestore.collection(_collection).doc(id).update(budget.toMap());
   }
 
   // Delete budget
   Future<void> deleteBudget(String id) async {
-    try {
-      await _firestore.collection(_collection).doc(id).delete();
-    } catch (e) {
-      throw Exception('Failed to delete budget: $e');
-    }
+    await _firestore.collection(_collection).doc(id).delete();
   }
 
   // Get budget by ID
   Future<BudgetModel?> getBudgetById(String id) async {
-    try {
-      final doc = await _firestore.collection(_collection).doc(id).get();
-      if (doc.exists) {
-        return BudgetModel.fromFirestore(doc);
-      }
-      return null;
-    } catch (e) {
-      throw Exception('Failed to get budget: $e');
-    }
+    final doc = await _firestore.collection(_collection).doc(id).get();
+    return doc.exists ? BudgetModel.fromFirestore(doc) : null;
   }
 }

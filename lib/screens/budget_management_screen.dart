@@ -65,10 +65,7 @@ class _BudgetManagementScreenState extends State<BudgetManagementScreen> {
           }
 
           final budgets = budgetSnapshot.data?.docs
-                  .map((doc) => BudgetModel.fromFirestore(
-                        doc.data() as Map<String, dynamic>,
-                        doc.id,
-                      ))
+                  .map((doc) => BudgetModel.fromFirestore(doc))
                   .toList() ??
               [];
 

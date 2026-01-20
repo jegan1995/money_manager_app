@@ -24,31 +24,35 @@ class _BudgetScreenState extends State<BudgetScreen> {
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         automaticallyImplyLeading: false,
       ),
-      body: StreamBuilder<List<BudgetModel>>(
-        stream: _budgetService.getBudgets(),
-        builder: (context, budgetSnapshot) {
-          if (budgetSnapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body: StreamBuilder<QuerySnapshot>(
+  stream: _budgetService.getBudgets(),
+  builder: (context, snapshot) {
+    if (snapshot.connectionState == ConnectionState.waiting) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    
+    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.account_balance_wallet, size: 80, color: Colors.grey),
+            const SizedBox(height: 16),
+            const Text('No budgets set', style: TextStyle(fontSize: 18, color: Colors.grey)),
+            const SizedBox(height: 8),
+            ElevatedButton.icon(
+              onPressed: () => _showAddBudgetDialog(context),
+              icon: const Icon(Icons.add),
+              label: const Text('Add Budget'),
+            ),
+          ],
+        ),
+      );
+    }
 
-          if (!budgetSnapshot.hasData || budgetSnapshot.data!.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.account_balance_wallet, size: 80, color: Colors.grey),
-                  const SizedBox(height: 16),
-                  const Text('No budgets set', style: TextStyle(fontSize: 18, color: Colors.grey)),
-                  const SizedBox(height: 8),
-                  ElevatedButton.icon(
-                    onPressed: () => _showAddBudgetDialog(context),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add Budget'),
-                  ),
-                ],
-              ),
-            );
-          }
+    final budgets = snapshot.data!.docs
+        .map((doc) => BudgetModel.fromFirestore(doc))
+        .toList();
 
           return StreamBuilder<List<app_transaction.Transaction>>(
             stream: _firestoreService.getTransactions(),

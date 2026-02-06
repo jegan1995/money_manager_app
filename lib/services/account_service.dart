@@ -5,12 +5,26 @@ class AccountService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final String _collection = 'accounts';
 
-  // Get all accounts
+  // Get all accounts as Stream<QuerySnapshot>
   Stream<QuerySnapshot> getAccounts() {
     return _firestore
         .collection(_collection)
         .orderBy('createdAt', descending: false)
         .snapshots();
+  }
+
+  // Get accounts as Stream<List<AccountModel>>
+  Stream<List<AccountModel>> getAccountsList() {
+    return _firestore
+        .collection(_collection)
+        .orderBy('name')
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => AccountModel.fromMap(
+                  doc.data() as Map<String, dynamic>,
+                  doc.id,
+                ))
+            .toList());
   }
 
   // Add account

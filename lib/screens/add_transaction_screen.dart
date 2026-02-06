@@ -26,7 +26,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   final TransactionService _transactionService = TransactionService();
   final AccountService _accountService = AccountService();
 
-  String _type = 'income'; // Income first
+  String _type = 'expense'; // defult expense
   final TextEditingController _amountController = TextEditingController();
   String? _selectedCategory;
   String? _selectedSubcategory;
@@ -297,49 +297,93 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   }
 
   // NEW METHOD: Account selection for Income/Expense
-  Widget _buildAccountField() {
-    return DropdownButtonFormField<String>(
-      value: _type == 'income' ? _toAccount : _fromAccount,
-      decoration: InputDecoration(
-        labelText: _type == 'income' ? 'To Account (Optional)' : 'From Account (Optional)',
-        border: const OutlineInputBorder(),
-        prefixIcon: const Icon(Icons.account_balance_wallet),
-        hintText: _accounts.isEmpty ? 'Create an account first' : 'Select account',
-      ),
-      items: [
-        const DropdownMenuItem<String>(
-          value: null,
-          child: Text('No account selected'),
-        ),
-        ..._accounts.map((account) {
-          return DropdownMenuItem<String>(
-            value: account.id,
-            child: Row(
-              children: [
-                Icon(_getAccountTypeIcon(account.type), size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '${account.name} (₹${account.balance.toStringAsFixed(0)})',
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
+// Single Account field for Income/Expense
+Widget _buildAccountField() {
+  return DropdownButtonFormField<String>(
+    value: _type == 'income' ? _toAccount : _fromAccount,
+    decoration: InputDecoration(
+      labelText: 'Account *', // Same label for both income/expense
+      border: const OutlineInputBorder(),
+      prefixIcon: const Icon(Icons.account_balance_wallet),
+      hintText: _accounts.isEmpty ? 'Create an account first' : 'Select account',
+    ),
+    items: _accounts.map((account) {
+      return DropdownMenuItem<String>(
+        value: account.id,
+        child: Row(
+          children: [
+            Icon(_getAccountTypeIcon(account.type), size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '${account.name} (₹${account.balance.toStringAsFixed(0)})',
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-          );
-        }).toList(),
-      ],
-      onChanged: (value) {
-        setState(() {
-          if (_type == 'income') {
-            _toAccount = value;
-          } else {
-            _fromAccount = value;
-          }
-        });
-      },
-    );
-  }
+          ],
+        ),
+      );
+    }).toList(),
+    onChanged: (value) {
+      setState(() {
+        if (_type == 'income') {
+          _toAccount = value;
+        } else {
+          _fromAccount = value;
+        }
+      });
+    },
+    validator: (value) {
+      if (value == null || value.isEmpty) {
+        return 'Please select an account';
+      }
+      return null;
+    },
+  );
+}
+  // Widget _buildAccountField() {
+  //   return DropdownButtonFormField<String>(
+  //     value: _type == 'income' ? _toAccount : _fromAccount,
+  //     decoration: InputDecoration(
+  //       labelText: _type == 'income' ? 'To Account (Optional)' : 'From Account (Optional)',
+  //       border: const OutlineInputBorder(),
+  //       prefixIcon: const Icon(Icons.account_balance_wallet),
+  //       hintText: _accounts.isEmpty ? 'Create an account first' : 'Select account',
+  //     ),
+  //     items: [
+  //       const DropdownMenuItem<String>(
+  //         value: null,
+  //         child: Text('No account selected'),
+  //       ),
+  //       ..._accounts.map((account) {
+  //         return DropdownMenuItem<String>(
+  //           value: account.id,
+  //           child: Row(
+  //             children: [
+  //               Icon(_getAccountTypeIcon(account.type), size: 20),
+  //               const SizedBox(width: 8),
+  //               Expanded(
+  //                 child: Text(
+  //                   '${account.name} (₹${account.balance.toStringAsFixed(0)})',
+  //                   overflow: TextOverflow.ellipsis,
+  //                 ),
+  //               ),
+  //             ],
+  //           ),
+  //         );
+  //       }).toList(),
+  //     ],
+  //     onChanged: (value) {
+  //       setState(() {
+  //         if (_type == 'income') {
+  //           _toAccount = value;
+  //         } else {
+  //           _fromAccount = value;
+  //         }
+  //       });
+  //     },
+  //   );
+  // }
 
   // Helper method for account type icons
   IconData _getAccountTypeIcon(String type) {
@@ -533,31 +577,56 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     );
   }
 
-  Widget _buildPaymentMethodField() {
-    return DropdownButtonFormField<String>(
-      value: _paymentMethod,
-      decoration: const InputDecoration(
-        labelText: 'Payment Method (Optional)',
-        border: OutlineInputBorder(),
-        prefixIcon: Icon(Icons.payment),
-        hintText: 'How did you pay?',
+Widget _buildPaymentMethodField() {
+  return DropdownButtonFormField<String>(
+    value: _paymentMethod,
+    decoration: const InputDecoration(
+      labelText: 'Payment Method (Optional)',
+      border: OutlineInputBorder(),
+      prefixIcon: Icon(Icons.payment),
+      hintText: 'Cash, Card, UPI, etc.',
+    ),
+    items: [
+      const DropdownMenuItem<String>(
+        value: null,
+        child: Text('Not specified'),
       ),
-      items: [
-        const DropdownMenuItem<String>(
-          value: null,
-          child: Text('Not specified'),
-        ),
-        ..._paymentMethods
-            .map((pm) => DropdownMenuItem(value: pm, child: Text(pm)))
-            .toList(),
-      ],
-      onChanged: (value) {
-        setState(() {
-          _paymentMethod = value;
-        });
-      },
-    );
-  }
+      ..._paymentMethods
+          .map((pm) => DropdownMenuItem(value: pm, child: Text(pm)))
+          .toList(),
+    ],
+    onChanged: (value) {
+      setState(() {
+        _paymentMethod = value;
+      });
+    },
+  );
+}
+  // Widget _buildPaymentMethodField() {
+  //   return DropdownButtonFormField<String>(
+  //     value: _paymentMethod,
+  //     decoration: const InputDecoration(
+  //       labelText: 'Payment Method (Optional)',
+  //       border: OutlineInputBorder(),
+  //       prefixIcon: Icon(Icons.payment),
+  //       hintText: 'How did you pay?',
+  //     ),
+  //     items: [
+  //       const DropdownMenuItem<String>(
+  //         value: null,
+  //         child: Text('Not specified'),
+  //       ),
+  //       ..._paymentMethods
+  //           .map((pm) => DropdownMenuItem(value: pm, child: Text(pm)))
+  //           .toList(),
+  //     ],
+  //     onChanged: (value) {
+  //       setState(() {
+  //         _paymentMethod = value;
+  //       });
+  //     },
+  //   );
+  // }
 
   Widget _buildTransferFields() {
     return Column(

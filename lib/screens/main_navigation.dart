@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dashboard_screen.dart';
 import 'home_screen.dart';
 import 'reports_screen.dart';
 import 'budget_screen.dart';
@@ -15,7 +16,8 @@ class _MainNavigationState extends State<MainNavigation> {
   int _currentIndex = 0;
 
   final List<Widget> _screens = [
-    const HomeScreen(),
+    const DashboardScreen(),  // NEW: Dashboard as home
+    const HomeScreen(),       // All transactions
     const ReportsScreen(),
     const BudgetScreen(),
     const MoreScreen(),
@@ -37,8 +39,12 @@ class _MainNavigationState extends State<MainNavigation> {
         unselectedItemColor: Colors.grey,
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: 'Home',
+            icon: Icon(Icons.dashboard),
+            label: 'Dashboard',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.list),
+            label: 'Transactions',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.insert_chart),

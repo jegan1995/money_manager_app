@@ -1,15 +1,11 @@
 import '../utils/categories.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../models/transaction_model.dart';
 import '../models/account_model.dart';
-import '../models/account_model.dart';
 import '../services/transaction_service.dart';
 import '../services/account_service.dart';
-import '../services/account_service.dart';
-// import '../utils/subcategories.dart';
 
 class AddTransactionScreen extends StatefulWidget {
   final TransactionModel? transaction;
@@ -34,9 +30,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   final TextEditingController _amountController = TextEditingController();
   String? _selectedCategory;
   String? _selectedSubcategory;
-  String _paymentMethod = 'Cash';
-  String? _fromAccount;
-  String? _toAccount;
+  String? _paymentMethod; // Made nullable - optional for expenses
+  String? _fromAccount; // For expense and transfer
+  String? _toAccount; // For income and transfer
 
   DateTime _selectedDate = DateTime.now();
   final TextEditingController _noteController = TextEditingController();
@@ -59,13 +55,12 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   void initState() {
     super.initState();
     _loadAccounts();
-    _loadAccounts();
     if (widget.transaction != null) {
       _type = widget.transaction!.type;
       _amountController.text = widget.transaction!.amount.toString();
       _selectedCategory = widget.transaction!.category;
       _selectedSubcategory = widget.transaction!.subcategory;
-      _paymentMethod = widget.transaction!.paymentMethod ?? 'Cash';
+      _paymentMethod = widget.transaction!.paymentMethod;
       _fromAccount = widget.transaction!.fromAccount;
       _toAccount = widget.transaction!.toAccount;
       _selectedDate = widget.transaction!.date;
@@ -133,6 +128,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   _type = newSelection.first;
                   _selectedCategory = null;
                   _selectedSubcategory = null;
+                  _fromAccount = null;
+                  _toAccount = null;
                 });
               },
             ),
@@ -256,7 +253,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             ] else ...[
               _buildCategoryFields(),
               const SizedBox(height: 16),
-              _buildPaymentMethodField(),
+              _buildAccountField(), // NEW: Account selection for income/expense
+              const SizedBox(height: 16),
+              if (_type == 'expense') _buildPaymentMethodField(), // Optional for expense only
             ],
 
             const SizedBox(height: 16),
@@ -295,6 +294,70 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         ),
       ),
     );
+  }
+
+  // NEW METHOD: Account selection for Income/Expense
+  Widget _buildAccountField() {
+    return DropdownButtonFormField<String>(
+      value: _type == 'income' ? _toAccount : _fromAccount,
+      decoration: InputDecoration(
+        labelText: _type == 'income' ? 'To Account (Optional)' : 'From Account (Optional)',
+        border: const OutlineInputBorder(),
+        prefixIcon: const Icon(Icons.account_balance_wallet),
+        hintText: _accounts.isEmpty ? 'Create an account first' : 'Select account',
+      ),
+      items: [
+        const DropdownMenuItem<String>(
+          value: null,
+          child: Text('No account selected'),
+        ),
+        ..._accounts.map((account) {
+          return DropdownMenuItem<String>(
+            value: account.id,
+            child: Row(
+              children: [
+                Icon(_getAccountTypeIcon(account.type), size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${account.name} (₹${account.balance.toStringAsFixed(0)})',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ],
+      onChanged: (value) {
+        setState(() {
+          if (_type == 'income') {
+            _toAccount = value;
+          } else {
+            _fromAccount = value;
+          }
+        });
+      },
+    );
+  }
+
+  // Helper method for account type icons
+  IconData _getAccountTypeIcon(String type) {
+    switch (type.toLowerCase()) {
+      case 'bank':
+        return Icons.account_balance;
+      case 'cash':
+        return Icons.money;
+      case 'credit card':
+      case 'card':
+        return Icons.credit_card;
+      case 'wallet':
+        return Icons.account_balance_wallet;
+      case 'loan':
+        return Icons.trending_down;
+      default:
+        return Icons.account_circle;
+    }
   }
 
   Widget _buildCategoryFields() {
@@ -356,18 +419,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    Row(
-                      children: [
-                        TextButton.icon(
-                          onPressed: () => _showAddCategoryDialog(),
-                          icon: const Icon(Icons.add, size: 18),
-                          label: const Text('Add New'),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                      ],
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
                     ),
                   ],
                 ),
@@ -423,23 +477,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                               crossAxisSpacing: 8,
                               mainAxisSpacing: 8,
                             ),
-                            itemCount: subcategories.length + 1,
+                            itemCount: subcategories.length,
                             itemBuilder: (context, subIndex) {
-                              // Add new subcategory button
-                              if (subIndex == subcategories.length) {
-                                return OutlinedButton.icon(
-                                  onPressed: () =>
-                                      _showAddSubcategoryDialog(category),
-                                  icon: const Icon(Icons.add, size: 16),
-                                  label: const Text('Add',
-                                      style: TextStyle(fontSize: 12)),
-                                  style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 4),
-                                  ),
-                                );
-                              }
-
                               final sub = subcategories[subIndex];
                               final isSelected =
                                   _selectedCategory == category &&
@@ -494,96 +533,27 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     );
   }
 
-  void _showAddCategoryDialog() {
-    final controller = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add New Category'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            labelText: 'Category Name',
-            border: OutlineInputBorder(),
-          ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              if (controller.text.isNotEmpty) {
-                // Add to categories (you'll need to implement storage)
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Custom categories coming soon'),
-                    backgroundColor: Colors.orange,
-                  ),
-                );
-              }
-            },
-            child: const Text('Add'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showAddSubcategoryDialog(String category) {
-    final controller = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Add Subcategory to $category'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            labelText: 'Subcategory Name',
-            border: OutlineInputBorder(),
-          ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              if (controller.text.isNotEmpty) {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Custom subcategories coming soon'),
-                    backgroundColor: Colors.orange,
-                  ),
-                );
-              }
-            },
-            child: const Text('Add'),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildPaymentMethodField() {
     return DropdownButtonFormField<String>(
       value: _paymentMethod,
       decoration: const InputDecoration(
-        labelText: 'Payment Method *',
+        labelText: 'Payment Method (Optional)',
         border: OutlineInputBorder(),
+        prefixIcon: Icon(Icons.payment),
+        hintText: 'How did you pay?',
       ),
-      items: _paymentMethods
-          .map((pm) => DropdownMenuItem(value: pm, child: Text(pm)))
-          .toList(),
+      items: [
+        const DropdownMenuItem<String>(
+          value: null,
+          child: Text('Not specified'),
+        ),
+        ..._paymentMethods
+            .map((pm) => DropdownMenuItem(value: pm, child: Text(pm)))
+            .toList(),
+      ],
       onChanged: (value) {
         setState(() {
-          _paymentMethod = value!;
+          _paymentMethod = value;
         });
       },
     );
@@ -694,32 +664,22 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         amount: double.parse(_amountController.text),
         category: _type == 'transfer' ? 'Transfer' : _selectedCategory!,
         subcategory: _selectedSubcategory,
-        paymentMethod: _type == 'transfer' ? null : _paymentMethod,
-        fromAccount: _type == 'transfer' ? _fromAccount : null,
-        toAccount: _type == 'transfer' ? _toAccount : null,
+        paymentMethod: _paymentMethod,
+        fromAccount: _type == 'expense' ? _fromAccount : (_type == 'transfer' ? _fromAccount : null),
+        toAccount: _type == 'income' ? _toAccount : (_type == 'transfer' ? _toAccount : null),
         date: _selectedDate,
         note: _noteController.text.isEmpty ? null : _noteController.text,
+        isRecurring: _isRecurring,
+        recurringFrequency: _isRecurring ? _recurringFrequency : null,
       );
 
       if (widget.transaction != null && !widget.isCopy) {
         await _transactionService.updateTransaction(
-          widget.transaction!.id!,
+          widget.transaction!.id,
           transaction,
         );
       } else {
         await _transactionService.addTransaction(transaction);
-
-
-        if (_type == 'transfer') {
-          await _accountService.updateAccountBalance(
-            _fromAccount!,
-            -transaction.amount,
-          );
-          await _accountService.updateAccountBalance(
-            _toAccount!,
-            transaction.amount,
-          );
-        }
       }
 
       if (mounted) {
@@ -727,8 +687,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(widget.isCopy
-                ? 'Transaction copied'
-                : (widget.transaction != null ? 'Updated' : 'Added')),
+                ? 'Transaction copied successfully!'
+                : (widget.transaction != null ? 'Transaction updated!' : 'Transaction added!')),
             backgroundColor: Colors.green,
           ),
         );

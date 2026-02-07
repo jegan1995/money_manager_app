@@ -11,6 +11,8 @@ import 'filter_screen.dart';
 import 'settings_screen.dart';
 import 'budget_screen.dart';
 import 'statistics_screen.dart';
+import 'calendar_screen.dart';
+import 'enhanced_reports_screen.dart';
 
 class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
@@ -63,6 +65,21 @@ class MoreScreen extends StatelessWidget {
                 context,
                 MaterialPageRoute(
                     builder: (context) => const StatisticsScreen()),
+              );
+            },
+          ),
+          const Divider(),
+          // ✅ NEW: Calendar menu item
+          _buildMenuItem(
+            context,
+            icon: Icons.calendar_month,
+            title: 'Calendar',
+            subtitle: 'View transactions by date',
+            color: Colors.indigo,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const CalendarScreen()),
               );
             },
           ),

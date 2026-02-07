@@ -254,8 +254,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               _buildCategoryFields(),
               const SizedBox(height: 16),
               _buildAccountField(), // NEW: Account selection for income/expense
-              const SizedBox(height: 16),
-              if (_type == 'expense') _buildPaymentMethodField(), // Optional for expense only
+              // const SizedBox(height: 16),
+              // if (_type == 'expense') _buildPaymentMethodField(), // Optional for expense only
             ],
 
             const SizedBox(height: 16),
@@ -576,32 +576,32 @@ Widget _buildAccountField() {
       ),
     );
   }
-
-Widget _buildPaymentMethodField() {
-  return DropdownButtonFormField<String>(
-    value: _paymentMethod,
-    decoration: const InputDecoration(
-      labelText: 'Payment Method (Optional)',
-      border: OutlineInputBorder(),
-      prefixIcon: Icon(Icons.payment),
-      hintText: 'Cash, Card, UPI, etc.',
-    ),
-    items: [
-      const DropdownMenuItem<String>(
-        value: null,
-        child: Text('Not specified'),
-      ),
-      ..._paymentMethods
-          .map((pm) => DropdownMenuItem(value: pm, child: Text(pm)))
-          .toList(),
-    ],
-    onChanged: (value) {
-      setState(() {
-        _paymentMethod = value;
-      });
-    },
-  );
-}
+// recently deleted this for not necessary feature
+// Widget _buildPaymentMethodField() {
+//   return DropdownButtonFormField<String>(
+//     value: _paymentMethod,
+//     decoration: const InputDecoration(
+//       labelText: 'Payment Method (Optional)',
+//       border: OutlineInputBorder(),
+//       prefixIcon: Icon(Icons.payment),
+//       hintText: 'Cash, Card, UPI, etc.',
+//     ),
+//     items: [
+//       const DropdownMenuItem<String>(
+//         value: null,
+//         child: Text('Not specified'),
+//       ),
+//       ..._paymentMethods
+//           .map((pm) => DropdownMenuItem(value: pm, child: Text(pm)))
+//           .toList(),
+//     ],
+//     onChanged: (value) {
+//       setState(() {
+//         _paymentMethod = value;
+//       });
+//     },
+//   );
+// }
   // Widget _buildPaymentMethodField() {
   //   return DropdownButtonFormField<String>(
   //     value: _paymentMethod,

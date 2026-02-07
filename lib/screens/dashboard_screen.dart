@@ -6,6 +6,7 @@ import '../services/transaction_service.dart';
 import '../services/account_service.dart';
 import 'add_transaction_screen.dart';
 import 'transaction_detail_screen.dart';
+import 'search_filter_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -29,9 +30,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
           IconButton(
             icon: const Icon(Icons.search),
             onPressed: () {
-              // TODO: Navigate to search screen
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Search coming soon')),
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const SearchFilterScreen(),
+                ),
               );
             },
           ),

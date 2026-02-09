@@ -1,191 +1,173 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-import '../models/transfer_model.dart';
+import '../models/transaction_model.dart';
 import '../models/account_model.dart';
-import '../services/transfer_service.dart';
+import '../services/transaction_service.dart';
 import '../services/account_service.dart';
 import 'add_transfer_screen.dart';
 
-class TransfersScreen extends StatefulWidget {
+class TransfersScreen extends StatelessWidget {
   const TransfersScreen({super.key});
 
   @override
-  State<TransfersScreen> createState() => _TransfersScreenState();
-}
-
-class _TransfersScreenState extends State<TransfersScreen> {
-  final TransferService _transferService = TransferService();
-  final AccountService _accountService = AccountService();
-
-  Map<String, AccountModel> _accountsMap = {};
-
-  @override
-  void initState() {
-    super.initState();
-    _loadAccounts();
-  }
-
-  void _loadAccounts() {
-    _accountService.getAccounts().listen((snapshot) {
-      setState(() {
-        _accountsMap = {
-          for (var doc in snapshot.docs)
-            doc.id: AccountModel.fromMap(
-              doc.data() as Map<String, dynamic>,
-              doc.id,
-            )
-        };
-      });
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final TransactionService transactionService = TransactionService();
+    final AccountService accountService = AccountService();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Transfers'),
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: _transferService.getTransfers(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+      body: StreamBuilder<List<AccountModel>>(
+        stream: accountService.getAccountsList(),
+        builder: (context, accountSnapshot) {
+          if (!accountSnapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.swap_horiz, size: 64, color: Colors.grey[400]),
-                  const SizedBox(height: 16),
-                  Text('No transfers yet',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 16)),
-                  const SizedBox(height: 8),
-                  Text('Tap + to create a transfer',
-                      style: TextStyle(color: Colors.grey[500], fontSize: 14)),
-                ],
-              ),
-            );
+          // Build account map
+          final accountMap = <String?, String>{};
+          for (var account in accountSnapshot.data!) {
+            accountMap[account.id] = account.name;
           }
 
-          final transfers = snapshot.data!.docs
-              .map((doc) => TransferModel.fromMap(
-                    doc.data() as Map<String, dynamic>,
-                    doc.id,
-                  ))
-              .toList();
+          return StreamBuilder<QuerySnapshot>(
+            stream: transactionService.getTransactionsByType('transfer'),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          return ListView.builder(
-            itemCount: transfers.length,
-            itemBuilder: (context, index) {
-              final transfer = transfers[index];
-              final fromAccount = _accountsMap[transfer.fromAccount];
-              final toAccount = _accountsMap[transfer.toAccount];
+              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                return _buildEmptyState(context);
+              }
 
-              return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: ListTile(
-                  leading: const CircleAvatar(
-                    backgroundColor: Colors.blue,
-                    child: Icon(Icons.swap_horiz, color: Colors.white),
-                  ),
-                  title: Text(
-                    '${fromAccount?.name ?? 'Unknown'} → ${toAccount?.name ?? 'Unknown'}',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(DateFormat('MMM d, yyyy').format(transfer.date)),
-                      if (transfer.note != null && transfer.note!.isNotEmpty)
-                        Text(
-                          transfer.note!,
-                          style: TextStyle(
-                              fontSize: 12, color: Colors.grey[600]),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                    ],
-                  ),
-                  trailing: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
+              final transfers = snapshot.data!.docs
+                  .map((doc) => TransactionModel.fromFirestore(doc))
+                  .toList();
+
+              return ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: transfers.length,
+                itemBuilder: (context, index) {
+                  final transfer = transfers[index];
+                  final fromName = accountMap[transfer.fromAccount] ?? 'Unknown';
+                  final toName = accountMap[transfer.toAccount] ?? 'Unknown';
+
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: Colors.blue.withOpacity(0.2),
+                        child: const Icon(Icons.swap_horiz, color: Colors.blue),
+                      ),
+                      title: Text(
+                        transfer.category,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('$fromName → $toName', style: const TextStyle(fontSize: 12)),
+                          Text(
+                            DateFormat('dd MMM yyyy').format(transfer.date),
+                            style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                          ),
+                        ],
+                      ),
+                      trailing: Text(
                         '₹${transfer.amount.toStringAsFixed(0)}',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blue,
-                        ),
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.delete, size: 20),
-                        onPressed: () => _deleteTransfer(transfer),
-                        color: Colors.red,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                      ),
-                    ],
-                  ),
-                ),
+                      onTap: () => _showDetails(context, transfer, fromName, toName, transactionService),
+                    ),
+                  );
+                },
               );
             },
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const AddTransferScreen()),
-          );
-        },
-        child: const Icon(Icons.add),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AddTransferScreen())),
+        icon: const Icon(Icons.add),
+        label: const Text('New Transfer'),
       ),
     );
   }
 
-  Future<void> _deleteTransfer(TransferModel transfer) async {
-    final confirmed = await showDialog<bool>(
+  Widget _buildEmptyState(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.swap_horiz, size: 80, color: Colors.grey[300]),
+          const SizedBox(height: 24),
+          Text('No transfers yet', style: TextStyle(color: Colors.grey[600], fontSize: 18, fontWeight: FontWeight.w500)),
+          const SizedBox(height: 8),
+          Text('Transfer money between accounts', style: TextStyle(color: Colors.grey[500], fontSize: 14)),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AddTransferScreen())),
+            icon: const Icon(Icons.add),
+            label: const Text('Add Transfer'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDetails(BuildContext context, TransactionModel transfer, String from, String to, TransactionService service) {
+    showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Transfer'),
-        content: const Text(
-            'Are you sure you want to delete this transfer? Account balances will be adjusted.'),
+        title: const Text('Transfer Details'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Amount: ₹${transfer.amount}'),
+            const SizedBox(height: 8),
+            Text('From: $from'),
+            const SizedBox(height: 8),
+            Text('To: $to'),
+            const SizedBox(height: 8),
+            Text('Date: ${DateFormat('dd MMM yyyy').format(transfer.date)}'),
+            if (transfer.note != null) ...[
+              const SizedBox(height: 8),
+              Text('Notes: ${transfer.note}'),
+            ],
+          ],
+        ),
         actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () async {
+              Navigator.pop(context);
+              final confirmed = await showDialog<bool>(
+                context: context,
+                builder: (c) => AlertDialog(
+                  title: const Text('Delete Transfer'),
+                  content: const Text('Delete this transfer?'),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+                    TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
+                  ],
+                ),
+              );
+              if (confirmed == true) {
+                await service.deleteTransaction(transfer.id);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Transfer deleted')));
+                }
+              }
+            },
             child: const Text('Delete', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
     );
-
-    if (confirmed == true) {
-      try {
-        await _transferService.deleteTransfer(transfer);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Transfer deleted'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-          );
-        }
-      }
-    }
   }
 }

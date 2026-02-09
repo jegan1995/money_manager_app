@@ -29,16 +29,27 @@ class MoreScreen extends StatelessWidget {
             context,
             icon: Icons.swap_horiz,
             title: 'Transfers',
-            subtitle: 'Move money between accounts',
+            subtitle: 'Transfer between accounts',
             color: Colors.blue,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (context) => const BudgetManagementScreen()),
-              );
-            },
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const TransfersScreen()),
+            ),
           ),
+          // _buildMenuItem(
+          //   context,
+          //   icon: Icons.swap_horiz,
+          //   title: 'Transfers',
+          //   subtitle: 'Move money between accounts',
+          //   color: Colors.blue,
+          //   onTap: () {
+          //     Navigator.push(
+          //       context,
+          //       MaterialPageRoute(
+          //           builder: (context) => const BudgetManagementScreen()),
+          //     );
+          //   },
+          // ),
           const Divider(),
           _buildMenuItem(
             context,

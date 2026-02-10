@@ -6,7 +6,6 @@ import '../services/transaction_service.dart';
 import 'add_transaction_screen.dart';
 import 'transaction_detail_screen.dart';
 import 'search_screen.dart';
-import 'transfers_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -94,88 +93,34 @@ class _HomeScreenState extends State<HomeScreen> {
 
         final filtered = _filterByPeriod(transactions);
 
-        double income = 0, expense = 0, transfers = 0;
-        int transferCount = 0;
-        
+        double income = 0, expense = 0;
         for (var txn in filtered) {
           if (txn.type == 'income') {
             income += txn.amount;
           } else if (txn.type == 'expense') {
             expense += txn.amount;
-          } else if (txn.type == 'transfer') {
-            transfers += txn.amount;
-            transferCount++;
           }
         }
 
         return Container(
           padding: const EdgeInsets.all(16),
           color: Colors.white,
-          child: Column(
+          child: Row(
             children: [
-              // Main Stats Row
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildStatCard('Balance', income - expense,
-                        Icons.account_balance_wallet_outlined, Colors.blue),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _buildStatCard(
-                        'Income', income, Icons.arrow_downward, Colors.green),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _buildStatCard(
-                        'Expense', expense, Icons.arrow_upward, Colors.red),
-                  ),
-                ],
+              Expanded(
+                child: _buildStatCard('Balance', income - expense,
+                    Icons.account_balance_wallet_outlined, Colors.blue),
               ),
-              
-              // Transfer Quick Access Card (if transfers exist)
-              if (transferCount > 0) ...[
-                const SizedBox(height: 12),
-                InkWell(
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const TransfersScreen()),
-                  ),
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.blue.withOpacity(0.3)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.swap_horiz, size: 20, color: Colors.blue),
-                        const SizedBox(width: 8),
-                        Text(
-                          '$transferCount Transfer${transferCount > 1 ? 's' : ''}',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.blue,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          '₹${transfers.toStringAsFixed(0)}',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue,
-                          ),
-                        ),
-                        const Spacer(),
-                        const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.blue),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildStatCard(
+                    'Income', income, Icons.arrow_downward, Colors.green),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildStatCard(
+                    'Expense', expense, Icons.arrow_upward, Colors.red),
+              ),
             ],
           ),
         );

@@ -7,12 +7,10 @@ import 'screens/home_screen.dart';
 import 'screens/accounts_screen.dart';
 import 'screens/reports_screen.dart';
 import 'screens/more_screen.dart';
+import 'services/recurring_transfer_service.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
   runApp(
     ChangeNotifierProvider(
       create: (context) => ThemeProvider(),
@@ -34,10 +32,79 @@ class MyApp extends StatelessWidget {
           theme: themeProvider.lightTheme,
           darkTheme: themeProvider.darkTheme,
           themeMode: themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
-          home: const MainScreen(),
+          home: const FirebaseInitializer(),
         );
       },
     );
+  }
+}
+
+class FirebaseInitializer extends StatefulWidget {
+  const FirebaseInitializer({super.key});
+
+  @override
+  State<FirebaseInitializer> createState() => _FirebaseInitializerState();
+}
+
+class _FirebaseInitializerState extends State<FirebaseInitializer> {
+  bool _initialized = false;
+  bool _error = false;
+
+  @override
+  void initState() {
+    super.initState();
+    initializeApp();
+  }
+
+  Future<void> initializeApp() async {
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+      
+      // Execute due recurring transfers on app start
+      final recurringService = RecurringTransferService();
+      await recurringService.executeDueTransfers();
+      
+      setState(() {
+        _initialized = true;
+      });
+    } catch (e) {
+      setState(() {
+        _error = true;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_error) {
+      return const Scaffold(
+        body: Center(
+          child: Text('Error initializing app'),
+        ),
+      );
+    }
+
+    if (!_initialized) {
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text(
+                'Loading Money Manager...',
+                style: TextStyle(color: Colors.grey.shade600),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return const MainScreen();
   }
 }
 

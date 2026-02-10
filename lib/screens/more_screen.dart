@@ -13,6 +13,9 @@ import 'budget_screen.dart';
 import 'statistics_screen.dart';
 import 'calendar_screen.dart';
 import 'enhanced_reports_screen.dart';
+import 'export_screen.dart';
+import 'transfer_analytics_screen.dart';
+import '../services/recurring_transfer_service.dart';
 
 class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
@@ -34,6 +37,28 @@ class MoreScreen extends StatelessWidget {
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const TransfersScreen()),
+            ),
+          ),
+          _buildMenuItem(
+            context,
+            icon: Icons.insights,
+            title: 'Transfer Analytics',
+            subtitle: 'Analyze transfer patterns',
+            color: Colors.purple,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const TransferAnalyticsScreen()),
+            ),
+          ),
+          _buildMenuItem(
+            context,
+            icon: Icons.download,
+            title: 'Export & Backup',
+            subtitle: 'Download transaction history',
+            color: Colors.orange,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const ExportScreen()),
             ),
           ),
           // _buildMenuItem(

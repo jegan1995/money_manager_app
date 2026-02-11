@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/transaction_service.dart';
 import '../services/export_service.dart';
+import '../services/budget_alert_service.dart';
 import '../models/transaction_model.dart';
 import 'transfers_screen.dart';
 import 'budget_management_screen.dart';
@@ -15,6 +16,7 @@ import 'calendar_screen.dart';
 import 'enhanced_reports_screen.dart';
 import 'export_screen.dart';
 import 'transfer_analytics_screen.dart';
+import 'alerts_screen.dart';
 import '../services/recurring_transfer_service.dart';
 
 class MoreScreen extends StatelessWidget {
@@ -22,12 +24,38 @@ class MoreScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final alertService = BudgetAlertService();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('More'),
       ),
       body: ListView(
         children: [
+          // ✅ NEW: Budget Alerts (with notification badge)
+          StreamBuilder<int>(
+            stream: alertService.getUnreadCount(),
+            builder: (context, snapshot) {
+              final unreadCount = snapshot.data ?? 0;
+              
+              return _buildMenuItem(
+                context,
+                icon: Icons.notifications,
+                title: 'Budget Alerts',
+                subtitle: unreadCount > 0 
+                    ? '$unreadCount new alert${unreadCount > 1 ? 's' : ''}'
+                    : 'View budget notifications',
+                color: unreadCount > 0 ? Colors.red : Colors.blue,
+                badge: unreadCount > 0 ? unreadCount : null,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const AlertsScreen()),
+                ),
+              );
+            },
+          ),
+          const Divider(),
+          
           _buildMenuItem(
             context,
             icon: Icons.swap_horiz,
@@ -61,27 +89,30 @@ class MoreScreen extends StatelessWidget {
               MaterialPageRoute(builder: (context) => const ExportScreen()),
             ),
           ),
-          // _buildMenuItem(
-          //   context,
-          //   icon: Icons.swap_horiz,
-          //   title: 'Transfers',
-          //   subtitle: 'Move money between accounts',
-          //   color: Colors.blue,
-          //   onTap: () {
-          //     Navigator.push(
-          //       context,
-          //       MaterialPageRoute(
-          //           builder: (context) => const BudgetManagementScreen()),
-          //     );
-          //   },
-          // ),
           const Divider(),
+          
+          // ✅ FIXED: Changed from GoalsScreen to BudgetManagementScreen
           _buildMenuItem(
             context,
             icon: Icons.pie_chart,
-            title: 'Budget',
-            subtitle: 'Manage your budgets',
+            title: 'Budget Management',
+            subtitle: 'Set and track budgets',
             color: Colors.orange,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const BudgetManagementScreen()),
+              );
+            },
+          ),
+          
+          // ✅ NEW: Separate Financial Goals menu item
+          _buildMenuItem(
+            context,
+            icon: Icons.flag,
+            title: 'Financial Goals',
+            subtitle: 'Track savings goals',
+            color: Colors.green,
             onTap: () {
               Navigator.push(
                 context,
@@ -89,6 +120,7 @@ class MoreScreen extends StatelessWidget {
               );
             },
           ),
+          
           const Divider(),
           _buildMenuItem(
             context,
@@ -105,7 +137,6 @@ class MoreScreen extends StatelessWidget {
             },
           ),
           const Divider(),
-          // ✅ NEW: Calendar menu item
           _buildMenuItem(
             context,
             icon: Icons.calendar_month,
@@ -146,9 +177,40 @@ class MoreScreen extends StatelessWidget {
     required String subtitle,
     required Color color,
     required VoidCallback onTap,
+    int? badge,
   }) {
     return ListTile(
-      leading: Icon(icon, color: color),
+      leading: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Icon(icon, color: color),
+          if (badge != null && badge > 0)
+            Positioned(
+              right: -8,
+              top: -8,
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.red,
+                  shape: BoxShape.circle,
+                ),
+                constraints: const BoxConstraints(
+                  minWidth: 18,
+                  minHeight: 18,
+                ),
+                child: Text(
+                  badge > 99 ? '99+' : badge.toString(),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+        ],
+      ),
       title: Text(title),
       subtitle: Text(subtitle),
       trailing: const Icon(Icons.chevron_right),

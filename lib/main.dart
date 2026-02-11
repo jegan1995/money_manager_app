@@ -8,6 +8,7 @@ import 'screens/accounts_screen.dart';
 import 'screens/reports_screen.dart';
 import 'screens/more_screen.dart';
 import 'services/recurring_transfer_service.dart';
+import 'services/budget_alert_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -66,10 +67,18 @@ class _FirebaseInitializerState extends State<FirebaseInitializer> {
       final recurringService = RecurringTransferService();
       await recurringService.executeDueTransfers();
       
+      // Check budgets and create alerts on app start
+      final budgetAlertService = BudgetAlertService();
+      await budgetAlertService.checkBudgets();
+      
+      // Clean up old alerts (older than 3 months)
+      await budgetAlertService.cleanupOldAlerts();
+      
       setState(() {
         _initialized = true;
       });
     } catch (e) {
+      print('Error initializing app: $e');
       setState(() {
         _error = true;
       });

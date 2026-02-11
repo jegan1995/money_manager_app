@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../models/transaction_model.dart';
 import '../services/transaction_service.dart';
+import '../widgets/alert_banner.dart';
 import 'add_transaction_screen.dart';
 import 'transaction_detail_screen.dart';
 import 'search_screen.dart';
@@ -61,6 +62,9 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: Column(
         children: [
+          // ✅ NEW: Alert Banner at the top
+          const AlertBanner(),
+          
           _buildBalanceCards(),
           Expanded(child: _buildTransactionsList()),
         ],

@@ -1,148 +1,296 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
+import 'package:universal_html/html.dart' as html;
 import '../providers/theme_provider.dart';
+import '../services/transaction_service.dart';
+import '../services/account_service.dart';
+import '../services/export_service.dart';
+import '../services/auth_service.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final transactionService = TransactionService();
+    final accountService = AccountService();
+    final exportService = ExportService();
+    final authService = AuthService();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Settings'),
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
       body: ListView(
         children: [
-          // Dark Mode
-          Consumer<ThemeProvider>(
-            builder: (context, themeProvider, child) {
-              return SwitchListTile(
-                secondary: Icon(
-                  themeProvider.isDarkMode ? Icons.dark_mode : Icons.light_mode,
+          const SizedBox(height: 10),
+          
+          // User Info Section
+          _buildSectionHeader('Account'),
+          FutureBuilder<String?>(
+            future: authService.getUserName(),
+            builder: (context, snapshot) {
+              final name = snapshot.data ?? authService.currentUser?.email ?? 'User';
+              return ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: Colors.blue.shade100,
+                  child: Text(
+                    name[0].toUpperCase(),
+                    style: const TextStyle(
+                      color: Colors.blue,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
-                title: const Text('Dark Mode'),
-                subtitle: Text(themeProvider.isDarkMode
-                    ? 'Dark theme enabled'
-                    : 'Light theme enabled'),
-                value: themeProvider.isDarkMode,
-                onChanged: (value) {
-                  themeProvider.toggleTheme();
-                },
+                title: Text(name),
+                subtitle: Text(authService.currentUser?.email ?? ''),
               );
             },
           ),
-          const Divider(),
-
-          // Currency
           ListTile(
-            leading: const Icon(Icons.currency_rupee),
-            title: const Text('Currency'),
-            subtitle: const Text('INR (₹)'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Multiple currency support coming soon'),
-                ),
-              );
-            },
-          ),
-          const Divider(),
-
-          // Notifications
-          ListTile(
-            leading: const Icon(Icons.notifications),
-            title: const Text('Notifications'),
-            subtitle: const Text('Budget alerts & reminders'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Coming soon')),
-              );
-            },
-          ),
-          const Divider(),
-
-          // Backup & Restore
-          ListTile(
-            leading: const Icon(Icons.backup),
-            title: const Text('Backup & Restore'),
-            subtitle: const Text('Export/Import data'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Coming soon')),
-              );
-            },
-          ),
-          const Divider(),
-
-          // Security
-          ListTile(
-            leading: const Icon(Icons.lock),
-            title: const Text('App Lock'),
-            subtitle: const Text('Secure with PIN or fingerprint'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Coming soon')),
-              );
-            },
-          ),
-          const Divider(),
-
-          // Data Management
-          const SizedBox(height: 24),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              'Data Management',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[600],
-                letterSpacing: 1.2,
-              ),
+            leading: const Icon(Icons.logout, color: Colors.red),
+            title: const Text(
+              'Logout',
+              style: TextStyle(color: Colors.red),
             ),
-          ),
-          const SizedBox(height: 8),
-
-          ListTile(
-            leading: const Icon(Icons.delete_forever, color: Colors.red),
-            title: const Text('Clear All Data',
-                style: TextStyle(color: Colors.red)),
-            subtitle: const Text('Delete all transactions & data'),
-            onTap: () {
-              showDialog(
+            onTap: () async {
+              final confirm = await showDialog<bool>(
                 context: context,
                 builder: (context) => AlertDialog(
-                  title: const Text('Clear All Data?'),
-                  content: const Text(
-                      'This will permanently delete all your transactions, accounts, budgets, and goals. This action cannot be undone.'),
+                  title: const Text('Logout'),
+                  content: const Text('Are you sure you want to logout?'),
                   actions: [
                     TextButton(
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: () => Navigator.pop(context, false),
                       child: const Text('Cancel'),
                     ),
                     TextButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Feature coming soon'),
-                            backgroundColor: Colors.orange,
-                          ),
-                        );
-                      },
-                      child: const Text('Delete All',
-                          style: TextStyle(color: Colors.red)),
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text(
+                        'Logout',
+                        style: TextStyle(color: Colors.red),
+                      ),
                     ),
                   ],
                 ),
               );
+
+              if (confirm == true) {
+                try {
+                  // Show loading dialog
+                  if (context.mounted) {
+                    showDialog(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (context) => const Center(
+                        child: CircularProgressIndicator(),
+                      ),
+                    );
+                  }
+
+                  await authService.signOut();
+                  
+                  // Close loading dialog
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                  }
+                  
+                  // Navigation handled by AuthWrapper in main.dart
+                } catch (e) {
+                  // Close loading dialog
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                  }
+                  
+                  // If logout fails on web, force reload
+                  if (kIsWeb) {
+                    final forceLogout = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Logout Issue'),
+                        content: const Text(
+                          'Browser extension blocking logout. Force logout by reloading page?'
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('Cancel'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            child: const Text(
+                              'Force Logout',
+                              style: TextStyle(color: Colors.red),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    if (forceLogout == true) {
+                      // Force page reload to clear auth state
+                      html.window.location.reload();
+                    }
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Logout failed: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              }
             },
           ),
+          const Divider(),
+          
+          _buildSectionHeader('Appearance'),
+          SwitchListTile(
+            title: const Text('Dark Mode'),
+            subtitle: const Text('Enable dark theme'),
+            secondary: Icon(
+              themeProvider.isDarkMode ? Icons.dark_mode : Icons.light_mode,
+            ),
+            value: themeProvider.isDarkMode,
+            onChanged: (value) {
+              themeProvider.toggleTheme();
+            },
+          ),
+          const Divider(),
+          
+          _buildSectionHeader('Data'),
+          ListTile(
+            leading: const Icon(Icons.download),
+            title: const Text('Export to CSV'),
+            subtitle: const Text('Download transactions as CSV'),
+            onTap: () async {
+              try {
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) => const Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                );
+                
+                final transactions = await transactionService.getTransactionsList();
+                final accounts = await accountService.getAccountsList().first;
+                
+                final path = await exportService.exportTransactionsToCSV(
+                  transactions,
+                  accounts,
+                  includeTransfers: true,
+                  includeIncome: true,
+                  includeExpense: true,
+                );
+                
+                Navigator.pop(context);
+                
+                if (path != null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Exported successfully: $path'),
+                      duration: const Duration(seconds: 5),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Export failed: $e'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.table_chart),
+            title: const Text('Export to Excel'),
+            subtitle: const Text('Download detailed Excel report'),
+            onTap: () async {
+              try {
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) => const Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                );
+                
+                final transactions = await transactionService.getTransactionsList();
+                final accounts = await accountService.getAccountsList().first;
+                
+                final path = await exportService.exportTransactionsToExcel(
+                  transactions,
+                  accounts,
+                  includeTransfers: true,
+                  includeIncome: true,
+                  includeExpense: true,
+                );
+                
+                Navigator.pop(context);
+                
+                if (path != null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Exported successfully: $path'),
+                      duration: const Duration(seconds: 5),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Export failed: $e'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+          ),
+          const Divider(),
+          
+          _buildSectionHeader('About'),
+          const ListTile(
+            leading: Icon(Icons.info),
+            title: Text('Version'),
+            subtitle: Text('1.0.0'),
+          ),
+          const ListTile(
+            leading: Icon(Icons.account_balance_wallet),
+            title: Text('Money Manager'),
+            subtitle: Text('Track your income and expenses'),
+          ),
+          const ListTile(
+            leading: Icon(Icons.person),
+            title: Text('Developer'),
+            subtitle: Text('Built by Jegan'),
+          ),
+          const SizedBox(height: 20),
         ],
+      ),
+    );
+  }
+  
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+          color: Colors.blue,
+        ),
       ),
     );
   }

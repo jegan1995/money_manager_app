@@ -2,15 +2,14 @@ name: money_manager_app
 description: "A new Flutter project."
 publish_to: 'none'
 version: 1.0.0+1
-
 environment:
   sdk: ^3.5.4
-
 dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
   firebase_core: ^3.15.2
+  firebase_auth: ^5.3.4
   cloud_firestore: ^5.6.12
   intl: ^0.19.0
   fl_chart: ^0.69.2
@@ -22,11 +21,9 @@ dependencies:
   table_calendar: ^3.1.2
   excel: ^4.0.6
   universal_html: ^2.3.0
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
-
 flutter:
   uses-material-design: true

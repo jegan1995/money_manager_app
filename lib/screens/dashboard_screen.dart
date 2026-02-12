@@ -218,7 +218,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildSummaryCard(String label, double amount, Color color, IconData icon) {
+  Widget _buildSummaryCard(String label, double amount, MaterialColor color, IconData icon) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(

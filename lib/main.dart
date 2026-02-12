@@ -2,19 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
+import 'screens/main_navigation.dart';
+import 'screens/login_screen.dart';
 import 'providers/theme_provider.dart';
-import 'screens/home_screen.dart';
-import 'screens/accounts_screen.dart';
-import 'screens/reports_screen.dart';
-import 'screens/more_screen.dart';
-import 'services/recurring_transfer_service.dart';
+import 'services/recurring_service.dart';
+import 'services/auth_service.dart';
 import 'services/budget_alert_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
   runApp(
     ChangeNotifierProvider(
-      create: (context) => ThemeProvider(),
+      create: (_) => ThemeProvider(),
       child: const MyApp(),
     ),
   );
@@ -25,17 +25,15 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ThemeProvider>(
-      builder: (context, themeProvider, child) {
-        return MaterialApp(
-          title: 'Money Manager',
-          debugShowCheckedModeBanner: false,
-          theme: themeProvider.lightTheme,
-          darkTheme: themeProvider.darkTheme,
-          themeMode: themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
-          home: const FirebaseInitializer(),
-        );
-      },
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    
+    return MaterialApp(
+      title: 'Money Manager',
+      theme: themeProvider.lightTheme,
+      darkTheme: themeProvider.darkTheme,
+      themeMode: themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+      home: const FirebaseInitializer(),
+      debugShowCheckedModeBanner: false,
     );
   }
 }
@@ -63,22 +61,10 @@ class _FirebaseInitializerState extends State<FirebaseInitializer> {
         options: DefaultFirebaseOptions.currentPlatform,
       );
       
-      // Execute due recurring transfers on app start
-      final recurringService = RecurringTransferService();
-      await recurringService.executeDueTransfers();
-      
-      // Check budgets and create alerts on app start
-      final budgetAlertService = BudgetAlertService();
-      await budgetAlertService.checkBudgets();
-      
-      // Clean up old alerts (older than 3 months)
-      await budgetAlertService.cleanupOldAlerts();
-      
       setState(() {
         _initialized = true;
       });
     } catch (e) {
-      print('Error initializing app: $e');
       setState(() {
         _error = true;
       });
@@ -90,7 +76,7 @@ class _FirebaseInitializerState extends State<FirebaseInitializer> {
     if (_error) {
       return const Scaffold(
         body: Center(
-          child: Text('Error initializing app'),
+          child: Text('Error initializing Firebase'),
         ),
       );
     }
@@ -113,66 +99,100 @@ class _FirebaseInitializerState extends State<FirebaseInitializer> {
       );
     }
 
-    return const MainScreen();
+    // Once Firebase is initialized, show auth-aware UI
+    return const AuthWrapper();
   }
 }
 
-class MainScreen extends StatefulWidget {
-  const MainScreen({super.key});
-
-  @override
-  State<MainScreen> createState() => _MainScreenState();
-}
-
-class _MainScreenState extends State<MainScreen> {
-  int _selectedIndex = 0;
-
-  final List<Widget> _screens = [
-    const HomeScreen(),
-    const AccountsScreen(),
-    const ReportsScreen(),
-    const MoreScreen(),
-  ];
+class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: _screens[_selectedIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: Colors.blue,
-        unselectedItemColor: Colors.grey,
-        selectedFontSize: 12,
-        unselectedFontSize: 12,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined),
-            activeIcon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.account_balance_wallet_outlined),
-            activeIcon: Icon(Icons.account_balance_wallet),
-            label: 'Accounts',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.bar_chart_outlined),
-            activeIcon: Icon(Icons.bar_chart),
-            label: 'Reports',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.menu),
-            activeIcon: Icon(Icons.menu),
-            label: 'More',
-          ),
-        ],
-      ),
+    final authService = AuthService();
+
+    return StreamBuilder(
+      stream: authService.authStateChanges,
+      builder: (context, snapshot) {
+        // Show loading while checking auth state
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+
+        // User is logged in
+        if (snapshot.hasData) {
+          return const AppInitializer();
+        }
+
+        // User is not logged in
+        return const LoginScreen();
+      },
     );
+  }
+}
+
+class AppInitializer extends StatefulWidget {
+  const AppInitializer({super.key});
+
+  @override
+  State<AppInitializer> createState() => _AppInitializerState();
+}
+
+class _AppInitializerState extends State<AppInitializer> {
+  bool _servicesInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeServices();
+  }
+
+  Future<void> _initializeServices() async {
+    try {
+      // Generate recurring transactions
+      final recurringService = RecurringService();
+      await recurringService.generateDueTransactions();
+      
+      // Check budgets and generate alerts
+      final budgetAlertService = BudgetAlertService();
+      await budgetAlertService.checkBudgets();
+      await budgetAlertService.cleanupOldAlerts();
+      
+      setState(() {
+        _servicesInitialized = true;
+      });
+    } catch (e) {
+      // If services fail, still show the app
+      setState(() {
+        _servicesInitialized = true;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_servicesInitialized) {
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text(
+                'Setting up your account...',
+                style: TextStyle(color: Colors.grey.shade600),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return const MainNavigation();
   }
 }

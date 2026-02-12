@@ -69,7 +69,7 @@ class AuthService {
       if (kIsWeb) {
         print('Attempting signout...');
       }
-      
+
       // Set a timeout for signout
       await _auth.signOut().timeout(
         const Duration(seconds: 5),
@@ -83,7 +83,7 @@ class AuthService {
           }
         },
       );
-      
+
       if (kIsWeb) {
         print('Signout successful');
       }
@@ -118,7 +118,7 @@ class AuthService {
             print('Warning: Could not delete user document: $e');
           }
         }
-        
+
         // Delete user account
         await user.delete();
       }

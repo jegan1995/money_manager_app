@@ -11,6 +11,47 @@ import '../services/auth_service.dart';
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
+  Future<void> _performLogout(BuildContext context) async {
+    final authService = AuthService();
+
+    try {
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+
+      // Sign out from Firebase
+      await authService.signOut();
+
+      // Close loading
+      if (context.mounted) {
+        Navigator.pop(context);
+      }
+
+      // Force reload on web
+      if (kIsWeb) {
+        html.window.location.reload();
+      }
+    } catch (e) {
+      // Even if signout fails, force reload
+      if (kIsWeb) {
+        html.window.location.reload();
+      } else if (context.mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Logout error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
@@ -27,13 +68,14 @@ class SettingsScreen extends StatelessWidget {
       body: ListView(
         children: [
           const SizedBox(height: 10),
-          
+
           // User Info Section
           _buildSectionHeader('Account'),
           FutureBuilder<String?>(
             future: authService.getUserName(),
             builder: (context, snapshot) {
-              final name = snapshot.data ?? authService.currentUser?.email ?? 'User';
+              final name =
+                  snapshot.data ?? authService.currentUser?.email ?? 'User';
               return ListTile(
                 leading: CircleAvatar(
                   backgroundColor: Colors.blue.shade100,
@@ -79,75 +121,12 @@ class SettingsScreen extends StatelessWidget {
               );
 
               if (confirm == true) {
-                try {
-                  // Show loading dialog
-                  if (context.mounted) {
-                    showDialog(
-                      context: context,
-                      barrierDismissible: false,
-                      builder: (context) => const Center(
-                        child: CircularProgressIndicator(),
-                      ),
-                    );
-                  }
-
-                  await authService.signOut();
-                  
-                  // Close loading dialog
-                  if (context.mounted) {
-                    Navigator.pop(context);
-                  }
-                  
-                  // Navigation handled by AuthWrapper in main.dart
-                } catch (e) {
-                  // Close loading dialog
-                  if (context.mounted) {
-                    Navigator.pop(context);
-                  }
-                  
-                  // If logout fails on web, force reload
-                  if (kIsWeb) {
-                    final forceLogout = await showDialog<bool>(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text('Logout Issue'),
-                        content: const Text(
-                          'Browser extension blocking logout. Force logout by reloading page?'
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context, false),
-                            child: const Text('Cancel'),
-                          ),
-                          TextButton(
-                            onPressed: () => Navigator.pop(context, true),
-                            child: const Text(
-                              'Force Logout',
-                              style: TextStyle(color: Colors.red),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-
-                    if (forceLogout == true) {
-                      // Force page reload to clear auth state
-                      html.window.location.reload();
-                    }
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Logout failed: $e'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
-                }
+                await _performLogout(context);
               }
             },
           ),
           const Divider(),
-          
+
           _buildSectionHeader('Appearance'),
           SwitchListTile(
             title: const Text('Dark Mode'),
@@ -161,7 +140,7 @@ class SettingsScreen extends StatelessWidget {
             },
           ),
           const Divider(),
-          
+
           _buildSectionHeader('Data'),
           ListTile(
             leading: const Icon(Icons.download),
@@ -176,10 +155,11 @@ class SettingsScreen extends StatelessWidget {
                     child: CircularProgressIndicator(),
                   ),
                 );
-                
-                final transactions = await transactionService.getTransactionsList();
+
+                final transactions =
+                    await transactionService.getTransactionsList();
                 final accounts = await accountService.getAccountsList().first;
-                
+
                 final path = await exportService.exportTransactionsToCSV(
                   transactions,
                   accounts,
@@ -187,9 +167,9 @@ class SettingsScreen extends StatelessWidget {
                   includeIncome: true,
                   includeExpense: true,
                 );
-                
+
                 Navigator.pop(context);
-                
+
                 if (path != null) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
@@ -223,10 +203,11 @@ class SettingsScreen extends StatelessWidget {
                     child: CircularProgressIndicator(),
                   ),
                 );
-                
-                final transactions = await transactionService.getTransactionsList();
+
+                final transactions =
+                    await transactionService.getTransactionsList();
                 final accounts = await accountService.getAccountsList().first;
-                
+
                 final path = await exportService.exportTransactionsToExcel(
                   transactions,
                   accounts,
@@ -234,9 +215,9 @@ class SettingsScreen extends StatelessWidget {
                   includeIncome: true,
                   includeExpense: true,
                 );
-                
+
                 Navigator.pop(context);
-                
+
                 if (path != null) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
@@ -258,7 +239,7 @@ class SettingsScreen extends StatelessWidget {
             },
           ),
           const Divider(),
-          
+
           _buildSectionHeader('About'),
           const ListTile(
             leading: Icon(Icons.info),
@@ -280,7 +261,7 @@ class SettingsScreen extends StatelessWidget {
       ),
     );
   }
-  
+
   Widget _buildSectionHeader(String title) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),

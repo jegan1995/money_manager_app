@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'screens/main_navigation.dart';
 import 'screens/login_screen.dart';
 import 'providers/theme_provider.dart';
 import 'services/recurring_service.dart';
-import 'services/auth_service.dart';
 import 'services/budget_alert_service.dart';
 
 void main() async {
@@ -109,10 +109,8 @@ class AuthWrapper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final authService = AuthService();
-
-    return StreamBuilder(
-      stream: authService.authStateChanges,
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
         // Show loading while checking auth state
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -123,13 +121,16 @@ class AuthWrapper extends StatelessWidget {
           );
         }
 
-        // User is logged in
-        if (snapshot.hasData) {
+        // Check if user is logged in
+        final user = snapshot.data;
+        
+        if (user != null) {
+          // User is logged in - show app
           return const AppInitializer();
+        } else {
+          // User is not logged in - show login screen
+          return const LoginScreen();
         }
-
-        // User is not logged in
-        return const LoginScreen();
       },
     );
   }
@@ -162,14 +163,18 @@ class _AppInitializerState extends State<AppInitializer> {
       await budgetAlertService.checkBudgets();
       await budgetAlertService.cleanupOldAlerts();
       
-      setState(() {
-        _servicesInitialized = true;
-      });
+      if (mounted) {
+        setState(() {
+          _servicesInitialized = true;
+        });
+      }
     } catch (e) {
       // If services fail, still show the app
-      setState(() {
-        _servicesInitialized = true;
-      });
+      if (mounted) {
+        setState(() {
+          _servicesInitialized = true;
+        });
+      }
     }
   }
 

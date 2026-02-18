@@ -32,17 +32,17 @@ class MoreScreen extends StatelessWidget {
       ),
       body: ListView(
         children: [
-          // ✅ NEW: Budget Alerts (with notification badge)
+          // Budget Alerts (with notification badge)
           StreamBuilder<int>(
             stream: alertService.getUnreadCount(),
             builder: (context, snapshot) {
               final unreadCount = snapshot.data ?? 0;
-              
+
               return _buildMenuItem(
                 context,
                 icon: Icons.notifications,
                 title: 'Budget Alerts',
-                subtitle: unreadCount > 0 
+                subtitle: unreadCount > 0
                     ? '$unreadCount new alert${unreadCount > 1 ? 's' : ''}'
                     : 'View budget notifications',
                 color: unreadCount > 0 ? Colors.red : Colors.blue,
@@ -55,7 +55,7 @@ class MoreScreen extends StatelessWidget {
             },
           ),
           const Divider(),
-          
+
           _buildMenuItem(
             context,
             icon: Icons.swap_horiz,
@@ -67,6 +67,22 @@ class MoreScreen extends StatelessWidget {
               MaterialPageRoute(builder: (context) => const TransfersScreen()),
             ),
           ),
+
+          // ✅ FIXED: Added missing closing parenthesis
+          _buildMenuItem(
+            context,
+            icon: Icons.repeat,
+            title: 'Recurring Transactions',
+            subtitle: 'Automatic transactions',
+            color: Colors.purple,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (context) => const RecurringTransactionsScreen()),
+            ),
+          ),
+          const Divider(),
+
           _buildMenuItem(
             context,
             icon: Icons.insights,
@@ -75,9 +91,11 @@ class MoreScreen extends StatelessWidget {
             color: Colors.purple,
             onTap: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const TransferAnalyticsScreen()),
+              MaterialPageRoute(
+                  builder: (context) => const TransferAnalyticsScreen()),
             ),
           ),
+
           _buildMenuItem(
             context,
             icon: Icons.download,
@@ -90,8 +108,7 @@ class MoreScreen extends StatelessWidget {
             ),
           ),
           const Divider(),
-          
-          // ✅ FIXED: Changed from GoalsScreen to BudgetManagementScreen
+
           _buildMenuItem(
             context,
             icon: Icons.pie_chart,
@@ -101,12 +118,12 @@ class MoreScreen extends StatelessWidget {
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const BudgetManagementScreen()),
+                MaterialPageRoute(
+                    builder: (context) => const BudgetManagementScreen()),
               );
             },
           ),
-          
-          // ✅ NEW: Separate Financial Goals menu item
+
           _buildMenuItem(
             context,
             icon: Icons.flag,
@@ -120,7 +137,7 @@ class MoreScreen extends StatelessWidget {
               );
             },
           ),
-          
+
           const Divider(),
           _buildMenuItem(
             context,
@@ -160,8 +177,7 @@ class MoreScreen extends StatelessWidget {
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                    builder: (context) => const SettingsScreen()),
+                MaterialPageRoute(builder: (context) => const SettingsScreen()),
               );
             },
           ),
@@ -190,7 +206,7 @@ class MoreScreen extends StatelessWidget {
               top: -8,
               child: Container(
                 padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   color: Colors.red,
                   shape: BoxShape.circle,
                 ),

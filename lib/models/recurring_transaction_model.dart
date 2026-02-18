@@ -1,66 +1,83 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class RecurringTransactionModel {
-  final String? id;
-  final String type;
+  final String id;
+  final String userId;
+  final String type; // 'income' or 'expense'
   final double amount;
   final String category;
   final String? subcategory;
-  final String? paymentMethod;
+  final String? fromAccount; // For expenses
+  final String? toAccount; // For income
   final String frequency; // 'daily', 'weekly', 'monthly', 'yearly'
-  final DateTime startDate;
-  final DateTime? endDate;
-  final String? note;
+  final DateTime nextDate;
+  final DateTime? lastExecuted;
   final bool isActive;
+  final String? note;
   final DateTime createdAt;
 
   RecurringTransactionModel({
-    this.id,
+    required this.id,
+    required this.userId,
     required this.type,
     required this.amount,
     required this.category,
     this.subcategory,
-    this.paymentMethod,
+    this.fromAccount,
+    this.toAccount,
     required this.frequency,
-    required this.startDate,
-    this.endDate,
+    required this.nextDate,
+    this.lastExecuted,
+    required this.isActive,
     this.note,
-    this.isActive = true,
-    DateTime? createdAt,
-  }) : createdAt = createdAt ?? DateTime.now();
+    required this.createdAt,
+  });
 
   Map<String, dynamic> toMap() {
     return {
+      'userId': userId,
       'type': type,
       'amount': amount,
       'category': category,
       'subcategory': subcategory,
-      'paymentMethod': paymentMethod,
+      'fromAccount': fromAccount,
+      'toAccount': toAccount,
       'frequency': frequency,
-      'startDate': Timestamp.fromDate(startDate),
-      'endDate': endDate != null ? Timestamp.fromDate(endDate!) : null,
-      'note': note,
+      'nextDate': Timestamp.fromDate(nextDate),
+      'lastExecuted':
+          lastExecuted != null ? Timestamp.fromDate(lastExecuted!) : null,
       'isActive': isActive,
+      'note': note,
       'createdAt': Timestamp.fromDate(createdAt),
     };
   }
 
-  factory RecurringTransactionModel.fromMap(Map<String, dynamic> map, String id) {
+  factory RecurringTransactionModel.fromMap(
+      Map<String, dynamic> map, String id) {
     return RecurringTransactionModel(
       id: id,
+      userId: map['userId'] ?? '',
       type: map['type'] ?? 'expense',
       amount: (map['amount'] ?? 0).toDouble(),
-      category: map['category'] ?? 'Other',
+      category: map['category'] ?? '',
       subcategory: map['subcategory'],
-      paymentMethod: map['paymentMethod'],
+      fromAccount: map['fromAccount'],
+      toAccount: map['toAccount'],
       frequency: map['frequency'] ?? 'monthly',
-      startDate: (map['startDate'] as Timestamp).toDate(),
-      endDate: map['endDate'] != null ? (map['endDate'] as Timestamp).toDate() : null,
-      note: map['note'],
+      nextDate: (map['nextDate'] as Timestamp).toDate(),
+      lastExecuted: map['lastExecuted'] != null
+          ? (map['lastExecuted'] as Timestamp).toDate()
+          : null,
       isActive: map['isActive'] ?? true,
+      note: map['note'],
       createdAt: map['createdAt'] != null
           ? (map['createdAt'] as Timestamp).toDate()
           : DateTime.now(),
     );
+  }
+
+  factory RecurringTransactionModel.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return RecurringTransactionModel.fromMap(data, doc.id);
   }
 }

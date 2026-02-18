@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import '../models/budget_model.dart';
 import '../services/budget_service.dart';
@@ -17,7 +18,7 @@ class BudgetManagementScreen extends StatefulWidget {
 class _BudgetManagementScreenState extends State<BudgetManagementScreen> {
   final BudgetService _budgetService = BudgetService();
   final TransactionService _transactionService = TransactionService();
-  
+
   int _selectedMonth = DateTime.now().month;
   int _selectedYear = DateTime.now().year;
 
@@ -58,7 +59,8 @@ class _BudgetManagementScreenState extends State<BudgetManagementScreen> {
         ],
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: _budgetService.getBudgetsForMonth(_selectedMonth, _selectedYear),
+        stream:
+            _budgetService.getBudgetsForMonth(_selectedMonth, _selectedYear),
         builder: (context, budgetSnapshot) {
           if (budgetSnapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -71,8 +73,8 @@ class _BudgetManagementScreenState extends State<BudgetManagementScreen> {
 
           return FutureBuilder<Map<String, double>>(
             future: _transactionService.getSpendingByCategory(
-              startDate: DateTime.now().subtract(const Duration(days: 30)),
-              endDate: DateTime.now(),
+              _selectedMonth, // ✅ Just pass the int directly
+              _selectedYear,
             ),
             builder: (context, spendingSnapshot) {
               if (!spendingSnapshot.hasData) {
@@ -339,7 +341,8 @@ class _BudgetManagementScreenState extends State<BudgetManagementScreen> {
                       final month = index + 1;
                       return DropdownMenuItem(
                         value: month,
-                        child: Text(DateFormat('MMMM').format(DateTime(0, month))),
+                        child:
+                            Text(DateFormat('MMMM').format(DateTime(0, month))),
                       );
                     }),
                     onChanged: (value) {
@@ -444,8 +447,22 @@ class _BudgetManagementScreenState extends State<BudgetManagementScreen> {
                       return;
                     }
 
+                    // ✅ Get current user ID
+                    final currentUserId =
+                        FirebaseAuth.instance.currentUser?.uid;
+                    if (currentUserId == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('User not logged in'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
+
                     final budget = BudgetModel(
                       id: '',
+                      userId: currentUserId, // ✅ NEW: Add userId
                       category: selectedCategory!,
                       amount: double.parse(amountController.text),
                       month: _selectedMonth,
@@ -513,6 +530,7 @@ class _BudgetManagementScreenState extends State<BudgetManagementScreen> {
 
                 final updatedBudget = BudgetModel(
                   id: budget.id,
+                  userId: budget.userId, // ✅ NEW: Keep existing userId
                   category: budget.category,
                   amount: double.parse(amountController.text),
                   month: budget.month,

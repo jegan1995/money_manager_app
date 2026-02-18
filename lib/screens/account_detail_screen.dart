@@ -20,7 +20,7 @@ class AccountDetailScreen extends StatefulWidget {
 class _AccountDetailScreenState extends State<AccountDetailScreen> {
   final TransactionService _transactionService = TransactionService();
   final AccountService _accountService = AccountService();
-  
+
   String _selectedPeriod = 'Daily'; // Daily, Monthly, Annually
   DateTime _selectedDate = DateTime.now();
 
@@ -44,7 +44,8 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => AddAccountScreen(account: widget.account),
+                  builder: (context) =>
+                      AddAccountScreen(account: widget.account),
                 ),
               );
             },
@@ -62,8 +63,9 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
             ),
             child: Column(
               children: [
-                const Icon(Icons.account_balance_wallet, 
-                  size: 48, 
+                const Icon(
+                  Icons.account_balance_wallet,
+                  size: 48,
                   color: Colors.white,
                 ),
                 const SizedBox(height: 8),
@@ -88,12 +90,12 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
                         ),
                       );
                     }
-                    
+
                     final account = snapshot.data!.docs
                         .map((doc) => AccountModel.fromMap(
                             doc.data() as Map<String, dynamic>, doc.id))
                         .firstWhere((a) => a.id == widget.account.id);
-                    
+
                     return Text(
                       '₹${account.balance.toStringAsFixed(2)}',
                       style: const TextStyle(
@@ -193,7 +195,7 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
   }
 
   Widget _buildSummaryRow() {
-    return StreamBuilder<QuerySnapshot>(
+    return StreamBuilder<List<TransactionModel>>(
       stream: _transactionService.getTransactions(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
@@ -209,11 +211,10 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
           );
         }
 
-        final allTransactions = snapshot.data!.docs
-            .map((doc) => TransactionModel.fromFirestore(doc))
-            .toList();
+        final transactions = snapshot.data!;
 
-        final filtered = _filterTransactionsByPeriod(allTransactions);
+        final filtered = _filterTransactionsByPeriod(
+            transactions); // ✅ Change allTransactions to transactions
 
         double deposit = 0;
         double withdrawal = 0;
@@ -221,7 +222,8 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
         for (var txn in filtered) {
           if (txn.type == 'income' && txn.toAccount == widget.account.id) {
             deposit += txn.amount;
-          } else if (txn.type == 'expense' && txn.fromAccount == widget.account.id) {
+          } else if (txn.type == 'expense' &&
+              txn.fromAccount == widget.account.id) {
             withdrawal += txn.amount;
           } else if (txn.type == 'transfer') {
             if (txn.toAccount == widget.account.id) {
@@ -249,15 +251,15 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
                   if (!accSnapshot.hasData) {
                     return _buildSummaryItem('Balance', 0, Colors.grey);
                   }
-                  
+
                   final account = accSnapshot.data!.docs
                       .map((doc) => AccountModel.fromMap(
                           doc.data() as Map<String, dynamic>, doc.id))
                       .firstWhere((a) => a.id == widget.account.id);
-                  
+
                   return _buildSummaryItem(
-                    'Balance', 
-                    account.balance, 
+                    'Balance',
+                    account.balance,
                     account.balance >= 0 ? Colors.green : Colors.red,
                   );
                 },
@@ -281,7 +283,7 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
         ),
         const SizedBox(height: 4),
         Text(
-          amount >= 0 
+          amount >= 0
               ? '₹${amount.toStringAsFixed(2)}'
               : '-₹${(-amount).toStringAsFixed(2)}',
           style: TextStyle(
@@ -295,7 +297,7 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
   }
 
   Widget _buildTransactionsList() {
-    return StreamBuilder<QuerySnapshot>(
+    return StreamBuilder<List<TransactionModel>>(
       stream: _transactionService.getTransactions(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -313,11 +315,10 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
           );
         }
 
-        final allTransactions = snapshot.data!.docs
-            .map((doc) => TransactionModel.fromFirestore(doc))
-            .toList();
+        final transactions = snapshot.data!;
 
-        final filtered = _filterTransactionsByPeriod(allTransactions);
+        final filtered = _filterTransactionsByPeriod(
+            transactions); // ✅ Change allTransactions to transactions
 
         if (filtered.isEmpty) {
           return Center(
@@ -358,7 +359,8 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
             for (var txn in dayTxns) {
               if (txn.type == 'income' && txn.toAccount == widget.account.id) {
                 dayDeposit += txn.amount;
-              } else if (txn.type == 'expense' && txn.fromAccount == widget.account.id) {
+              } else if (txn.type == 'expense' &&
+                  txn.fromAccount == widget.account.id) {
                 dayWithdrawal += txn.amount;
               } else if (txn.type == 'transfer') {
                 if (txn.toAccount == widget.account.id) {
@@ -373,7 +375,8 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
               children: [
                 // Date Header
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   color: Colors.grey[850],
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -424,9 +427,11 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
     bool isDeposit = false;
     bool isWithdrawal = false;
 
-    if (transaction.type == 'income' && transaction.toAccount == widget.account.id) {
+    if (transaction.type == 'income' &&
+        transaction.toAccount == widget.account.id) {
       isDeposit = true;
-    } else if (transaction.type == 'expense' && transaction.fromAccount == widget.account.id) {
+    } else if (transaction.type == 'expense' &&
+        transaction.fromAccount == widget.account.id) {
       isWithdrawal = true;
     } else if (transaction.type == 'transfer') {
       if (transaction.toAccount == widget.account.id) {
@@ -444,13 +449,16 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => TransactionDetailScreen(transaction: transaction),
+          builder: (context) =>
+              TransactionDetailScreen(transaction: transaction),
         ),
       ),
       leading: CircleAvatar(
         backgroundColor: transaction.type == 'transfer'
             ? Colors.blue.withOpacity(0.2)
-            : (isDeposit ? Colors.blue.withOpacity(0.2) : Colors.red.withOpacity(0.2)),
+            : (isDeposit
+                ? Colors.blue.withOpacity(0.2)
+                : Colors.red.withOpacity(0.2)),
         child: Icon(
           transaction.type == 'transfer'
               ? Icons.swap_horiz
@@ -493,7 +501,8 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
       // Filter by account
       if (txn.type == 'income' && txn.toAccount != widget.account.id) {
         return false;
-      } else if (txn.type == 'expense' && txn.fromAccount != widget.account.id) {
+      } else if (txn.type == 'expense' &&
+          txn.fromAccount != widget.account.id) {
         return false;
       } else if (txn.type == 'transfer') {
         if (txn.fromAccount != widget.account.id &&

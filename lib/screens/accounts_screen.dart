@@ -85,30 +85,28 @@ class _AccountsScreenState extends State<AccountsScreen> {
               .toList();
 
           // Calculate totals
-          double totalCash = 0;
-          double totalBank = 0;
-          double totalDebt = 0;
-          double totalOther = 0;
+          // Calculate totals
+          double totalPositive = 0; // All positive balances = Assets
+          double totalNegative = 0; // All negative balances = Debt
+          double totalDebt = 0; // Credit card/loan accounts
 
           for (var account in accounts) {
-            switch (account.type) {
-              case 'cash':
-                totalCash += account.balance;
-                break;
-              case 'bank':
-                totalBank += account.balance;
-                break;
-              case 'credit_card':
-              case 'loan':
-                totalDebt += account.balance;
-                break;
-              default:
-                totalOther += account.balance;
+            if (account.type == 'credit_card' || account.type == 'loan') {
+              // Credit/Loan: balance is what you owe
+              totalDebt += account.balance.abs();
+            } else {
+              // Cash/Bank: positive = asset, negative = overdraft (debt)
+              if (account.balance >= 0) {
+                totalPositive += account.balance;
+              } else {
+                totalNegative += account.balance.abs();
+              }
             }
           }
 
-          final totalAssets = totalCash + totalBank + totalOther;
-          final netWorth = totalAssets - totalDebt;
+          final totalAssets = totalPositive;
+          final totalDebtDisplay = totalDebt + totalNegative;
+          final netWorth = totalPositive - totalDebtDisplay;
 
           // Group accounts by type
           final grouped = <String, List<AccountModel>>{};
@@ -123,7 +121,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
             child: ListView(
               children: [
                 // Summary Cards
-                _buildSummarySection(totalAssets, totalDebt, netWorth),
+                _buildSummarySection(totalAssets, totalDebtDisplay, netWorth),
 
                 const SizedBox(height: 8),
 

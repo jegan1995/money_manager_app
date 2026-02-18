@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AccountModel {
   final String? id;
+  final String userId; // ✅ NEW: User ID field
   final String name;
   final String type; // 'cash', 'bank', 'credit_card', 'loan', 'other'
   final double balance;
@@ -11,6 +12,7 @@ class AccountModel {
 
   AccountModel({
     this.id,
+    required this.userId, // ✅ NEW: Required field
     required this.name,
     required this.type,
     required this.balance,
@@ -21,6 +23,7 @@ class AccountModel {
 
   Map<String, dynamic> toMap() {
     return {
+      'userId': userId, // ✅ NEW: Include in map
       'name': name,
       'type': type,
       'balance': balance,
@@ -33,6 +36,7 @@ class AccountModel {
   factory AccountModel.fromMap(Map<String, dynamic> map, String id) {
     return AccountModel(
       id: id,
+      userId: map['userId'] ?? '', // ✅ NEW: Read userId
       name: map['name'] ?? '',
       type: map['type'] ?? 'other',
       balance: (map['balance'] ?? 0).toDouble(),
@@ -46,6 +50,7 @@ class AccountModel {
 
   AccountModel copyWith({
     String? id,
+    String? userId, // ✅ NEW: Added to copyWith
     String? name,
     String? type,
     double? balance,
@@ -55,6 +60,7 @@ class AccountModel {
   }) {
     return AccountModel(
       id: id ?? this.id,
+      userId: userId ?? this.userId, // ✅ NEW
       name: name ?? this.name,
       type: type ?? this.type,
       balance: balance ?? this.balance,

@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../models/recurring_transaction_model.dart';
 import '../services/recurring_transaction_service.dart';
-// import '../utils/subcategories.dart';
-import '../utils/categories.dart';
+import 'add_recurring_transaction_screen.dart';
 
 class RecurringTransactionsScreen extends StatefulWidget {
   const RecurringTransactionsScreen({super.key});
@@ -16,166 +14,136 @@ class RecurringTransactionsScreen extends StatefulWidget {
 
 class _RecurringTransactionsScreenState
     extends State<RecurringTransactionsScreen> {
-  final RecurringTransactionService _recurringService =
-      RecurringTransactionService();
+  final RecurringTransactionService _service = RecurringTransactionService();
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Recurring Transactions'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.play_arrow),
-            tooltip: 'Generate Today\'s Transactions',
-            onPressed: () async {
-              try {
-                await _recurringService.generateRecurringTransactions();
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Recurring transactions generated'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Error: $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
-            },
-          ),
-        ],
+        backgroundColor: Colors.blue,
+        foregroundColor: Colors.white,
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: _recurringService.getRecurringTransactions(),
+      body: StreamBuilder<List<RecurringTransactionModel>>(
+        stream: _service.getRecurringTransactions(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.repeat, size: 80, color: Colors.grey[300]),
-                  const SizedBox(height: 24),
-                  Text('No recurring transactions',
-                      style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 18,
-                          fontWeight: FontWeight.w500)),
-                  const SizedBox(height: 8),
-                  Text('Tap + to add your first recurring transaction',
-                      style: TextStyle(color: Colors.grey[500], fontSize: 14)),
-                  const SizedBox(height: 24),
-                  ElevatedButton.icon(
-                    onPressed: () => _showAddRecurringDialog(),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add Recurring'),
-                  ),
-                ],
-              ),
-            );
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
           }
 
-          final recurring = snapshot.data!.docs
-              .map((doc) => RecurringTransactionModel.fromMap(
-                    doc.data() as Map<String, dynamic>,
-                    doc.id,
-                  ))
-              .toList();
+          final recurring = snapshot.data ?? [];
+
+          if (recurring.isEmpty) {
+            return _buildEmptyState();
+          }
 
           return ListView.builder(
+            padding: const EdgeInsets.all(16),
             itemCount: recurring.length,
             itemBuilder: (context, index) {
               final item = recurring[index];
-              final isExpense = item.type == 'expense';
-
-              return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor:
-                        isExpense ? Colors.red[50] : Colors.green[50],
-                    child: Icon(
-                      Icons.repeat,
-                      color: isExpense ? Colors.red : Colors.green,
-                    ),
-                  ),
-                  title: Text(
-                    item.category,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(_getFrequencyText(item.frequency)),
-                      Text(
-                        'Start: ${DateFormat('MMM d, yyyy').format(item.startDate)}',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                      if (!item.isActive)
-                        const Text(
-                          'Inactive',
-                          style: TextStyle(color: Colors.orange, fontSize: 12),
-                        ),
-                    ],
-                  ),
-                  trailing: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        '${isExpense ? '-' : '+'}₹${item.amount.toStringAsFixed(0)}',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: isExpense ? Colors.red : Colors.green,
-                        ),
-                      ),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: Icon(
-                              item.isActive
-                                  ? Icons.pause_circle
-                                  : Icons.play_circle,
-                              size: 20,
-                            ),
-                            onPressed: () => _toggleActive(item),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                          ),
-                          const SizedBox(width: 8),
-                          IconButton(
-                            icon: const Icon(Icons.delete, size: 20),
-                            onPressed: () => _deleteRecurring(item.id!),
-                            color: Colors.red,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              );
+              return _buildRecurringCard(item);
             },
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddRecurringDialog,
-        child: const Icon(Icons.add),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const AddRecurringTransactionScreen(),
+            ),
+          );
+        },
+        icon: const Icon(Icons.add),
+        label: const Text('Add Recurring'),
+        backgroundColor: Colors.blue,
+      ),
+    );
+  }
+
+  Widget _buildRecurringCard(RecurringTransactionModel item) {
+    final isIncome = item.type == 'income';
+    final color = isIncome ? Colors.green : Colors.red;
+    final icon = isIncome ? Icons.arrow_downward : Icons.arrow_upward;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        contentPadding: const EdgeInsets.all(16),
+        leading: CircleAvatar(
+          backgroundColor: color.withOpacity(0.1),
+          child: Icon(icon, color: color),
+        ),
+        title: Text(
+          item.category,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 4),
+            Text(
+              _getFrequencyText(item.frequency),
+              style: TextStyle(color: Colors.grey[600], fontSize: 13),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Next: ${DateFormat('MMM d, yyyy').format(item.nextDate)}',
+              style: TextStyle(color: Colors.grey[600], fontSize: 12),
+            ),
+            if (item.note != null && item.note!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  item.note!,
+                  style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+          ],
+        ),
+        trailing: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              '₹${item.amount.toStringAsFixed(0)}',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Switch(
+              value: item.isActive,
+              onChanged: (value) async {
+                await _service.toggleRecurringTransaction(item.id, value);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(value ? 'Activated' : 'Paused'),
+                      duration: const Duration(seconds: 1),
+                    ),
+                  );
+                }
+              },
+              activeColor: Colors.green,
+            ),
+          ],
+        ),
+        onTap: () {
+          _showOptions(item);
+        },
       ),
     );
   }
@@ -183,260 +151,124 @@ class _RecurringTransactionsScreenState
   String _getFrequencyText(String frequency) {
     switch (frequency) {
       case 'daily':
-        return 'Daily';
+        return 'Every day';
       case 'weekly':
-        return 'Weekly';
+        return 'Every week';
       case 'monthly':
-        return 'Monthly';
+        return 'Every month';
       case 'yearly':
-        return 'Yearly';
+        return 'Every year';
       default:
         return frequency;
     }
   }
 
-  void _showAddRecurringDialog() {
-    String type = 'expense';
-    String? selectedCategory;
-    String? selectedSubcategory;
-    String frequency = 'monthly';
-    final amountController = TextEditingController();
-    final noteController = TextEditingController();
-    DateTime startDate = DateTime.now();
-
-    showDialog(
+  void _showOptions(RecurringTransactionModel item) {
+    showModalBottomSheet(
       context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text('Add Recurring Transaction'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Type Selector
-                    SegmentedButton<String>(
-                      segments: const [
-                        ButtonSegment(value: 'expense', label: Text('Expense')),
-                        ButtonSegment(value: 'income', label: Text('Income')),
-                      ],
-                      selected: {type},
-                      onSelectionChanged: (newSelection) {
-                        setDialogState(() {
-                          type = newSelection.first;
-                          selectedCategory = null;
-                          selectedSubcategory = null;
-                        });
-                      },
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit, color: Colors.blue),
+              title: const Text('Edit'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        AddRecurringTransactionScreen(recurring: item),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.play_arrow, color: Colors.green),
+              title: const Text('Execute Now'),
+              onTap: () async {
+                Navigator.pop(context);
+                await _service.executeRecurring(item.id);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Transaction created successfully!'),
+                      backgroundColor: Colors.green,
                     ),
-                    const SizedBox(height: 16),
-
-                    // Amount
-                    TextField(
-                      controller: amountController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Amount',
-                        prefixText: '₹ ',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Category
-                    DropdownButtonFormField<String>(
-                      value: selectedCategory,
-                      decoration: const InputDecoration(
-                        labelText: 'Category',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: Categories.getMainCategories(type)
-                          .map((cat) =>
-                              DropdownMenuItem(value: cat, child: Text(cat)))
-                          .toList(),
-                      onChanged: (value) {
-                        setDialogState(() {
-                          selectedCategory = value;
-                          selectedSubcategory = null;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Frequency
-                    DropdownButtonFormField<String>(
-                      value: frequency,
-                      decoration: const InputDecoration(
-                        labelText: 'Frequency',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: const [
-                        DropdownMenuItem(value: 'daily', child: Text('Daily')),
-                        DropdownMenuItem(value: 'weekly', child: Text('Weekly')),
-                        DropdownMenuItem(value: 'monthly', child: Text('Monthly')),
-                        DropdownMenuItem(value: 'yearly', child: Text('Yearly')),
-                      ],
-                      onChanged: (value) {
-                        setDialogState(() {
-                          frequency = value!;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Start Date
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Start Date'),
-                      subtitle: Text(DateFormat('MMM d, yyyy').format(startDate)),
-                      trailing: const Icon(Icons.calendar_today),
-                      onTap: () async {
-                        final date = await showDatePicker(
-                          context: context,
-                          initialDate: startDate,
-                          firstDate: DateTime.now(),
-                          lastDate: DateTime(2100),
-                        );
-                        if (date != null) {
-                          setDialogState(() {
-                            startDate = date;
-                          });
-                        }
-                      },
-                    ),
-
-                    // Note
-                    TextField(
-                      controller: noteController,
-                      decoration: const InputDecoration(
-                        labelText: 'Note (Optional)',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
-                TextButton(
-                  onPressed: () async {
-                    if (selectedCategory == null ||
-                        amountController.text.isEmpty) {
-                      return;
-                    }
-
-                    final recurring = RecurringTransactionModel(
-                      type: type,
-                      amount: double.parse(amountController.text),
-                      category: selectedCategory!,
-                      subcategory: selectedSubcategory,
-                      paymentMethod: 'Cash',
-                      frequency: frequency,
-                      startDate: startDate,
-                      note: noteController.text.isEmpty
-                          ? null
-                          : noteController.text,
-                    );
-
-                    try {
-                      await _recurringService.addRecurringTransaction(recurring);
-                      if (context.mounted) {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Recurring transaction added'),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
-                      }
-                    } catch (e) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Error: $e'),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                      }
-                    }
-                  },
-                  child: const Text('Add'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+                  );
+                }
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete, color: Colors.red),
+              title: const Text('Delete'),
+              onTap: () {
+                Navigator.pop(context);
+                _confirmDelete(item);
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 
-  Future<void> _toggleActive(RecurringTransactionModel recurring) async {
-    try {
-      final updated = RecurringTransactionModel(
-        id: recurring.id,
-        type: recurring.type,
-        amount: recurring.amount,
-        category: recurring.category,
-        subcategory: recurring.subcategory,
-        paymentMethod: recurring.paymentMethod,
-        frequency: recurring.frequency,
-        startDate: recurring.startDate,
-        endDate: recurring.endDate,
-        note: recurring.note,
-        isActive: !recurring.isActive,
-      );
-      await _recurringService.updateRecurringTransaction(recurring.id!, updated);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
-      }
-    }
-  }
-
-  Future<void> _deleteRecurring(String id) async {
-    final confirmed = await showDialog<bool>(
+  void _confirmDelete(RecurringTransactionModel item) {
+    showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Recurring Transaction'),
-        content: const Text(
-            'Are you sure you want to delete this recurring transaction?'),
+        title: const Text('Delete Recurring Transaction?'),
+        content: Text('Delete "${item.category}"? This cannot be undone.'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _service.deleteRecurringTransaction(item.id);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Deleted successfully'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete'),
           ),
         ],
       ),
     );
+  }
 
-    if (confirmed == true) {
-      try {
-        await _recurringService.deleteRecurringTransaction(id);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Recurring transaction deleted'),
-              backgroundColor: Colors.green,
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.repeat, size: 80, color: Colors.grey[300]),
+          const SizedBox(height: 16),
+          Text(
+            'No recurring transactions',
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 18,
+              fontWeight: FontWeight.w500,
             ),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-          );
-        }
-      }
-    }
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Set up automatic transactions for\nsalary, rent, bills, etc.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey[500], fontSize: 14),
+          ),
+        ],
+      ),
+    );
   }
 }

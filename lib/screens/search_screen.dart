@@ -38,9 +38,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
     try {
       final snapshot = await _transactionService.searchTransactions(query).first;
-      final results = snapshot.docs
-          .map((doc) => TransactionModel.fromFirestore(doc))
-          .toList();
+      final results = snapshot; // Already a List<TransactionModel>
       setState(() {
         _searchResults = results;
       });

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/account_model.dart';
 import '../services/account_service.dart';
 
@@ -148,7 +149,8 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
             // Balance
             TextFormField(
               controller: _balanceController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               decoration: InputDecoration(
                 labelText: _type == 'credit_card' || _type == 'loan'
                     ? 'Outstanding Amount *'
@@ -215,8 +217,15 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     });
 
     try {
+      // ✅ Get current user ID
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUserId == null) {
+        throw Exception('User not logged in');
+      }
+
       final account = AccountModel(
         id: widget.account?.id,
+        userId: currentUserId, // ✅ NEW: Add userId
         name: _nameController.text,
         type: _type,
         balance: double.parse(_balanceController.text),
@@ -233,9 +242,8 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(widget.account != null
-                ? 'Account updated'
-                : 'Account added'),
+            content: Text(
+                widget.account != null ? 'Account updated' : 'Account added'),
             backgroundColor: Colors.green,
           ),
         );

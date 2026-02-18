@@ -113,9 +113,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       stream: _accountService.getAccountsList(),
       builder: (context, snapshot) {
         double totalBalance = 0;
-        
+
         if (snapshot.hasData) {
-          totalBalance = snapshot.data!.fold(0.0, (sum, account) => sum + account.balance);
+          totalBalance =
+              snapshot.data!.fold(0.0, (sum, account) => sum + account.balance);
         }
 
         return Container(
@@ -179,10 +180,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (snapshot.hasData) {
           final now = DateTime.now();
           final startOfMonth = DateTime(now.year, now.month, 1);
-          
-          final monthTransactions = snapshot.data!.where((t) => 
-            t.date.isAfter(startOfMonth) && t.date.isBefore(now.add(const Duration(days: 1)))
-          ).toList();
+
+          final monthTransactions = snapshot.data!
+              .where((t) =>
+                  t.date.isAfter(startOfMonth) &&
+                  t.date.isBefore(now.add(const Duration(days: 1))))
+              .toList();
 
           for (var t in monthTransactions) {
             if (t.type == 'income') {
@@ -218,7 +221,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildSummaryCard(String label, double amount, MaterialColor color, IconData icon) {
+  Widget _buildSummaryCard(
+      String label, double amount, MaterialColor color, IconData icon) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -274,12 +278,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (snapshot.hasData) {
           final now = DateTime.now();
           final startOfMonth = DateTime(now.year, now.month, 1);
-          
-          final transfers = snapshot.data!.where((t) => 
-            t.type == 'transfer' &&
-            t.date.isAfter(startOfMonth) && 
-            t.date.isBefore(now.add(const Duration(days: 1)))
-          ).toList();
+
+          final transfers = snapshot.data!
+              .where((t) =>
+                  t.type == 'transfer' &&
+                  t.date.isAfter(startOfMonth) &&
+                  t.date.isBefore(now.add(const Duration(days: 1))))
+              .toList();
 
           transferCount = transfers.length;
           transferAmount = transfers.fold(0.0, (sum, t) => sum + t.amount);
@@ -299,7 +304,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: InkWell(
               onTap: () => Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const TransfersScreen()),
+                MaterialPageRoute(
+                    builder: (context) => const TransfersScreen()),
               ),
               borderRadius: BorderRadius.circular(12),
               child: Padding(
@@ -312,7 +318,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         color: Colors.white.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(Icons.swap_horiz, color: Colors.white, size: 28),
+                      child: const Icon(Icons.swap_horiz,
+                          color: Colors.white, size: 28),
                     ),
                     const SizedBox(width: 16),
                     Expanded(
@@ -341,9 +348,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     IconButton(
                       onPressed: () => Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => const AddTransferScreen()),
+                        MaterialPageRoute(
+                            builder: (context) => const AddTransferScreen()),
                       ),
-                      icon: const Icon(Icons.add_circle, color: Colors.white, size: 32),
+                      icon: const Icon(Icons.add_circle,
+                          color: Colors.white, size: 32),
                       tooltip: 'New Transfer',
                     ),
                   ],
@@ -403,9 +412,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _buildStatItem('Today', '₹${todayExpense.toStringAsFixed(0)}'),
+                  _buildStatItem(
+                      'Today', '₹${todayExpense.toStringAsFixed(0)}'),
                   Container(width: 1, height: 40, color: Colors.grey.shade300),
-                  _buildStatItem('This Week', '₹${weekExpense.toStringAsFixed(0)}'),
+                  _buildStatItem(
+                      'This Week', '₹${weekExpense.toStringAsFixed(0)}'),
                   Container(width: 1, height: 40, color: Colors.grey.shade300),
                   _buildStatItem('Total Txns', '$transactionCount'),
                 ],
@@ -458,7 +469,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               padding: const EdgeInsets.all(32.0),
               child: Column(
                 children: [
-                  Icon(Icons.receipt_long, size: 64, color: Colors.grey.shade400),
+                  Icon(Icons.receipt_long,
+                      size: 64, color: Colors.grey.shade400),
                   const SizedBox(height: 16),
                   Text(
                     'No transactions yet',
@@ -494,10 +506,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             final transaction = recentTransactions[index];
             final isIncome = transaction.type == 'income';
             final isTransfer = transaction.type == 'transfer';
-            final color = isTransfer ? Colors.blue : (isIncome ? Colors.green : Colors.red);
+            final color = isTransfer
+                ? Colors.blue
+                : (isIncome ? Colors.green : Colors.red);
 
             return ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               leading: CircleAvatar(
                 backgroundColor: color.withOpacity(0.1),
                 child: Icon(
@@ -516,7 +531,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   if (transaction.subcategory != null)
                     Text(
                       transaction.subcategory!,
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      style:
+                          TextStyle(fontSize: 12, color: Colors.grey.shade600),
                     ),
                   Text(
                     DateFormat('MMM d, yyyy').format(transaction.date),
@@ -525,7 +541,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ],
               ),
               trailing: Text(
-                isTransfer 
+                isTransfer
                     ? '₹${transaction.amount.toStringAsFixed(0)}'
                     : '${isIncome ? '+' : '-'}₹${transaction.amount.toStringAsFixed(0)}',
                 style: TextStyle(
@@ -538,7 +554,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => TransactionDetailScreen(transaction: transaction),
+                    builder: (context) =>
+                        TransactionDetailScreen(transaction: transaction),
                   ),
                 ).then((_) => setState(() {}));
               },

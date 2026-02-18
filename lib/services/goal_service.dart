@@ -1,56 +1,52 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/goal_model.dart';
 
 class GoalService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
   final String _collection = 'goals';
 
+  String? get _currentUserId => _auth.currentUser?.uid;
+
   Stream<QuerySnapshot> getGoals() {
+    final userId = _currentUserId;
+    if (userId == null) return const Stream.empty();
     return _firestore
         .collection(_collection)
-        .orderBy('createdAt', descending: false)
+        .where('userId', isEqualTo: userId)
         .snapshots();
   }
 
   Future<void> addGoal(GoalModel goal) async {
-    try {
-      await _firestore.collection(_collection).add(goal.toMap());
-    } catch (e) {
-      throw Exception('Failed to add goal: $e');
-    }
+    if (_currentUserId == null) throw Exception('User not logged in');
+    await _firestore.collection(_collection).add(goal.toMap());
   }
 
   Future<void> updateGoal(String id, GoalModel goal) async {
-    try {
-      await _firestore.collection(_collection).doc(id).update(goal.toMap());
-    } catch (e) {
-      throw Exception('Failed to update goal: $e');
-    }
+    if (_currentUserId == null) throw Exception('User not logged in');
+    await _firestore.collection(_collection).doc(id).update(goal.toMap());
   }
 
   Future<void> deleteGoal(String id) async {
-    try {
-      await _firestore.collection(_collection).doc(id).delete();
-    } catch (e) {
-      throw Exception('Failed to delete goal: $e');
-    }
+    if (_currentUserId == null) throw Exception('User not logged in');
+    await _firestore.collection(_collection).doc(id).delete();
   }
 
   Future<void> addAmountToGoal(String id, double amount) async {
+    if (_currentUserId == null) throw Exception('User not logged in');
     try {
       final doc = await _firestore.collection(_collection).doc(id).get();
       if (doc.exists) {
         final goal = GoalModel.fromMap(doc.data()!, doc.id);
         final newAmount = goal.currentAmount + amount;
-        final isCompleted = newAmount >= goal.targetAmount;
-
         await _firestore.collection(_collection).doc(id).update({
           'currentAmount': newAmount,
-          'isCompleted': isCompleted,
+          'isCompleted': newAmount >= goal.targetAmount,
         });
       }
     } catch (e) {
-      throw Exception('Failed to add amount to goal: $e');
+      throw Exception('Failed to add amount: $e');
     }
   }
 }

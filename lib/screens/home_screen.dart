@@ -44,7 +44,8 @@ class _HomeScreenState extends State<HomeScreen> {
             itemBuilder: (context) => [
               const PopupMenuItem(value: 'Today', child: Text('Today')),
               const PopupMenuItem(value: 'This Week', child: Text('This Week')),
-              const PopupMenuItem(value: 'This Month', child: Text('This Month')),
+              const PopupMenuItem(
+                  value: 'This Month', child: Text('This Month')),
               const PopupMenuItem(value: 'This Year', child: Text('This Year')),
               const PopupMenuItem(value: 'All Time', child: Text('All Time')),
             ],
@@ -64,7 +65,7 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           // ✅ NEW: Alert Banner at the top
           const AlertBanner(),
-          
+
           _buildBalanceCards(),
           Expanded(child: _buildTransactionsList()),
         ],
@@ -80,9 +81,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildBalanceCards() {
-    return StreamBuilder<QuerySnapshot>(
+    return StreamBuilder<List<TransactionModel>>(
+      // ✅ ADD return
       stream: _transactionService.getTransactions(),
-      builder: (context, snapshot) {
+      builder: (context, AsyncSnapshot<List<TransactionModel>> snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Padding(
             padding: EdgeInsets.all(16.0),
@@ -92,15 +94,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
         if (!snapshot.hasData) return const SizedBox.shrink();
 
-        final transactions = snapshot.data!.docs
-            .map((doc) => TransactionModel.fromFirestore(doc))
-            .toList();
+        final transactions = snapshot.data!;
 
         final filtered = _filterByPeriod(transactions);
 
         double income = 0, expense = 0, transfers = 0;
         int transferCount = 0;
-        
+
         for (var txn in filtered) {
           if (txn.type == 'income') {
             income += txn.amount;
@@ -136,14 +136,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ],
               ),
-              
+
               // Transfer Quick Access Card (if transfers exist)
               if (transferCount > 0) ...[
                 const SizedBox(height: 12),
                 InkWell(
                   onTap: () => Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const TransfersScreen()),
+                    MaterialPageRoute(
+                        builder: (context) => const TransfersScreen()),
                   ),
                   child: Container(
                     padding: const EdgeInsets.all(12),
@@ -154,7 +155,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.swap_horiz, size: 20, color: Colors.blue),
+                        const Icon(Icons.swap_horiz,
+                            size: 20, color: Colors.blue),
                         const SizedBox(width: 8),
                         Text(
                           '$transferCount Transfer${transferCount > 1 ? 's' : ''}',
@@ -174,7 +176,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                         const Spacer(),
-                        const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.blue),
+                        const Icon(Icons.arrow_forward_ios,
+                            size: 14, color: Colors.blue),
                       ],
                     ),
                   ),
@@ -187,7 +190,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildStatCard(String label, double amount, IconData icon, Color color) {
+  Widget _buildStatCard(
+      String label, double amount, IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -232,14 +236,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildTransactionsList() {
-    return StreamBuilder<QuerySnapshot>(
+    return StreamBuilder<List<TransactionModel>>(
       stream: _transactionService.getTransactions(),
-      builder: (context, snapshot) {
+      builder: (context, AsyncSnapshot<List<TransactionModel>> snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -256,9 +260,7 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
 
-        final transactions = snapshot.data!.docs
-            .map((doc) => TransactionModel.fromFirestore(doc))
-            .toList();
+        final transactions = snapshot.data!;
 
         final filtered = _filterByPeriod(transactions);
 
@@ -282,7 +284,8 @@ class _HomeScreenState extends State<HomeScreen> {
           grouped.putIfAbsent(key, () => []).add(txn);
         }
 
-        final sortedDates = grouped.keys.toList()..sort((a, b) => b.compareTo(a));
+        final sortedDates = grouped.keys.toList()
+          ..sort((a, b) => b.compareTo(a));
 
         return Container(
           color: Colors.white,
@@ -305,7 +308,8 @@ class _HomeScreenState extends State<HomeScreen> {
               return Column(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
                     color: Colors.grey[100],
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -343,7 +347,8 @@ class _HomeScreenState extends State<HomeScreen> {
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => TransactionDetailScreen(transaction: transaction),
+          builder: (context) =>
+              TransactionDetailScreen(transaction: transaction),
         ),
       ),
       leading: CircleAvatar(
@@ -364,9 +369,9 @@ class _HomeScreenState extends State<HomeScreen> {
       title: Text(transaction.category,
           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
       subtitle: Text(
-        transaction.subcategory ?? 
-        transaction.paymentMethod ?? 
-        (transaction.type == 'transfer' ? 'Transfer' : ''),
+        transaction.subcategory ??
+            transaction.paymentMethod ??
+            (transaction.type == 'transfer' ? 'Transfer' : ''),
         style: TextStyle(fontSize: 12, color: Colors.grey[600]),
       ),
       trailing: Text(
@@ -395,7 +400,8 @@ class _HomeScreenState extends State<HomeScreen> {
               txn.date.day == now.day;
         case 'This Week':
           final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
-          return txn.date.isAfter(startOfWeek.subtract(const Duration(days: 1)));
+          return txn.date
+              .isAfter(startOfWeek.subtract(const Duration(days: 1)));
         case 'This Month':
           return txn.date.year == now.year && txn.date.month == now.month;
         case 'This Year':
@@ -411,7 +417,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final now = DateTime.now();
     final yesterday = now.subtract(const Duration(days: 1));
 
-    if (date.year == now.year && date.month == now.month && date.day == now.day) {
+    if (date.year == now.year &&
+        date.month == now.month &&
+        date.day == now.day) {
       return 'Today';
     } else if (date.year == yesterday.year &&
         date.month == yesterday.month &&

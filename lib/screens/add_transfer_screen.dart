@@ -80,14 +80,18 @@ class _AddTransferScreenState extends State<AddTransferScreen> {
 
       // Create transfer transaction
       final transaction = TransactionModel(
+        userId: '', // ✅ Service will set this
         id: '',
         type: 'transfer',
-        amount: amount,
+        amount: double.parse(_amountController.text),
         category: 'Transfer',
         date: _selectedDate,
-        note: _notesController.text.isEmpty ? null : _notesController.text,
-        fromAccount: _fromAccountId,
-        toAccount: _toAccountId,
+        note: _notesController.text.isEmpty
+            ? null
+            : _notesController.text, // ✅ _notesController
+        fromAccount: _fromAccountId, // ✅ Fixed
+        toAccount: _toAccountId, // ✅ Fixed
+        createdAt: DateTime.now(),
       );
 
       await _transactionService.addTransaction(transaction);
@@ -99,7 +103,9 @@ class _AddTransferScreenState extends State<AddTransferScreen> {
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Transfer completed!'), backgroundColor: Colors.green),
+          const SnackBar(
+              content: Text('Transfer completed!'),
+              backgroundColor: Colors.green),
         );
       }
     } catch (e) {
@@ -159,9 +165,12 @@ class _AddTransferScreenState extends State<AddTransferScreen> {
                       ),
                       keyboardType: TextInputType.number,
                       validator: (value) {
-                        if (value == null || value.isEmpty) return 'Enter amount';
-                        if (double.tryParse(value) == null) return 'Enter valid number';
-                        if (double.parse(value) <= 0) return 'Amount must be > 0';
+                        if (value == null || value.isEmpty)
+                          return 'Enter amount';
+                        if (double.tryParse(value) == null)
+                          return 'Enter valid number';
+                        if (double.parse(value) <= 0)
+                          return 'Amount must be > 0';
                         return null;
                       },
                     ),
@@ -175,23 +184,33 @@ class _AddTransferScreenState extends State<AddTransferScreen> {
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.account_balance),
                       ),
-                      items: _accounts.map((account) => DropdownMenuItem(
-                        value: account.id,
-                        child: Row(
-                          children: [
-                            Icon(_getIcon(account.type), size: 20, color: _getColor(account.type)),
-                            const SizedBox(width: 8),
-                            Expanded(child: Text('${account.name} (₹${account.balance.toStringAsFixed(0)})')),
-                          ],
-                        ),
-                      )).toList(),
-                      onChanged: (value) => setState(() => _fromAccountId = value),
-                      validator: (value) => value == null ? 'Select source account' : null,
+                      items: _accounts
+                          .map((account) => DropdownMenuItem(
+                                value: account.id,
+                                child: Row(
+                                  children: [
+                                    Icon(_getIcon(account.type),
+                                        size: 20,
+                                        color: _getColor(account.type)),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                        child: Text(
+                                            '${account.name} (₹${account.balance.toStringAsFixed(0)})')),
+                                  ],
+                                ),
+                              ))
+                          .toList(),
+                      onChanged: (value) =>
+                          setState(() => _fromAccountId = value),
+                      validator: (value) =>
+                          value == null ? 'Select source account' : null,
                     ),
                     const SizedBox(height: 16),
 
                     // Transfer Icon
-                    const Center(child: Icon(Icons.arrow_downward, size: 32, color: Colors.blue)),
+                    const Center(
+                        child: Icon(Icons.arrow_downward,
+                            size: 32, color: Colors.blue)),
                     const SizedBox(height: 16),
 
                     // To Account
@@ -202,24 +221,33 @@ class _AddTransferScreenState extends State<AddTransferScreen> {
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.account_balance_wallet),
                       ),
-                      items: _accounts.map((account) => DropdownMenuItem(
-                        value: account.id,
-                        child: Row(
-                          children: [
-                            Icon(_getIcon(account.type), size: 20, color: _getColor(account.type)),
-                            const SizedBox(width: 8),
-                            Expanded(child: Text('${account.name} (₹${account.balance.toStringAsFixed(0)})')),
-                          ],
-                        ),
-                      )).toList(),
-                      onChanged: (value) => setState(() => _toAccountId = value),
-                      validator: (value) => value == null ? 'Select destination account' : null,
+                      items: _accounts
+                          .map((account) => DropdownMenuItem(
+                                value: account.id,
+                                child: Row(
+                                  children: [
+                                    Icon(_getIcon(account.type),
+                                        size: 20,
+                                        color: _getColor(account.type)),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                        child: Text(
+                                            '${account.name} (₹${account.balance.toStringAsFixed(0)})')),
+                                  ],
+                                ),
+                              ))
+                          .toList(),
+                      onChanged: (value) =>
+                          setState(() => _toAccountId = value),
+                      validator: (value) =>
+                          value == null ? 'Select destination account' : null,
                     ),
                     const SizedBox(height: 16),
 
                     // Date
                     ListTile(
-                      title: Text('Date: ${DateFormat('dd/MM/yyyy').format(_selectedDate)}'),
+                      title: Text(
+                          'Date: ${DateFormat('dd/MM/yyyy').format(_selectedDate)}'),
                       leading: const Icon(Icons.calendar_today),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(4),
@@ -250,8 +278,13 @@ class _AddTransferScreenState extends State<AddTransferScreen> {
                         foregroundColor: Colors.white,
                       ),
                       child: _isLoading
-                          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                          : const Text('Transfer Money', style: TextStyle(fontSize: 16)),
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                  color: Colors.white, strokeWidth: 2))
+                          : const Text('Transfer Money',
+                              style: TextStyle(fontSize: 16)),
                     ),
                   ],
                 ),
@@ -262,21 +295,31 @@ class _AddTransferScreenState extends State<AddTransferScreen> {
 
   IconData _getIcon(String type) {
     switch (type) {
-      case 'cash': return Icons.money;
-      case 'bank': return Icons.account_balance;
-      case 'credit_card': return Icons.credit_card;
-      case 'loan': return Icons.receipt_long;
-      default: return Icons.wallet;
+      case 'cash':
+        return Icons.money;
+      case 'bank':
+        return Icons.account_balance;
+      case 'credit_card':
+        return Icons.credit_card;
+      case 'loan':
+        return Icons.receipt_long;
+      default:
+        return Icons.wallet;
     }
   }
 
   Color _getColor(String type) {
     switch (type) {
-      case 'cash': return Colors.green;
-      case 'bank': return Colors.blue;
-      case 'credit_card': return Colors.orange;
-      case 'loan': return Colors.red;
-      default: return Colors.grey;
+      case 'cash':
+        return Colors.green;
+      case 'bank':
+        return Colors.blue;
+      case 'credit_card':
+        return Colors.orange;
+      case 'loan':
+        return Colors.red;
+      default:
+        return Colors.grey;
     }
   }
 }

@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class TransactionModel {
   final String id;
+  final String userId; // ✅ NEW: User ID field
   final String type;
   final double amount;
   final String category;
@@ -18,6 +19,7 @@ class TransactionModel {
 
   TransactionModel({
     required this.id,
+    required this.userId, // ✅ NEW: Required field
     required this.type,
     required this.amount,
     required this.category,
@@ -35,6 +37,7 @@ class TransactionModel {
 
   Map<String, dynamic> toMap() {
     return {
+      'userId': userId, // ✅ NEW: Include in map
       'type': type,
       'amount': amount,
       'category': category,
@@ -55,6 +58,7 @@ class TransactionModel {
     final data = doc.data() as Map<String, dynamic>;
     return TransactionModel(
       id: doc.id,
+      userId: data['userId'] ?? '', // ✅ NEW: Read userId
       type: data['type'] ?? 'expense',
       amount: (data['amount'] ?? 0.0).toDouble(),
       category: data['category'] ?? '',
@@ -75,6 +79,7 @@ class TransactionModel {
 
   TransactionModel copyWith({
     String? id,
+    String? userId, // ✅ NEW: Added to copyWith
     String? type,
     double? amount,
     String? category,
@@ -91,6 +96,7 @@ class TransactionModel {
   }) {
     return TransactionModel(
       id: id ?? this.id,
+      userId: userId ?? this.userId, // ✅ NEW
       type: type ?? this.type,
       amount: amount ?? this.amount,
       category: category ?? this.category,

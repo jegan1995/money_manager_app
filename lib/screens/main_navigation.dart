@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'dashboard_screen.dart';
 import 'home_screen.dart';
-import 'reports_screen.dart';
+import 'accounts_screen.dart'; // ✅ NEW: Import accounts screen
+import 'enhanced_reports_screen.dart';
 import 'budget_screen.dart';
 import 'more_screen.dart';
 
@@ -16,9 +16,9 @@ class _MainNavigationState extends State<MainNavigation> {
   int _currentIndex = 0;
 
   final List<Widget> _screens = [
-    const DashboardScreen(),  // NEW: Dashboard as home
-    const HomeScreen(),       // All transactions
-    const ReportsScreen(),
+    const HomeScreen(),
+    const AccountsScreen(), // ✅ NEW: Accounts screen
+    const EnhancedReportsScreen(),
     const BudgetScreen(),
     const MoreScreen(),
   ];
@@ -39,19 +39,19 @@ class _MainNavigationState extends State<MainNavigation> {
         unselectedItemColor: Colors.grey,
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.dashboard),
-            label: 'Dashboard',
+            icon: Icon(Icons.home),
+            label: 'Home',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.list),
-            label: 'Transactions',
+            icon: Icon(Icons.account_balance_wallet), // ✅ NEW: Accounts
+            label: 'Accounts',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.insert_chart),
             label: 'Reports',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.account_balance_wallet),
+            icon: Icon(Icons.pie_chart), // ✅ Changed icon for Budget
             label: 'Budget',
           ),
           BottomNavigationBarItem(

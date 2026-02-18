@@ -34,7 +34,8 @@ class _RecurringScreenState extends State<RecurringScreen> {
                 children: [
                   const Icon(Icons.replay, size: 80, color: Colors.grey),
                   const SizedBox(height: 16),
-                  const Text('No recurring transactions', style: TextStyle(fontSize: 18, color: Colors.grey)),
+                  const Text('No recurring transactions',
+                      style: TextStyle(fontSize: 18, color: Colors.grey)),
                   const SizedBox(height: 8),
                   ElevatedButton.icon(
                     onPressed: () => _showAddRecurringDialog(context),
@@ -74,7 +75,8 @@ class _RecurringScreenState extends State<RecurringScreen> {
                       Text('${recurring.category} • ${recurring.frequency}'),
                       Text(
                         'Next: ${_getNextDate(recurring)}',
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.grey.shade600),
                       ),
                     ],
                   ),
@@ -91,8 +93,10 @@ class _RecurringScreenState extends State<RecurringScreen> {
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.delete, size: 18, color: Colors.red),
-                        onPressed: () => _recurringService.deleteRecurring(recurring.id),
+                        icon: const Icon(Icons.delete,
+                            size: 18, color: Colors.red),
+                        onPressed: () =>
+                            _recurringService.deleteRecurring(recurring.id),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
                       ),
@@ -135,20 +139,36 @@ class _RecurringScreenState extends State<RecurringScreen> {
     final titleController = TextEditingController();
     final amountController = TextEditingController();
     final notesController = TextEditingController();
-    
+
     String selectedType = 'expense';
     String selectedCategory = 'Bills';
     String selectedFrequency = 'monthly';
-    
-    final expenseCategories = ['Food', 'Transport', 'Shopping', 'Bills', 'Entertainment', 'Health', 'Education', 'Other'];
-    final incomeCategories = ['Salary', 'Business', 'Investment', 'Gift', 'Other'];
+
+    final expenseCategories = [
+      'Food',
+      'Transport',
+      'Shopping',
+      'Bills',
+      'Entertainment',
+      'Health',
+      'Education',
+      'Other'
+    ];
+    final incomeCategories = [
+      'Salary',
+      'Business',
+      'Investment',
+      'Gift',
+      'Other'
+    ];
     final frequencies = ['daily', 'weekly', 'monthly', 'yearly'];
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) {
-          List<String> categories = selectedType == 'expense' ? expenseCategories : incomeCategories;
+          List<String> categories =
+              selectedType == 'expense' ? expenseCategories : incomeCategories;
           if (!categories.contains(selectedCategory)) {
             selectedCategory = categories[0];
           }
@@ -168,7 +188,8 @@ class _RecurringScreenState extends State<RecurringScreen> {
                             title: const Text('Expense'),
                             value: 'expense',
                             groupValue: selectedType,
-                            onChanged: (value) => setState(() => selectedType = value!),
+                            onChanged: (value) =>
+                                setState(() => selectedType = value!),
                           ),
                         ),
                         Expanded(
@@ -176,7 +197,8 @@ class _RecurringScreenState extends State<RecurringScreen> {
                             title: const Text('Income'),
                             value: 'income',
                             groupValue: selectedType,
-                            onChanged: (value) => setState(() => selectedType = value!),
+                            onChanged: (value) =>
+                                setState(() => selectedType = value!),
                           ),
                         ),
                       ],
@@ -195,18 +217,27 @@ class _RecurringScreenState extends State<RecurringScreen> {
                     DropdownButtonFormField<String>(
                       value: selectedCategory,
                       decoration: const InputDecoration(labelText: 'Category'),
-                      items: categories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat))).toList(),
-                      onChanged: (value) => setState(() => selectedCategory = value!),
+                      items: categories
+                          .map((cat) =>
+                              DropdownMenuItem(value: cat, child: Text(cat)))
+                          .toList(),
+                      onChanged: (value) =>
+                          setState(() => selectedCategory = value!),
                     ),
                     DropdownButtonFormField<String>(
                       value: selectedFrequency,
                       decoration: const InputDecoration(labelText: 'Frequency'),
-                      items: frequencies.map((f) => DropdownMenuItem(value: f, child: Text(f))).toList(),
-                      onChanged: (value) => setState(() => selectedFrequency = value!),
+                      items: frequencies
+                          .map(
+                              (f) => DropdownMenuItem(value: f, child: Text(f)))
+                          .toList(),
+                      onChanged: (value) =>
+                          setState(() => selectedFrequency = value!),
                     ),
                     TextFormField(
                       controller: notesController,
-                      decoration: const InputDecoration(labelText: 'Notes (Optional)'),
+                      decoration:
+                          const InputDecoration(labelText: 'Notes (Optional)'),
                       maxLines: 2,
                     ),
                   ],
@@ -229,7 +260,9 @@ class _RecurringScreenState extends State<RecurringScreen> {
                       type: selectedType,
                       frequency: selectedFrequency,
                       startDate: DateTime.now(),
-                      notes: notesController.text.isEmpty ? null : notesController.text,
+                      notes: notesController.text.isEmpty
+                          ? null
+                          : notesController.text,
                       lastGenerated: DateTime.now(),
                     );
                     await _recurringService.addRecurring(recurring);

@@ -9,7 +9,8 @@ class RecurringTransfersScreen extends StatefulWidget {
   const RecurringTransfersScreen({super.key});
 
   @override
-  State<RecurringTransfersScreen> createState() => _RecurringTransfersScreenState();
+  State<RecurringTransfersScreen> createState() =>
+      _RecurringTransfersScreenState();
 }
 
 class _RecurringTransfersScreenState extends State<RecurringTransfersScreen> {
@@ -37,9 +38,11 @@ class _RecurringTransfersScreenState extends State<RecurringTransfersScreen> {
                 children: [
                   const Icon(Icons.repeat, size: 80, color: Colors.grey),
                   const SizedBox(height: 16),
-                  const Text('No recurring transfers', style: TextStyle(fontSize: 18, color: Colors.grey)),
+                  const Text('No recurring transfers',
+                      style: TextStyle(fontSize: 18, color: Colors.grey)),
                   const SizedBox(height: 8),
-                  const Text('Set up automatic transfers', style: TextStyle(fontSize: 14, color: Colors.grey)),
+                  const Text('Set up automatic transfers',
+                      style: TextStyle(fontSize: 14, color: Colors.grey)),
                   const SizedBox(height: 16),
                   ElevatedButton.icon(
                     onPressed: () => _showAddRecurringDialog(),
@@ -81,21 +84,38 @@ class _RecurringTransfersScreenState extends State<RecurringTransfersScreen> {
               backgroundColor: Colors.blue.withOpacity(0.1),
               child: const Icon(Icons.repeat, color: Colors.blue),
             ),
-            title: Text(recurring.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+            title: Text(recurring.title,
+                style: const TextStyle(fontWeight: FontWeight.bold)),
             subtitle: StreamBuilder<List<AccountModel>>(
               stream: _accountService.getAccountsList(),
               builder: (context, accountSnapshot) {
                 if (!accountSnapshot.hasData) return const Text('Loading...');
-                
+
                 final accounts = accountSnapshot.data!;
-                final fromAccount = accounts.firstWhere((a) => a.id == recurring.fromAccountId, orElse: () => AccountModel(id: '', name: 'Unknown', type: 'cash', balance: 0, createdAt: DateTime.now()));
-                final toAccount = accounts.firstWhere((a) => a.id == recurring.toAccountId, orElse: () => AccountModel(id: '', name: 'Unknown', type: 'cash', balance: 0, createdAt: DateTime.now()));
-                
+                final fromAccount = accounts.firstWhere(
+                    (a) => a.id == recurring.fromAccountId,
+                    orElse: () => AccountModel(
+                        id: '',
+                        name: 'Unknown',
+                        type: 'cash',
+                        balance: 0,
+                        createdAt: DateTime.now()));
+                final toAccount = accounts.firstWhere(
+                    (a) => a.id == recurring.toAccountId,
+                    orElse: () => AccountModel(
+                        id: '',
+                        name: 'Unknown',
+                        type: 'cash',
+                        balance: 0,
+                        createdAt: DateTime.now()));
+
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('${fromAccount.name} → ${toAccount.name}'),
-                    Text('₹${recurring.amount.toStringAsFixed(0)} • ${recurring.frequency}', style: const TextStyle(fontSize: 12)),
+                    Text(
+                        '₹${recurring.amount.toStringAsFixed(0)} • ${recurring.frequency}',
+                        style: const TextStyle(fontSize: 12)),
                   ],
                 );
               },
@@ -113,14 +133,20 @@ class _RecurringTransfersScreenState extends State<RecurringTransfersScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Next Transfer', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                      Text('Next Transfer',
+                          style:
+                              TextStyle(fontSize: 12, color: Colors.grey[600])),
                       Text(
                         DateFormat('MMM d, yyyy').format(nextDate),
                         style: const TextStyle(fontWeight: FontWeight.w500),
                       ),
                       Text(
                         daysUntil > 0 ? 'in $daysUntil days' : 'Today',
-                        style: TextStyle(fontSize: 12, color: daysUntil == 0 ? Colors.orange : Colors.grey[600]),
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: daysUntil == 0
+                                ? Colors.orange
+                                : Colors.grey[600]),
                       ),
                     ],
                   ),
@@ -135,8 +161,10 @@ class _RecurringTransfersScreenState extends State<RecurringTransfersScreen> {
                     ),
                     TextButton.icon(
                       onPressed: () => _deleteRecurring(recurring),
-                      icon: const Icon(Icons.delete, size: 16, color: Colors.red),
-                      label: const Text('Delete', style: TextStyle(color: Colors.red)),
+                      icon:
+                          const Icon(Icons.delete, size: 16, color: Colors.red),
+                      label: const Text('Delete',
+                          style: TextStyle(color: Colors.red)),
                     ),
                   ],
                 ),
@@ -150,7 +178,7 @@ class _RecurringTransfersScreenState extends State<RecurringTransfersScreen> {
 
   DateTime _calculateNextDate(RecurringTransferModel recurring) {
     DateTime next = recurring.lastExecuted ?? recurring.startDate;
-    
+
     switch (recurring.frequency) {
       case 'daily':
         next = next.add(const Duration(days: 1));
@@ -165,7 +193,7 @@ class _RecurringTransfersScreenState extends State<RecurringTransfersScreen> {
         next = DateTime(next.year + 1, next.month, next.day);
         break;
     }
-    
+
     while (next.isBefore(DateTime.now())) {
       switch (recurring.frequency) {
         case 'daily':
@@ -182,7 +210,7 @@ class _RecurringTransfersScreenState extends State<RecurringTransfersScreen> {
           break;
       }
     }
-    
+
     return next;
   }
 
@@ -198,7 +226,8 @@ class _RecurringTransfersScreenState extends State<RecurringTransfersScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Recurring Transfer?'),
-        content: Text('This will stop automatic transfers for "${recurring.title}".'),
+        content: Text(
+            'This will stop automatic transfers for "${recurring.title}".'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -220,25 +249,29 @@ class _RecurringTransfersScreenState extends State<RecurringTransfersScreen> {
   void _showAddRecurringDialog() async {
     final accounts = await _accountService.getAccountsList().first;
     if (!mounted) return;
-    
+
     _showRecurringDialog(null, accounts);
   }
 
   void _showEditDialog(RecurringTransferModel recurring) async {
     final accounts = await _accountService.getAccountsList().first;
     if (!mounted) return;
-    
+
     _showRecurringDialog(recurring, accounts);
   }
 
-  void _showRecurringDialog(RecurringTransferModel? existing, List<AccountModel> accounts) {
+  void _showRecurringDialog(
+      RecurringTransferModel? existing, List<AccountModel> accounts) {
     final formKey = GlobalKey<FormState>();
     final titleController = TextEditingController(text: existing?.title ?? '');
-    final amountController = TextEditingController(text: existing?.amount.toString() ?? '');
+    final amountController =
+        TextEditingController(text: existing?.amount.toString() ?? '');
     final notesController = TextEditingController(text: existing?.note ?? '');
-    
-    String? fromAccountId = existing?.fromAccountId ?? (accounts.isNotEmpty ? accounts.first.id : null);
-    String? toAccountId = existing?.toAccountId ?? (accounts.length > 1 ? accounts[1].id : null);
+
+    String? fromAccountId = existing?.fromAccountId ??
+        (accounts.isNotEmpty ? accounts.first.id : null);
+    String? toAccountId =
+        existing?.toAccountId ?? (accounts.length > 1 ? accounts[1].id : null);
     String frequency = existing?.frequency ?? 'monthly';
     DateTime startDate = existing?.startDate ?? DateTime.now();
 
@@ -246,7 +279,9 @@ class _RecurringTransfersScreenState extends State<RecurringTransfersScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: Text(existing == null ? 'Add Recurring Transfer' : 'Edit Recurring Transfer'),
+          title: Text(existing == null
+              ? 'Add Recurring Transfer'
+              : 'Edit Recurring Transfer'),
           content: SingleChildScrollView(
             child: Form(
               key: formKey,
@@ -276,11 +311,13 @@ class _RecurringTransfersScreenState extends State<RecurringTransfersScreen> {
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
                     value: fromAccountId,
-                    decoration: const InputDecoration(labelText: 'From Account'),
+                    decoration:
+                        const InputDecoration(labelText: 'From Account'),
                     items: accounts.map((account) {
                       return DropdownMenuItem(
                         value: account.id,
-                        child: Text('${account.name} (₹${account.balance.toStringAsFixed(0)})'),
+                        child: Text(
+                            '${account.name} (₹${account.balance.toStringAsFixed(0)})'),
                       );
                     }).toList(),
                     onChanged: (value) => setState(() => fromAccountId = value),
@@ -293,13 +330,15 @@ class _RecurringTransfersScreenState extends State<RecurringTransfersScreen> {
                     items: accounts.map((account) {
                       return DropdownMenuItem(
                         value: account.id,
-                        child: Text('${account.name} (₹${account.balance.toStringAsFixed(0)})'),
+                        child: Text(
+                            '${account.name} (₹${account.balance.toStringAsFixed(0)})'),
                       );
                     }).toList(),
                     onChanged: (value) => setState(() => toAccountId = value),
                     validator: (v) {
                       if (v == null) return 'Required';
-                      if (v == fromAccountId) return 'Must be different from source';
+                      if (v == fromAccountId)
+                        return 'Must be different from source';
                       return null;
                     },
                   ),
@@ -310,14 +349,16 @@ class _RecurringTransfersScreenState extends State<RecurringTransfersScreen> {
                     items: const [
                       DropdownMenuItem(value: 'daily', child: Text('Daily')),
                       DropdownMenuItem(value: 'weekly', child: Text('Weekly')),
-                      DropdownMenuItem(value: 'monthly', child: Text('Monthly')),
+                      DropdownMenuItem(
+                          value: 'monthly', child: Text('Monthly')),
                       DropdownMenuItem(value: 'yearly', child: Text('Yearly')),
                     ],
                     onChanged: (value) => setState(() => frequency = value!),
                   ),
                   const SizedBox(height: 16),
                   ListTile(
-                    title: Text('Start Date: ${DateFormat('MMM d, yyyy').format(startDate)}'),
+                    title: Text(
+                        'Start Date: ${DateFormat('MMM d, yyyy').format(startDate)}'),
                     trailing: const Icon(Icons.calendar_today),
                     onTap: () async {
                       final picked = await showDatePicker(
@@ -333,7 +374,8 @@ class _RecurringTransfersScreenState extends State<RecurringTransfersScreen> {
                   ),
                   TextFormField(
                     controller: notesController,
-                    decoration: const InputDecoration(labelText: 'Notes (Optional)'),
+                    decoration:
+                        const InputDecoration(labelText: 'Notes (Optional)'),
                     maxLines: 2,
                   ),
                 ],
@@ -356,7 +398,9 @@ class _RecurringTransfersScreenState extends State<RecurringTransfersScreen> {
                     toAccountId: toAccountId!,
                     frequency: frequency,
                     startDate: startDate,
-                    note: notesController.text.isEmpty ? null : notesController.text,
+                    note: notesController.text.isEmpty
+                        ? null
+                        : notesController.text,
                     isActive: existing?.isActive ?? true,
                     lastExecuted: existing?.lastExecuted,
                     createdAt: existing?.createdAt ?? DateTime.now(),
@@ -365,9 +409,10 @@ class _RecurringTransfersScreenState extends State<RecurringTransfersScreen> {
                   if (existing == null) {
                     _recurringService.addRecurringTransfer(recurring);
                   } else {
-                    _recurringService.updateRecurringTransfer(existing.id!, recurring);
+                    _recurringService.updateRecurringTransfer(
+                        existing.id!, recurring);
                   }
-                  
+
                   Navigator.pop(context);
                 }
               },
@@ -379,3 +424,4 @@ class _RecurringTransfersScreenState extends State<RecurringTransfersScreen> {
     );
   }
 }
+

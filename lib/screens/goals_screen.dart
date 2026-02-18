@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import '../models/goal_model.dart';
 import '../services/goal_service.dart';
@@ -130,7 +131,8 @@ class _GoalsScreenState extends State<GoalsScreen> {
                       ),
                       child: Row(
                         children: const [
-                          Icon(Icons.check_circle, size: 16, color: Colors.green),
+                          Icon(Icons.check_circle,
+                              size: 16, color: Colors.green),
                           SizedBox(width: 4),
                           Text(
                             'Completed',
@@ -181,7 +183,8 @@ class _GoalsScreenState extends State<GoalsScreen> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.calendar_today, size: 16, color: Colors.grey[600]),
+                      Icon(Icons.calendar_today,
+                          size: 16, color: Colors.grey[600]),
                       const SizedBox(width: 4),
                       Text(
                         'Target: ${DateFormat('MMM d, yyyy').format(goal.targetDate)}',
@@ -248,14 +251,16 @@ class _GoalsScreenState extends State<GoalsScreen> {
                     ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: const Text('Target Date'),
-                      subtitle: Text(DateFormat('MMM d, yyyy').format(targetDate)),
+                      subtitle:
+                          Text(DateFormat('MMM d, yyyy').format(targetDate)),
                       trailing: const Icon(Icons.calendar_today),
                       onTap: () async {
                         final date = await showDatePicker(
                           context: context,
                           initialDate: targetDate,
                           firstDate: DateTime.now(),
-                          lastDate: DateTime.now().add(const Duration(days: 3650)),
+                          lastDate:
+                              DateTime.now().add(const Duration(days: 3650)),
                         );
                         if (date != null) {
                           setDialogState(() {
@@ -288,7 +293,21 @@ class _GoalsScreenState extends State<GoalsScreen> {
                       return;
                     }
 
+                    // ✅ Get current user ID
+                    final currentUserId =
+                        FirebaseAuth.instance.currentUser?.uid;
+                    if (currentUserId == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('User not logged in'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
+
                     final goal = GoalModel(
+                      userId: currentUserId, // ✅ NEW: Add userId
                       name: nameController.text,
                       targetAmount: double.parse(targetAmountController.text),
                       targetDate: targetDate,
@@ -351,7 +370,8 @@ class _GoalsScreenState extends State<GoalsScreen> {
               ),
               const SizedBox(height: 16),
               if (!goal.isCompleted) ...[
-                const Text('Add Amount:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const Text('Add Amount:',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 TextField(
                   controller: amountController,

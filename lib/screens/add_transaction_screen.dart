@@ -6,6 +6,7 @@ import '../models/transaction_model.dart';
 import '../models/account_model.dart';
 import '../services/transaction_service.dart';
 import '../services/account_service.dart';
+import 'accounts_screen.dart';
 
 class AddTransactionScreen extends StatefulWidget {
   final TransactionModel? transaction;
@@ -138,7 +139,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             // Amount
             TextFormField(
               controller: _amountController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(
                 labelText: 'Amount *',
                 prefixText: '₹ ',
@@ -212,7 +214,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                         Text(
                           'Repeat',
                           style: TextStyle(
-                            color: _isRecurring ? Colors.blue : Colors.grey[600],
+                            color:
+                                _isRecurring ? Colors.blue : Colors.grey[600],
                           ),
                         ),
                       ],
@@ -298,49 +301,80 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
   // NEW METHOD: Account selection for Income/Expense
 // Single Account field for Income/Expense
-Widget _buildAccountField() {
-  return DropdownButtonFormField<String>(
-    value: _type == 'income' ? _toAccount : _fromAccount,
-    decoration: InputDecoration(
-      labelText: 'Account *', // Same label for both income/expense
-      border: const OutlineInputBorder(),
-      prefixIcon: const Icon(Icons.account_balance_wallet),
-      hintText: _accounts.isEmpty ? 'Create an account first' : 'Select account',
-    ),
-    items: _accounts.map((account) {
-      return DropdownMenuItem<String>(
-        value: account.id,
-        child: Row(
-          children: [
-            Icon(_getAccountTypeIcon(account.type), size: 20),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                '${account.name} (₹${account.balance.toStringAsFixed(0)})',
-                overflow: TextOverflow.ellipsis,
-              ),
+// Single Account field for Income/Expense
+  Widget _buildAccountField() {
+    // ✅ Show button when no accounts exist
+    if (_accounts.isEmpty) {
+      return Column(
+        children: [
+          OutlinedButton.icon(
+            onPressed: () {
+              // ✅ FIXED: Use proper navigation
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const AccountsScreen(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.add),
+            label: const Text('Create Account First'),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.all(16),
+              minimumSize: const Size.fromHeight(50),
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'You need at least one account to add transactions',
+            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+          ),
+        ],
       );
-    }).toList(),
-    onChanged: (value) {
-      setState(() {
-        if (_type == 'income') {
-          _toAccount = value;
-        } else {
-          _fromAccount = value;
+    }
+
+    return DropdownButtonFormField<String>(
+      value: _type == 'income' ? _toAccount : _fromAccount,
+      decoration: const InputDecoration(
+        labelText: 'Account *',
+        border: OutlineInputBorder(),
+        prefixIcon: Icon(Icons.account_balance_wallet),
+        hintText: 'Select account',
+      ),
+      items: _accounts.map((account) {
+        return DropdownMenuItem<String>(
+          value: account.id,
+          child: Row(
+            children: [
+              Icon(_getAccountTypeIcon(account.type), size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${account.name} (₹${account.balance.toStringAsFixed(0)})',
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+      onChanged: (value) {
+        setState(() {
+          if (_type == 'income') {
+            _toAccount = value;
+          } else {
+            _fromAccount = value;
+          }
+        });
+      },
+      validator: (value) {
+        if (value == null || value.isEmpty) {
+          return 'Please select an account';
         }
-      });
-    },
-    validator: (value) {
-      if (value == null || value.isEmpty) {
-        return 'Please select an account';
-      }
-      return null;
-    },
-  );
-}
+        return null;
+      },
+    );
+  }
   // Widget _buildAccountField() {
   //   return DropdownButtonFormField<String>(
   //     value: _type == 'income' ? _toAccount : _fromAccount,
@@ -565,6 +599,26 @@ Widget _buildAccountField() {
                             },
                           ),
                         ),
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: OutlinedButton.icon(
+                            onPressed: () {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                      'Custom categories coming in next update!'),
+                                  backgroundColor: Colors.blue,
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.add),
+                            label: const Text('Add New Category'),
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(48),
+                            ),
+                          ),
+                        ),
                       ],
                     );
                   },
@@ -728,18 +782,25 @@ Widget _buildAccountField() {
 
     try {
       final transaction = TransactionModel(
-        id: widget.transaction?.id ?? '',
+        userId: '',
+        id: '',
         type: _type,
         amount: double.parse(_amountController.text),
-        category: _type == 'transfer' ? 'Transfer' : _selectedCategory!,
+        category: _selectedCategory ?? '',
         subcategory: _selectedSubcategory,
         paymentMethod: _paymentMethod,
-        fromAccount: _type == 'expense' ? _fromAccount : (_type == 'transfer' ? _fromAccount : null),
-        toAccount: _type == 'income' ? _toAccount : (_type == 'transfer' ? _toAccount : null),
         date: _selectedDate,
         note: _noteController.text.isEmpty ? null : _noteController.text,
+        fromAccount: _type == 'transfer'
+            ? _fromAccount
+            : (_type == 'expense' ? _fromAccount : null),
+        toAccount: _type == 'transfer'
+            ? _toAccount
+            : (_type == 'income' ? _toAccount : null),
         isRecurring: _isRecurring,
         recurringFrequency: _isRecurring ? _recurringFrequency : null,
+        imageUrl: null,
+        createdAt: DateTime.now(),
       );
 
       if (widget.transaction != null && !widget.isCopy) {
@@ -757,7 +818,9 @@ Widget _buildAccountField() {
           SnackBar(
             content: Text(widget.isCopy
                 ? 'Transaction copied successfully!'
-                : (widget.transaction != null ? 'Transaction updated!' : 'Transaction added!')),
+                : (widget.transaction != null
+                    ? 'Transaction updated!'
+                    : 'Transaction added!')),
             backgroundColor: Colors.green,
           ),
         );

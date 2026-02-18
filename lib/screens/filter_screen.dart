@@ -46,7 +46,8 @@ class _FilterScreenState extends State<FilterScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 // Type Filter
-                const Text('Type', style: TextStyle(fontWeight: FontWeight.bold)),
+                const Text('Type',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
@@ -92,7 +93,8 @@ class _FilterScreenState extends State<FilterScreen> {
                 const SizedBox(height: 24),
 
                 // Category Filter
-                const Text('Category', style: TextStyle(fontWeight: FontWeight.bold)),
+                const Text('Category',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
                   value: _selectedCategory,
@@ -101,9 +103,10 @@ class _FilterScreenState extends State<FilterScreen> {
                     hintText: 'Select category',
                   ),
                   items: [
-                    const DropdownMenuItem(value: null, child: Text('All Categories')),
-                    ...Categories.getMainCategories('expense')
-                        .map((cat) => DropdownMenuItem(value: cat, child: Text(cat))),
+                    const DropdownMenuItem(
+                        value: null, child: Text('All Categories')),
+                    ...Categories.getMainCategories('expense').map((cat) =>
+                        DropdownMenuItem(value: cat, child: Text(cat))),
                   ],
                   onChanged: (value) {
                     setState(() {
@@ -114,7 +117,8 @@ class _FilterScreenState extends State<FilterScreen> {
                 const SizedBox(height: 24),
 
                 // Date Range
-                const Text('Date Range', style: TextStyle(fontWeight: FontWeight.bold)),
+                const Text('Date Range',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 Row(
                   children: [
@@ -166,7 +170,8 @@ class _FilterScreenState extends State<FilterScreen> {
                 const SizedBox(height: 24),
 
                 // Amount Range
-                const Text('Amount Range', style: TextStyle(fontWeight: FontWeight.bold)),
+                const Text('Amount Range',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 Row(
                   children: [
@@ -215,7 +220,8 @@ class _FilterScreenState extends State<FilterScreen> {
               child: _isLoading
                   ? const CircularProgressIndicator()
                   : const Text('APPLY FILTERS',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             ),
           ),
         ],
@@ -242,9 +248,7 @@ class _FilterScreenState extends State<FilterScreen> {
 
     try {
       final snapshot = await _transactionService.getTransactions().first;
-      final allTransactions = snapshot.docs
-          .map((doc) => TransactionModel.fromFirestore(doc))
-          .toList();
+      final allTransactions = snapshot; // Already a List<TransactionModel>
 
       final filtered = allTransactions.where((txn) {
         // Type filter
@@ -353,7 +357,8 @@ class FilterResultsScreen extends StatelessWidget {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
+                        Icon(Icons.search_off,
+                            size: 64, color: Colors.grey[400]),
                         const SizedBox(height: 16),
                         const Text('No transactions match your filters'),
                       ],
@@ -388,7 +393,8 @@ class FilterResultsScreen extends StatelessWidget {
                           ),
                         ),
                         title: Text(txn.category),
-                        subtitle: Text(DateFormat('MMM d, yyyy').format(txn.date)),
+                        subtitle:
+                            Text(DateFormat('MMM d, yyyy').format(txn.date)),
                         trailing: Text(
                           isTransfer
                               ? '₹${txn.amount.toStringAsFixed(0)}'

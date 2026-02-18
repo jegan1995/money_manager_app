@@ -10,6 +10,11 @@ class StatisticsScreen extends StatefulWidget {
   State<StatisticsScreen> createState() => _StatisticsScreenState();
 }
 
+final TransactionService _transactionService = TransactionService();
+String _selectedPeriod = 'This Month';
+int _selectedMonth = DateTime.now().month; // ✅ ADD THIS
+int _selectedYear = DateTime.now().year; // ✅ ADD THIS
+
 class _StatisticsScreenState extends State<StatisticsScreen> {
   final TransactionService _transactionService = TransactionService();
   String _selectedPeriod = 'This Month';
@@ -24,9 +29,12 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             initialValue: _selectedPeriod,
             onSelected: (value) => setState(() => _selectedPeriod = value),
             itemBuilder: (context) => [
-              const PopupMenuItem(value: 'This Month', child: Text('This Month')),
-              const PopupMenuItem(value: 'Last 3 Months', child: Text('Last 3 Months')),
-              const PopupMenuItem(value: 'Last 6 Months', child: Text('Last 6 Months')),
+              const PopupMenuItem(
+                  value: 'This Month', child: Text('This Month')),
+              const PopupMenuItem(
+                  value: 'Last 3 Months', child: Text('Last 3 Months')),
+              const PopupMenuItem(
+                  value: 'Last 6 Months', child: Text('Last 6 Months')),
               const PopupMenuItem(value: 'This Year', child: Text('This Year')),
             ],
           ),
@@ -34,8 +42,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       ),
       body: FutureBuilder<Map<String, double>>(
         future: _transactionService.getSpendingByCategory(
-          startDate: DateTime.now().subtract(const Duration(days: 30)),
-          endDate: DateTime.now(),
+          _selectedMonth, // ✅ Just pass the int directly
+          _selectedYear,
         ),
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
@@ -43,7 +51,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           }
 
           final spending = snapshot.data!;
-          
+
           if (spending.isEmpty) {
             return Center(
               child: Column(

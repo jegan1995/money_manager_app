@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class BudgetModel {
   final String id;
+  final String userId; // ✅ NEW: User ID field
   final String category;
   final double amount;
   final int month;
@@ -10,6 +11,7 @@ class BudgetModel {
 
   BudgetModel({
     required this.id,
+    required this.userId, // ✅ NEW: Required field
     required this.category,
     required this.amount,
     required this.month,
@@ -19,6 +21,7 @@ class BudgetModel {
 
   Map<String, dynamic> toMap() {
     return {
+      'userId': userId, // ✅ NEW: Include in map
       'category': category,
       'amount': amount,
       'month': month,
@@ -31,6 +34,7 @@ class BudgetModel {
     final data = doc.data() as Map<String, dynamic>;
     return BudgetModel(
       id: doc.id,
+      userId: data['userId'] ?? '', // ✅ NEW: Read userId
       category: data['category'] ?? '',
       amount: (data['amount'] ?? 0.0).toDouble(),
       month: data['month'] ?? DateTime.now().month,
@@ -43,6 +47,7 @@ class BudgetModel {
 
   BudgetModel copyWith({
     String? id,
+    String? userId, // ✅ NEW: Added to copyWith
     String? category,
     double? amount,
     int? month,
@@ -51,6 +56,7 @@ class BudgetModel {
   }) {
     return BudgetModel(
       id: id ?? this.id,
+      userId: userId ?? this.userId, // ✅ NEW
       category: category ?? this.category,
       amount: amount ?? this.amount,
       month: month ?? this.month,

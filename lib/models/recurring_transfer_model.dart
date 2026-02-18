@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class RecurringTransferModel {
   final String? id;
+  final String userId; // ✅ NEW: User ID field
   final String title;
   final double amount;
   final String fromAccountId;
@@ -15,6 +16,7 @@ class RecurringTransferModel {
 
   RecurringTransferModel({
     this.id,
+    required this.userId, // ✅ NEW: Required field
     required this.title,
     required this.amount,
     required this.fromAccountId,
@@ -29,6 +31,7 @@ class RecurringTransferModel {
 
   Map<String, dynamic> toMap() {
     return {
+      'userId': userId, // ✅ NEW: Include in map
       'title': title,
       'amount': amount,
       'fromAccountId': fromAccountId,
@@ -37,7 +40,8 @@ class RecurringTransferModel {
       'startDate': Timestamp.fromDate(startDate),
       'note': note,
       'isActive': isActive,
-      'lastExecuted': lastExecuted != null ? Timestamp.fromDate(lastExecuted!) : null,
+      'lastExecuted':
+          lastExecuted != null ? Timestamp.fromDate(lastExecuted!) : null,
       'createdAt': Timestamp.fromDate(createdAt),
     };
   }
@@ -46,6 +50,7 @@ class RecurringTransferModel {
     final data = doc.data() as Map<String, dynamic>;
     return RecurringTransferModel(
       id: doc.id,
+      userId: data['userId'] ?? '', // ✅ NEW: Read userId
       title: data['title'] ?? '',
       amount: (data['amount'] ?? 0).toDouble(),
       fromAccountId: data['fromAccountId'] ?? '',
@@ -54,13 +59,16 @@ class RecurringTransferModel {
       startDate: (data['startDate'] as Timestamp).toDate(),
       note: data['note'],
       isActive: data['isActive'] ?? true,
-      lastExecuted: data['lastExecuted'] != null ? (data['lastExecuted'] as Timestamp).toDate() : null,
+      lastExecuted: data['lastExecuted'] != null
+          ? (data['lastExecuted'] as Timestamp).toDate()
+          : null,
       createdAt: (data['createdAt'] as Timestamp).toDate(),
     );
   }
 
   RecurringTransferModel copyWith({
     String? id,
+    String? userId, // ✅ NEW: Added to copyWith
     String? title,
     double? amount,
     String? fromAccountId,
@@ -74,6 +82,7 @@ class RecurringTransferModel {
   }) {
     return RecurringTransferModel(
       id: id ?? this.id,
+      userId: userId ?? this.userId, // ✅ NEW
       title: title ?? this.title,
       amount: amount ?? this.amount,
       fromAccountId: fromAccountId ?? this.fromAccountId,

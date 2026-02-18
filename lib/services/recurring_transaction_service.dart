@@ -1,103 +1,167 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/recurring_transaction_model.dart';
 import '../models/transaction_model.dart';
 import 'transaction_service.dart';
 
 class RecurringTransactionService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final String _collection = 'recurring_transactions';
+  final FirebaseAuth _auth = FirebaseAuth.instance;
   final TransactionService _transactionService = TransactionService();
+  final String _collection = 'recurring_transactions';
 
-  // Get all recurring transactions
-  Stream<QuerySnapshot> getRecurringTransactions() {
+  String? get _currentUserId => _auth.currentUser?.uid;
+
+  Stream<List<RecurringTransactionModel>> getRecurringTransactions() {
+    final userId = _currentUserId;
+    if (userId == null) return Stream.value([]);
+
     return _firestore
         .collection(_collection)
-        .orderBy('createdAt', descending: true)
-        .snapshots();
+        .where('userId', isEqualTo: userId)
+        .snapshots()
+        .map((snapshot) {
+      final list = snapshot.docs
+          .map((doc) => RecurringTransactionModel.fromFirestore(doc))
+          .toList();
+      list.sort((a, b) => a.nextDate.compareTo(b.nextDate));
+      return list;
+    });
   }
 
-  // Add recurring transaction
-  Future<void> addRecurringTransaction(RecurringTransactionModel recurring) async {
-    try {
-      await _firestore.collection(_collection).add(recurring.toMap());
-    } catch (e) {
-      throw Exception('Failed to add recurring transaction: $e');
-    }
+  Future<void> addRecurringTransaction(
+      RecurringTransactionModel recurring) async {
+    if (_currentUserId == null) throw Exception('User not logged in');
+
+    final r = RecurringTransactionModel(
+      id: '',
+      userId: _currentUserId!,
+      type: recurring.type,
+      amount: recurring.amount,
+      category: recurring.category,
+      subcategory: recurring.subcategory,
+      fromAccount: recurring.fromAccount,
+      toAccount: recurring.toAccount,
+      frequency: recurring.frequency,
+      nextDate: recurring.nextDate,
+      lastExecuted: null,
+      isActive: true,
+      note: recurring.note,
+      createdAt: DateTime.now(),
+    );
+
+    await _firestore.collection(_collection).add(r.toMap());
   }
 
-  // Update recurring transaction
   Future<void> updateRecurringTransaction(
       String id, RecurringTransactionModel recurring) async {
-    try {
-      await _firestore
-          .collection(_collection)
-          .doc(id)
-          .update(recurring.toMap());
-    } catch (e) {
-      throw Exception('Failed to update recurring transaction: $e');
-    }
+    if (_currentUserId == null) throw Exception('User not logged in');
+
+    final r = RecurringTransactionModel(
+      id: id,
+      userId: _currentUserId!,
+      type: recurring.type,
+      amount: recurring.amount,
+      category: recurring.category,
+      subcategory: recurring.subcategory,
+      fromAccount: recurring.fromAccount,
+      toAccount: recurring.toAccount,
+      frequency: recurring.frequency,
+      nextDate: recurring.nextDate,
+      lastExecuted: recurring.lastExecuted,
+      isActive: recurring.isActive,
+      note: recurring.note,
+      createdAt: recurring.createdAt,
+    );
+
+    await _firestore.collection(_collection).doc(id).update(r.toMap());
   }
 
-  // Delete recurring transaction
   Future<void> deleteRecurringTransaction(String id) async {
-    try {
-      await _firestore.collection(_collection).doc(id).delete();
-    } catch (e) {
-      throw Exception('Failed to delete recurring transaction: $e');
-    }
+    if (_currentUserId == null) throw Exception('User not logged in');
+    await _firestore.collection(_collection).doc(id).delete();
   }
 
-  // Generate transactions from recurring (call this daily)
-  Future<void> generateRecurringTransactions() async {
-    try {
-      final snapshot = await _firestore
-          .collection(_collection)
-          .where('isActive', isEqualTo: true)
-          .get();
+  Future<void> toggleRecurringTransaction(String id, bool isActive) async {
+    if (_currentUserId == null) throw Exception('User not logged in');
+    await _firestore
+        .collection(_collection)
+        .doc(id)
+        .update({'isActive': isActive});
+  }
 
-      final now = DateTime.now();
+  // Execute recurring transaction now
+  Future<void> executeRecurring(String id) async {
+    if (_currentUserId == null) throw Exception('User not logged in');
 
-      for (var doc in snapshot.docs) {
-        final recurring = RecurringTransactionModel.fromMap(doc.data(), doc.id);
+    final doc = await _firestore.collection(_collection).doc(id).get();
+    if (!doc.exists) throw Exception('Not found');
 
-        if (_shouldGenerateTransaction(recurring, now)) {
-          final transaction = TransactionModel(
-          id: "",
-            type: recurring.type,
-            amount: recurring.amount,
-            category: recurring.category,
-            subcategory: recurring.subcategory,
-            paymentMethod: recurring.paymentMethod,
-            date: now,
-            note: recurring.note,
-          );
+    final recurring = RecurringTransactionModel.fromFirestore(doc);
 
-          await _transactionService.addTransaction(transaction);
-        }
+    // Create transaction
+    final transaction = TransactionModel(
+      id: '',
+      userId: _currentUserId!,
+      type: recurring.type,
+      amount: recurring.amount,
+      category: recurring.category,
+      subcategory: recurring.subcategory,
+      paymentMethod: 'recurring',
+      date: DateTime.now(),
+      note: recurring.note,
+      fromAccount: recurring.fromAccount,
+      toAccount: recurring.toAccount,
+      isRecurring: false,
+      recurringFrequency: null,
+      imageUrl: null,
+      createdAt: DateTime.now(),
+    );
+
+    await _transactionService.addTransaction(transaction);
+
+    // Update next date
+    final nextDate = _calculateNextDate(DateTime.now(), recurring.frequency);
+    await _firestore.collection(_collection).doc(id).update({
+      'lastExecuted': Timestamp.fromDate(DateTime.now()),
+      'nextDate': Timestamp.fromDate(nextDate),
+    });
+  }
+
+  // Check and execute due recurring transactions
+  Future<void> checkAndExecuteRecurring() async {
+    final userId = _currentUserId;
+    if (userId == null) return;
+
+    final now = DateTime.now();
+    final snapshot = await _firestore
+        .collection(_collection)
+        .where('userId', isEqualTo: userId)
+        .where('isActive', isEqualTo: true)
+        .get();
+
+    for (var doc in snapshot.docs) {
+      final recurring = RecurringTransactionModel.fromFirestore(doc);
+
+      if (recurring.nextDate.isBefore(now) ||
+          recurring.nextDate.day == now.day) {
+        await executeRecurring(recurring.id);
       }
-    } catch (e) {
-      throw Exception('Failed to generate recurring transactions: $e');
     }
   }
 
-  bool _shouldGenerateTransaction(RecurringTransactionModel recurring, DateTime now) {
-    // Check if within date range
-    if (now.isBefore(recurring.startDate)) return false;
-    if (recurring.endDate != null && now.isAfter(recurring.endDate!)) return false;
-
-    // Check frequency
-    switch (recurring.frequency) {
+  DateTime _calculateNextDate(DateTime current, String frequency) {
+    switch (frequency) {
       case 'daily':
-        return true;
+        return current.add(const Duration(days: 1));
       case 'weekly':
-        return now.weekday == recurring.startDate.weekday;
+        return current.add(const Duration(days: 7));
       case 'monthly':
-        return now.day == recurring.startDate.day;
+        return DateTime(current.year, current.month + 1, current.day);
       case 'yearly':
-        return now.month == recurring.startDate.month &&
-            now.day == recurring.startDate.day;
+        return DateTime(current.year + 1, current.month, current.day);
       default:
-        return false;
+        return current.add(const Duration(days: 30));
     }
   }
 }

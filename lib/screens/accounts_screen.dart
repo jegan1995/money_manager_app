@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/account_model.dart';
 import '../services/account_service.dart';
 import 'add_account_screen.dart';
-import 'account_detail_screen.dart';
 
 class AccountsScreen extends StatefulWidget {
   const AccountsScreen({super.key});
@@ -18,84 +16,35 @@ class _AccountsScreenState extends State<AccountsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: const Text('Accounts'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (context) => const AddAccountScreen()),
-              );
-            },
-          ),
-        ],
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black87,
+        elevation: 0,
       ),
-      body: StreamBuilder<QuerySnapshot>(
+      body: StreamBuilder<List<AccountModel>>(
         stream: _accountService.getAccounts(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.account_balance_wallet_outlined,
-                      size: 80, color: Colors.grey[300]),
-                  const SizedBox(height: 24),
-                  Text('No accounts yet',
-                      style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 18,
-                          fontWeight: FontWeight.w500)),
-                  const SizedBox(height: 8),
-                  Text('Tap + to add your first account',
-                      style: TextStyle(color: Colors.grey[500], fontSize: 14)),
-                  const SizedBox(height: 24),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => const AddAccountScreen()),
-                      );
-                    },
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add Account'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 12),
-                    ),
-                  ),
-                ],
-              ),
-            );
+          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+            return _buildEmptyState();
           }
 
-          final accounts = snapshot.data!.docs
-              .map((doc) => AccountModel.fromMap(
-                    doc.data() as Map<String, dynamic>,
-                    doc.id,
-                  ))
-              .toList();
+          final accounts = snapshot.data!;
 
           // Calculate totals
-          // Calculate totals
-          double totalPositive = 0; // All positive balances = Assets
-          double totalNegative = 0; // All negative balances = Debt
-          double totalDebt = 0; // Credit card/loan accounts
+          double totalPositive = 0;
+          double totalNegative = 0;
+          double totalDebt = 0;
 
           for (var account in accounts) {
             if (account.type == 'credit_card' || account.type == 'loan') {
-              // Credit/Loan: balance is what you owe
               totalDebt += account.balance.abs();
             } else {
-              // Cash/Bank: positive = asset, negative = overdraft (debt)
               if (account.balance >= 0) {
                 totalPositive += account.balance;
               } else {
@@ -108,40 +57,19 @@ class _AccountsScreenState extends State<AccountsScreen> {
           final totalDebtDisplay = totalDebt + totalNegative;
           final netWorth = totalPositive - totalDebtDisplay;
 
-          // Group accounts by type
-          final grouped = <String, List<AccountModel>>{};
-          for (var account in accounts) {
-            grouped.putIfAbsent(account.type, () => []).add(account);
-          }
-
-          return RefreshIndicator(
-            onRefresh: () async {
-              setState(() {});
-            },
-            child: ListView(
-              children: [
-                // Summary Cards
-                _buildSummarySection(totalAssets, totalDebtDisplay, netWorth),
-
-                const SizedBox(height: 8),
-
-                // Accounts List
-                if (grouped.containsKey('cash'))
-                  _buildAccountGroup('Cash', grouped['cash']!, Colors.green),
-                if (grouped.containsKey('bank'))
-                  _buildAccountGroup(
-                      'Bank Accounts', grouped['bank']!, Colors.blue),
-                if (grouped.containsKey('credit_card'))
-                  _buildAccountGroup(
-                      'Credit Cards', grouped['credit_card']!, Colors.orange),
-                if (grouped.containsKey('loan'))
-                  _buildAccountGroup('Loans', grouped['loan']!, Colors.red),
-                if (grouped.containsKey('other'))
-                  _buildAccountGroup('Others', grouped['other']!, Colors.grey),
-
-                const SizedBox(height: 80), // Space for FAB
-              ],
-            ),
+          return Column(
+            children: [
+              _buildSummaryCards(totalAssets, totalDebtDisplay, netWorth),
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: accounts.length,
+                  itemBuilder: (context, index) {
+                    return _buildAccountCard(accounts[index]);
+                  },
+                ),
+              ),
+            ],
           );
         },
       ),
@@ -149,83 +77,40 @@ class _AccountsScreenState extends State<AccountsScreen> {
         onPressed: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => const AddAccountScreen()),
+            MaterialPageRoute(
+              builder: (context) => const AddAccountScreen(),
+            ),
           );
         },
         icon: const Icon(Icons.add),
         label: const Text('Add Account'),
+        backgroundColor: Colors.blue,
       ),
     );
   }
 
-  Widget _buildSummarySection(double assets, double debt, double netWorth) {
+  Widget _buildSummaryCards(
+      double totalAssets, double totalDebt, double netWorth) {
     return Container(
-      margin: const EdgeInsets.all(16),
-      child: Column(
+      padding: const EdgeInsets.all(16),
+      child: Row(
         children: [
-          // Net Worth Card
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.blue[700]!, Colors.blue[500]!],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.blue.withOpacity(0.3),
-                  blurRadius: 8,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                const Text(
-                  'Net Worth',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '₹${netWorth.toStringAsFixed(0)}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 36,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
+          Expanded(
+            child: _buildSummaryCard(
+              'Assets',
+              totalAssets,
+              Colors.green,
+              Icons.account_balance,
             ),
           ),
-          const SizedBox(height: 16),
-
-          // Assets and Debt Row
-          Row(
-            children: [
-              Expanded(
-                child: _buildSummaryCard(
-                  'Assets',
-                  assets,
-                  Icons.account_balance_wallet,
-                  Colors.green,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildSummaryCard(
-                  'Debt',
-                  debt,
-                  Icons.credit_card,
-                  Colors.red,
-                ),
-              ),
-            ],
+          const SizedBox(width: 12),
+          Expanded(
+            child: _buildSummaryCard(
+              'Debt',
+              totalDebt,
+              Colors.red,
+              Icons.credit_card,
+            ),
           ),
         ],
       ),
@@ -233,18 +118,17 @@ class _AccountsScreenState extends State<AccountsScreen> {
   }
 
   Widget _buildSummaryCard(
-      String label, double amount, IconData icon, Color color) {
+      String label, double amount, Color color, IconData icon) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
             color: Colors.grey.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -253,25 +137,32 @@ class _AccountsScreenState extends State<AccountsScreen> {
         children: [
           Row(
             children: [
-              Icon(icon, size: 20, color: color),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                  fontWeight: FontWeight.w500,
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
                 ),
+                child: Icon(icon, color: color, size: 20),
               ),
+              const Spacer(),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 4),
           Text(
             '₹${amount.toStringAsFixed(0)}',
             style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
               color: color,
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
             ),
           ),
         ],
@@ -279,130 +170,127 @@ class _AccountsScreenState extends State<AccountsScreen> {
     );
   }
 
-  Widget _buildAccountGroup(
-      String title, List<AccountModel> accounts, Color color) {
-    final total = accounts.fold<double>(0, (sum, acc) => sum + acc.balance);
+  Widget _buildAccountCard(AccountModel account) {
+    final isNegative = account.balance < 0;
+    final color = _getAccountColor(account.type);
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Group Header
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(12)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Icon(_getAccountIcon(accounts.first.type),
-                        size: 20, color: color),
-                    const SizedBox(width: 8),
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                        color: color,
-                      ),
-                    ),
-                  ],
-                ),
-                Text(
-                  '₹${total.toStringAsFixed(0)}',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: color,
-                  ),
-                ),
-              ],
+      child: ListTile(
+        contentPadding: const EdgeInsets.all(16),
+        leading: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(
+            _getAccountIcon(account.type),
+            color: color,
+            size: 28,
+          ),
+        ),
+        title: Text(
+          account.name,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+          ),
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(
+            _getAccountTypeName(account.type),
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 13,
             ),
           ),
+        ),
+        trailing: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              '₹${account.balance.abs().toStringAsFixed(0)}',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: isNegative ? Colors.red : Colors.green,
+              ),
+            ),
+            if (isNegative)
+              Container(
+                margin: const EdgeInsets.only(top: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.red[50],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'Overdrawn',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.red[700],
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => AddAccountScreen(account: account),
+            ),
+          );
+        },
+      ),
+    );
+  }
 
-          // Accounts List
-          ...accounts.asMap().entries.map((entry) {
-            final index = entry.key;
-            final account = entry.value;
-            final isLast = index == accounts.length - 1;
-
-            return Column(
-              children: [
-                _buildAccountTile(account),
-                if (!isLast) Divider(height: 1, color: Colors.grey[200]),
-              ],
-            );
-          }),
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.account_balance_wallet_outlined,
+            size: 80,
+            color: Colors.grey[300],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'No accounts yet',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey[600],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Add your first account to get started',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[500],
+            ),
+          ),
         ],
       ),
     );
-  }
-
-  Widget _buildAccountTile(AccountModel account) {
-    return ListTile(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => AccountDetailScreen(account: account),
-          ),
-        );
-      },
-      leading: CircleAvatar(
-        backgroundColor: _getAccountColor(account.type).withOpacity(0.2),
-        child: Icon(
-          _getAccountIcon(account.type),
-          color: _getAccountColor(account.type),
-          size: 20,
-        ),
-      ),
-      title: Text(
-        account.name,
-        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-      ),
-      subtitle: account.note != null && account.note!.isNotEmpty
-          ? Text(
-              account.note!,
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            )
-          : null,
-      trailing: Text(
-        '₹${account.balance.toStringAsFixed(0)}',
-        style: TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-          color: account.balance >= 0 ? Colors.green : Colors.red,
-        ),
-      ),
-    );
-  }
-
-  IconData _getAccountIcon(String type) {
-    switch (type) {
-      case 'cash':
-        return Icons.money;
-      case 'bank':
-        return Icons.account_balance;
-      case 'credit_card':
-        return Icons.credit_card;
-      case 'loan':
-        return Icons.receipt_long;
-      default:
-        return Icons.wallet;
-    }
   }
 
   Color _getAccountColor(String type) {
@@ -417,6 +305,36 @@ class _AccountsScreenState extends State<AccountsScreen> {
         return Colors.red;
       default:
         return Colors.grey;
+    }
+  }
+
+  IconData _getAccountIcon(String type) {
+    switch (type) {
+      case 'cash':
+        return Icons.payments;
+      case 'bank':
+        return Icons.account_balance;
+      case 'credit_card':
+        return Icons.credit_card;
+      case 'loan':
+        return Icons.money_off;
+      default:
+        return Icons.account_balance_wallet;
+    }
+  }
+
+  String _getAccountTypeName(String type) {
+    switch (type) {
+      case 'cash':
+        return 'Cash';
+      case 'bank':
+        return 'Bank Account';
+      case 'credit_card':
+        return 'Credit Card';
+      case 'loan':
+        return 'Loan';
+      default:
+        return type;
     }
   }
 }

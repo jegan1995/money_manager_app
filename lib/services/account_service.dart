@@ -9,13 +9,19 @@ class AccountService {
 
   String? get _currentUserId => _auth.currentUser?.uid;
 
-  Stream<QuerySnapshot> getAccounts() {
+  Stream<List<AccountModel>> getAccounts() {
     final userId = _currentUserId;
-    if (userId == null) return const Stream.empty();
+    if (userId == null) return Stream.value([]);
+
     return _firestore
         .collection(_collection)
         .where('userId', isEqualTo: userId)
-        .snapshots();
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .map((doc) => AccountModel.fromFirestore(doc))
+          .toList();
+    });
   }
 
   Stream<List<AccountModel>> getAccountsList() {

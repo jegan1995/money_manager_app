@@ -55,6 +55,10 @@ class GoalModel {
       isCompleted: map['isCompleted'] ?? false,
     );
   }
+  factory GoalModel.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return GoalModel.fromMap(data, doc.id);
+  }
 
   GoalModel copyWith({
     String? id,

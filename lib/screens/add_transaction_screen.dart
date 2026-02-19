@@ -70,14 +70,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   }
 
   void _loadAccounts() {
-    _accountService.getAccounts().listen((snapshot) {
+    _accountService.getAccounts().listen((accountsList) {
       setState(() {
-        _accounts = snapshot.docs
-            .map((doc) => AccountModel.fromMap(
-                  doc.data() as Map<String, dynamic>,
-                  doc.id,
-                ))
-            .toList();
+        _accounts = accountsList;
       });
     });
   }

@@ -18,6 +18,7 @@ import 'export_screen.dart';
 import 'transfer_analytics_screen.dart';
 import 'alerts_screen.dart';
 import '../services/recurring_transfer_service.dart';
+import 'search_transactions_screen.dart';
 
 class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
@@ -65,6 +66,18 @@ class MoreScreen extends StatelessWidget {
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const TransfersScreen()),
+            ),
+          ),
+          _buildMenuItem(
+            context,
+            icon: Icons.search,
+            title: 'Search Transactions',
+            subtitle: 'Advanced search & filters',
+            color: Colors.teal,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (context) => const SearchTransactionsScreen()),
             ),
           ),
 

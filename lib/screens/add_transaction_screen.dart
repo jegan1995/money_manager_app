@@ -7,6 +7,8 @@ import '../models/account_model.dart';
 import '../services/transaction_service.dart';
 import '../services/account_service.dart';
 import 'accounts_screen.dart';
+import '../widgets/custom_snackbar.dart';
+import '../widgets/loading_overlay.dart';
 
 class AddTransactionScreen extends StatefulWidget {
   final TransactionModel? transaction;
@@ -762,18 +764,15 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     if (_type != 'transfer' && _selectedCategory == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select a category'),
-          backgroundColor: Colors.red,
-        ),
+      CustomSnackBar.show(
+        context,
+        message: 'Please select a category',
+        type: SnackBarType.error,
       );
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    LoadingOverlay.show(context, message: 'Saving...');
 
     try {
       final transaction = TransactionModel(
@@ -808,29 +807,26 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       }
 
       if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(widget.isCopy
-                ? 'Transaction copied successfully!'
-                : (widget.transaction != null
-                    ? 'Transaction updated!'
-                    : 'Transaction added!')),
-            backgroundColor: Colors.green,
-          ),
+        LoadingOverlay.hide(context);
+        CustomSnackBar.show(
+          context,
+          message: widget.isCopy
+              ? 'Transaction copied successfully!'
+              : (widget.transaction != null
+                  ? 'Transaction updated!'
+                  : 'Transaction saved successfully!'),
+          type: SnackBarType.success,
         );
+        Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        LoadingOverlay.hide(context);
+        CustomSnackBar.show(
+          context,
+          message: 'Failed to save: $e',
+          type: SnackBarType.error,
         );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
       }
     }
   }

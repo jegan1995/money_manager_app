@@ -9,6 +9,8 @@ import 'transactions_screen.dart';
 import 'accounts_screen.dart';
 import 'category_analytics_screen.dart';
 import 'search_transactions_screen.dart';
+import '../widgets/animated_fab.dart';
+import '../widgets/slide_page_route.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -66,19 +68,15 @@ class _HomeScreenState extends State<HomeScreen>
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: AnimatedFab(
         onPressed: () {
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (context) => const AddTransactionScreen(),
+            SlidePageRoute(
+              page: const AddTransactionScreen(),
             ),
           );
         },
-        icon: const Icon(Icons.add),
-        label: const Text('Add Transaction'),
-        backgroundColor: Colors.blue,
-        elevation: 8,
       ),
     );
   }

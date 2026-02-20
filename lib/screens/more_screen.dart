@@ -19,6 +19,8 @@ import 'transfer_analytics_screen.dart';
 import 'alerts_screen.dart';
 import '../services/recurring_transfer_service.dart';
 import 'search_transactions_screen.dart';
+import 'theme_settings_screen.dart';
+import 'currency_settings_screen.dart';
 
 class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
@@ -81,7 +83,6 @@ class MoreScreen extends StatelessWidget {
             ),
           ),
 
-          // ✅ FIXED: Added missing closing parenthesis
           _buildMenuItem(
             context,
             icon: Icons.repeat,
@@ -181,6 +182,34 @@ class MoreScreen extends StatelessWidget {
             },
           ),
           const Divider(),
+
+          // Theme Settings
+          _buildMenuItem(
+            context,
+            icon: Icons.palette,
+            title: 'Theme Settings',
+            subtitle: 'Customize appearance',
+            color: Colors.purple,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (context) => const ThemeSettingsScreen()),
+            ),
+          ),
+
+          _buildMenuItem(
+            context,
+            icon: Icons.currency_exchange,
+            title: 'Currency Settings',
+            subtitle: 'Change display currency',
+            color: Colors.green,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (context) => const CurrencySettingsScreen()),
+            ),
+          ),
+
           _buildMenuItem(
             context,
             icon: Icons.settings,

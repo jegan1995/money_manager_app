@@ -3,42 +3,55 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'screens/auth_wrapper.dart';
-import 'screens/accounts_screen.dart'; // ✅ ADD THIS LINE
+import 'screens/accounts_screen.dart';
 import 'providers/theme_provider.dart';
+import 'services/theme_service.dart';
 import 'services/recurring_transaction_service.dart';
 import 'services/recurring_transfer_service.dart';
 import 'screens/recurring_transactions_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  // Initialize theme service
+  final themeService = ThemeService();
+  await themeService.loadSettings();
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
       ],
-      child: const MyApp(),
+      child: MyApp(themeService: themeService),
     ),
   );
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final ThemeService themeService;
+
+  const MyApp({super.key, required this.themeService});
 
   @override
   Widget build(BuildContext context) {
-    final themeProvider = Provider.of<ThemeProvider>(context);
-
-    return MaterialApp(
-      title: 'Money Manager',
-      theme: themeProvider.lightTheme,
-      darkTheme: themeProvider.darkTheme,
-      themeMode: themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
-      home: const AppInitializer(),
-      debugShowCheckedModeBanner: false,
-      // ✅ ADD THESE 3 LINES:
-      routes: {
-        '/accounts': (context) => const AccountsScreen(),
-        '/recurring': (context) => RecurringTransactionsScreen(),
+    return AnimatedBuilder(
+      animation: themeService,
+      builder: (context, child) {
+        return MaterialApp(
+          title: 'Money Manager',
+          debugShowCheckedModeBanner: false,
+          theme: themeService.lightTheme,
+          darkTheme: themeService.darkTheme,
+          themeMode: themeService.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+          home: const AppInitializer(),
+          routes: {
+            '/accounts': (context) => const AccountsScreen(),
+            '/recurring': (context) => RecurringTransactionsScreen(),
+          },
+        );
       },
     );
   }
@@ -63,10 +76,6 @@ class _AppInitializerState extends State<AppInitializer> {
 
   Future<void> _initializeApp() async {
     try {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
-
       // Process recurring transactions
       final recurringTransactionService = RecurringTransactionService();
       final recurringTransferService = RecurringTransferService();

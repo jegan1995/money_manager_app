@@ -9,6 +9,9 @@ import '../services/account_service.dart';
 import 'accounts_screen.dart';
 import '../widgets/custom_snackbar.dart';
 import '../widgets/loading_overlay.dart';
+import 'dart:typed_data';
+import '../services/storage_service.dart';
+import '../widgets/receipt_picker.dart';
 
 class AddTransactionScreen extends StatefulWidget {
   final TransactionModel? transaction;
@@ -29,7 +32,12 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   final TransactionService _transactionService = TransactionService();
   final AccountService _accountService = AccountService();
 
-  String _type = 'expense'; // defult expense
+  // Receipt fields
+  final StorageService _storageService = StorageService();
+  Uint8List? _receiptImage;
+  String? _receiptUrl;
+
+  String _type = 'expense'; // default expense
   final TextEditingController _amountController = TextEditingController();
   String? _selectedCategory;
   String? _selectedSubcategory;
@@ -68,6 +76,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       _toAccount = widget.transaction!.toAccount;
       _selectedDate = widget.transaction!.date;
       _noteController.text = widget.transaction!.note ?? '';
+      _receiptUrl = widget.transaction!.imageUrl;
     }
   }
 
@@ -155,7 +164,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Date Picker (Moved to top)
+            // Date Picker
             Row(
               children: [
                 Expanded(
@@ -253,9 +262,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             ] else ...[
               _buildCategoryFields(),
               const SizedBox(height: 16),
-              _buildAccountField(), // NEW: Account selection for income/expense
-              // const SizedBox(height: 16),
-              // if (_type == 'expense') _buildPaymentMethodField(), // Optional for expense only
+              _buildAccountField(),
             ],
 
             const SizedBox(height: 16),
@@ -270,6 +277,16 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 hintText: 'Add a note...',
               ),
             ),
+
+            // Receipt Picker
+            // const SizedBox(height: 16),
+            // ReceiptPicker(
+            //   onImageSelected: (imageData) {
+            //     setState(() => _receiptImage = imageData);
+            //   },
+            //   existingImageUrl: _receiptUrl,
+            // ),
+
             const SizedBox(height: 24),
 
             // Save Button
@@ -296,17 +313,12 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     );
   }
 
-  // NEW METHOD: Account selection for Income/Expense
-// Single Account field for Income/Expense
-// Single Account field for Income/Expense
   Widget _buildAccountField() {
-    // ✅ Show button when no accounts exist
     if (_accounts.isEmpty) {
       return Column(
         children: [
           OutlinedButton.icon(
             onPressed: () {
-              // ✅ FIXED: Use proper navigation
               Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -372,51 +384,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       },
     );
   }
-  // Widget _buildAccountField() {
-  //   return DropdownButtonFormField<String>(
-  //     value: _type == 'income' ? _toAccount : _fromAccount,
-  //     decoration: InputDecoration(
-  //       labelText: _type == 'income' ? 'To Account (Optional)' : 'From Account (Optional)',
-  //       border: const OutlineInputBorder(),
-  //       prefixIcon: const Icon(Icons.account_balance_wallet),
-  //       hintText: _accounts.isEmpty ? 'Create an account first' : 'Select account',
-  //     ),
-  //     items: [
-  //       const DropdownMenuItem<String>(
-  //         value: null,
-  //         child: Text('No account selected'),
-  //       ),
-  //       ..._accounts.map((account) {
-  //         return DropdownMenuItem<String>(
-  //           value: account.id,
-  //           child: Row(
-  //             children: [
-  //               Icon(_getAccountTypeIcon(account.type), size: 20),
-  //               const SizedBox(width: 8),
-  //               Expanded(
-  //                 child: Text(
-  //                   '${account.name} (₹${account.balance.toStringAsFixed(0)})',
-  //                   overflow: TextOverflow.ellipsis,
-  //                 ),
-  //               ),
-  //             ],
-  //           ),
-  //         );
-  //       }).toList(),
-  //     ],
-  //     onChanged: (value) {
-  //       setState(() {
-  //         if (_type == 'income') {
-  //           _toAccount = value;
-  //         } else {
-  //           _fromAccount = value;
-  //         }
-  //       });
-  //     },
-  //   );
-  // }
 
-  // Helper method for account type icons
   IconData _getAccountTypeIcon(String type) {
     switch (type.toLowerCase()) {
       case 'bank':
@@ -502,7 +470,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 ),
               ),
 
-              // Categories Grid (3 per row like Money Manager)
+              // Categories Grid
               Expanded(
                 child: ListView.builder(
                   controller: scrollController,
@@ -627,57 +595,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       ),
     );
   }
-// recently deleted this for not necessary feature
-// Widget _buildPaymentMethodField() {
-//   return DropdownButtonFormField<String>(
-//     value: _paymentMethod,
-//     decoration: const InputDecoration(
-//       labelText: 'Payment Method (Optional)',
-//       border: OutlineInputBorder(),
-//       prefixIcon: Icon(Icons.payment),
-//       hintText: 'Cash, Card, UPI, etc.',
-//     ),
-//     items: [
-//       const DropdownMenuItem<String>(
-//         value: null,
-//         child: Text('Not specified'),
-//       ),
-//       ..._paymentMethods
-//           .map((pm) => DropdownMenuItem(value: pm, child: Text(pm)))
-//           .toList(),
-//     ],
-//     onChanged: (value) {
-//       setState(() {
-//         _paymentMethod = value;
-//       });
-//     },
-//   );
-// }
-  // Widget _buildPaymentMethodField() {
-  //   return DropdownButtonFormField<String>(
-  //     value: _paymentMethod,
-  //     decoration: const InputDecoration(
-  //       labelText: 'Payment Method (Optional)',
-  //       border: OutlineInputBorder(),
-  //       prefixIcon: Icon(Icons.payment),
-  //       hintText: 'How did you pay?',
-  //     ),
-  //     items: [
-  //       const DropdownMenuItem<String>(
-  //         value: null,
-  //         child: Text('Not specified'),
-  //       ),
-  //       ..._paymentMethods
-  //           .map((pm) => DropdownMenuItem(value: pm, child: Text(pm)))
-  //           .toList(),
-  //     ],
-  //     onChanged: (value) {
-  //       setState(() {
-  //         _paymentMethod = value;
-  //       });
-  //     },
-  //   );
-  // }
 
   Widget _buildTransferFields() {
     return Column(
@@ -775,6 +692,18 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     LoadingOverlay.show(context, message: 'Saving...');
 
     try {
+      // Generate a temp ID for receipt upload before transaction is created
+      final tempId = DateTime.now().millisecondsSinceEpoch.toString();
+
+      // Upload receipt image if selected
+      String? uploadedImageUrl;
+      // if (_receiptImage != null) {
+      //   uploadedImageUrl = await _storageService.uploadReceipt(
+      //     _receiptImage!,
+      //     widget.transaction?.id ?? tempId,
+      //   );
+      // }
+
       final transaction = TransactionModel(
         userId: '',
         id: '',
@@ -793,7 +722,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             : (_type == 'income' ? _toAccount : null),
         isRecurring: _isRecurring,
         recurringFrequency: _isRecurring ? _recurringFrequency : null,
-        imageUrl: null,
+        imageUrl: uploadedImageUrl ?? _receiptUrl,
         createdAt: DateTime.now(),
       );
 

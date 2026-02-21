@@ -21,6 +21,7 @@ import '../services/recurring_transfer_service.dart';
 import 'search_transactions_screen.dart';
 import 'theme_settings_screen.dart';
 import 'currency_settings_screen.dart';
+import 'import_transactions_screen.dart';
 
 class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
@@ -107,6 +108,18 @@ class MoreScreen extends StatelessWidget {
               context,
               MaterialPageRoute(
                   builder: (context) => const TransferAnalyticsScreen()),
+            ),
+          ),
+          _buildMenuItem(
+            context,
+            icon: Icons.file_upload,
+            title: 'Import Transactions',
+            subtitle: 'Import from Excel file',
+            color: Colors.indigo,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (context) => const ImportTransactionsScreen()),
             ),
           ),
 

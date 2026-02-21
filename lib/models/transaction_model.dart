@@ -10,6 +10,7 @@ class TransactionModel {
   final String? paymentMethod;
   final DateTime date;
   final String? note;
+  final String? description;
   final String? fromAccount;
   final String? toAccount;
   final bool isRecurring;
@@ -27,6 +28,7 @@ class TransactionModel {
     this.paymentMethod,
     required this.date,
     this.note,
+    this.description,
     this.fromAccount,
     this.toAccount,
     this.isRecurring = false,
@@ -45,6 +47,7 @@ class TransactionModel {
       'paymentMethod': paymentMethod,
       'date': Timestamp.fromDate(date),
       'note': note,
+      'description': description,
       'fromAccount': fromAccount,
       'toAccount': toAccount,
       'isRecurring': isRecurring,
@@ -66,6 +69,7 @@ class TransactionModel {
       paymentMethod: data['paymentMethod'],
       date: (data['date'] as Timestamp).toDate(),
       note: data['note'],
+      description: data['description'],
       fromAccount: data['fromAccount'],
       toAccount: data['toAccount'],
       isRecurring: data['isRecurring'] ?? false,
@@ -87,6 +91,7 @@ class TransactionModel {
     String? paymentMethod,
     DateTime? date,
     String? note,
+    String? description,
     String? fromAccount,
     String? toAccount,
     bool? isRecurring,
@@ -104,6 +109,7 @@ class TransactionModel {
       paymentMethod: paymentMethod ?? this.paymentMethod,
       date: date ?? this.date,
       note: note ?? this.note,
+      description: description ?? this.description,
       fromAccount: fromAccount ?? this.fromAccount,
       toAccount: toAccount ?? this.toAccount,
       isRecurring: isRecurring ?? this.isRecurring,

@@ -9,9 +9,7 @@ workflows:
       - name: Get Flutter packages
         script: flutter pub get
       - name: Build APK
-        script: |
-          flutter build apk --release \
-            --dart-define=FLUTTER_WEB_USE_SKIA=true
+        script: flutter build apk --release
     artifacts:
       - build/app/outputs/flutter-apk/app-release.apk
     publishing:

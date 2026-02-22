@@ -6,6 +6,9 @@ workflows:
       flutter: stable
       java: 17
     scripts:
+      - name: Set up local.properties
+        script: |
+          echo "flutter.sdk=$HOME/programs/flutter" > android/local.properties
       - name: Get Flutter packages
         script: flutter pub get
       - name: Build APK

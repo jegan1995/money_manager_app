@@ -5,18 +5,12 @@ workflows:
     environment:
       flutter: stable
       java: 17
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: 'mm-bkp'
-          include: true
-        - pattern: 'main'
-          include: true
     scripts:
       - name: Set up local.properties
         script: |
           echo "flutter.sdk=$HOME/programs/flutter" > android/local.properties
+          echo "flutter.versionName=1.0.0" >> android/local.properties
+          echo "flutter.versionCode=1" >> android/local.properties
       - name: Get Flutter packages
         script: flutter pub get
       - name: Build APK

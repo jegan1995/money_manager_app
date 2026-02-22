@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'dart:math' as math;
 
+/// Simple animated FAB — replaces the old spinning extended button.
+/// Keeps a subtle scale-in entrance animation only.
 class AnimatedFab extends StatefulWidget {
   final VoidCallback onPressed;
 
@@ -14,24 +15,18 @@ class _AnimatedFabState extends State<AnimatedFab>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
-  late Animation<double> _rotationAnimation;
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
-      duration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 250),
       vsync: this,
     );
-
-    _scaleAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.elasticOut),
+    _scaleAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOut,
     );
-
-    _rotationAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
-
     _controller.forward();
   }
 
@@ -45,25 +40,11 @@ class _AnimatedFabState extends State<AnimatedFab>
   Widget build(BuildContext context) {
     return ScaleTransition(
       scale: _scaleAnimation,
-      child: AnimatedBuilder(
-        animation: _rotationAnimation,
-        builder: (context, child) {
-          return Transform.rotate(
-            angle: _rotationAnimation.value * 2 * math.pi,
-            child: FloatingActionButton.extended(
-              onPressed: () {
-                _controller.reverse().then((_) {
-                  _controller.forward();
-                });
-                widget.onPressed();
-              },
-              icon: const Icon(Icons.add),
-              label: const Text('Add Transaction'),
-              backgroundColor: Colors.blue,
-              elevation: 8,
-            ),
-          );
-        },
+      child: FloatingActionButton(
+        onPressed: widget.onPressed,
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        elevation: 4,
+        child: const Icon(Icons.add, color: Colors.white, size: 24),
       ),
     );
   }

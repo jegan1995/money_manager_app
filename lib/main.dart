@@ -37,19 +37,33 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: themeService,
-      builder: (context, child) {
-        return MaterialApp(
-          title: 'Money Manager',
-          debugShowCheckedModeBanner: false,
-          theme: themeService.lightTheme,
-          darkTheme: themeService.darkTheme,
-          themeMode: themeService.isDarkMode ? ThemeMode.dark : ThemeMode.light,
-          home: const AppInitializer(),
-          routes: {
-            '/accounts': (context) => const AccountsScreen(),
-            '/recurring': (context) => RecurringTransactionsScreen(),
+    return Consumer<ThemeProvider>(
+      builder: (context, themeProvider, child) {
+        return AnimatedBuilder(
+          animation: themeService,
+          builder: (context, child) {
+            return MaterialApp(
+              title: 'Money Manager',
+              debugShowCheckedModeBanner: false,
+              theme: themeService.lightTheme,
+              darkTheme: themeService.darkTheme,
+              themeMode:
+                  themeService.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+              // Apply font size scaling app-wide
+              builder: (context, widget) {
+                return MediaQuery(
+                  data: MediaQuery.of(context).copyWith(
+                    textScaler: TextScaler.linear(themeProvider.textScaleFactor),
+                  ),
+                  child: widget!,
+                );
+              },
+              home: const AppInitializer(),
+              routes: {
+                '/accounts': (context) => const AccountsScreen(),
+                '/recurring': (context) => RecurringTransactionsScreen(),
+              },
+            );
           },
         );
       },
@@ -76,7 +90,6 @@ class _AppInitializerState extends State<AppInitializer> {
 
   Future<void> _initializeApp() async {
     try {
-      // Process recurring transactions
       final recurringTransactionService = RecurringTransactionService();
       final recurringTransferService = RecurringTransferService();
 

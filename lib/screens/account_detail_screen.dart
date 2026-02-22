@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/account_model.dart';
 import '../models/transaction_model.dart';
 import '../services/transaction_service.dart';
 import '../services/account_service.dart';
 import 'transaction_detail_screen.dart';
 import 'add_account_screen.dart';
+import 'add_transaction_screen.dart';
 
 class AccountDetailScreen extends StatefulWidget {
   final AccountModel account;
@@ -21,87 +21,77 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
   final TransactionService _transactionService = TransactionService();
   final AccountService _accountService = AccountService();
 
-  String _selectedPeriod = 'Daily'; // Daily, Monthly, Annually
+  // Default to Monthly (so user sees all this month's transactions, not just today)
+  String _selectedPeriod = 'Monthly';
   DateTime _selectedDate = DateTime.now();
 
   @override
   Widget build(BuildContext context) {
+    final color = _accountColor(widget.account.type);
+
     return Scaffold(
-      backgroundColor: Colors.grey[900],
+      backgroundColor: const Color(0xFF1A1A2E),
       appBar: AppBar(
-        backgroundColor: Colors.green,
-        title: Text(widget.account.name),
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        title: Text(
+          widget.account.name,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.bar_chart),
-            onPressed: () {
-              // TODO: Navigate to account analytics
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.edit),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) =>
-                      AddAccountScreen(account: widget.account),
-                ),
-              );
-            },
+            icon: const Icon(Icons.edit_outlined, size: 20),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => AddAccountScreen(account: widget.account),
+              ),
+            ),
           ),
         ],
       ),
       body: Column(
         children: [
-          // Account Balance Header
+          // ── Balance Header ──────────────────────────────────────────────
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(24),
-            decoration: const BoxDecoration(
-              color: Colors.green,
-            ),
+            color: color,
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: Column(
               children: [
-                const Icon(
-                  Icons.account_balance_wallet,
-                  size: 48,
-                  color: Colors.white,
-                ),
-                const SizedBox(height: 8),
+                Icon(_accountIcon(widget.account.type),
+                    size: 36, color: Colors.white.withOpacity(0.9)),
+                const SizedBox(height: 6),
                 Text(
                   widget.account.typeDisplayName,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                  ),
+                  style: TextStyle(
+                      color: Colors.white.withOpacity(0.75), fontSize: 12),
                 ),
-                const SizedBox(height: 8),
-                StreamBuilder<QuerySnapshot>(
+                const SizedBox(height: 6),
+                // Live balance from Firestore
+                StreamBuilder<List<AccountModel>>(
                   stream: _accountService.getAccounts(),
                   builder: (context, snapshot) {
-                    if (!snapshot.hasData) {
-                      return const Text(
-                        '₹0.00',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      );
+                    double balance = widget.account.balance;
+                    if (snapshot.hasData) {
+                      try {
+                        final acc = snapshot.data!
+                            .firstWhere((a) => a.id == widget.account.id);
+                        balance = acc.balance;
+                      } catch (_) {}
                     }
-
-                    final account = snapshot.data!.docs
-                        .map((doc) => AccountModel.fromMap(
-                            doc.data() as Map<String, dynamic>, doc.id))
-                        .firstWhere((a) => a.id == widget.account.id);
-
                     return Text(
-                      '₹${account.balance.toStringAsFixed(2)}',
+                      '₹${_fmt(balance)}',
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 32,
+                        fontSize: 30,
                         fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
                       ),
                     );
                   },
@@ -110,74 +100,82 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
             ),
           ),
 
-          // Period Tabs
+          // ── Period Tabs ─────────────────────────────────────────────────
           Container(
-            color: Colors.grey[850],
+            color: Color.lerp(color, Colors.black, 0.25),
             child: Row(
-              children: [
-                _buildPeriodTab('Daily'),
-                _buildPeriodTab('Monthly'),
-                _buildPeriodTab('Annually'),
-              ],
+              children: ['Daily', 'Monthly', 'Annually']
+                  .map((p) => _buildPeriodTab(p, color))
+                  .toList(),
             ),
           ),
 
-          // Date Navigation
+          // ── Date Navigation ─────────────────────────────────────────────
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            color: Colors.grey[850],
+            color: Color.lerp(color, Colors.black, 0.35),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 IconButton(
-                  icon: const Icon(Icons.chevron_left, color: Colors.white),
+                  icon: const Icon(Icons.chevron_left, color: Colors.white, size: 22),
                   onPressed: _previousPeriod,
+                  constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                  padding: EdgeInsets.zero,
                 ),
                 Text(
                   _getDateLabel(),
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.chevron_right, color: Colors.white),
+                  icon: const Icon(Icons.chevron_right, color: Colors.white, size: 22),
                   onPressed: _nextPeriod,
+                  constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                  padding: EdgeInsets.zero,
                 ),
               ],
             ),
           ),
 
-          // Summary Row
-          _buildSummaryRow(),
+          // ── Income / Expense summary bar ────────────────────────────────
+          _buildSummaryBar(color),
 
-          // Transactions List
-          Expanded(
-            child: _buildTransactionsList(),
-          ),
+          // ── Transactions List ───────────────────────────────────────────
+          Expanded(child: _buildTransactionsList()),
         ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const AddTransactionScreen()),
+        ).then((_) => setState(() {})),
+        backgroundColor: color,
+        child: const Icon(Icons.add, color: Colors.white),
       ),
     );
   }
 
-  Widget _buildPeriodTab(String period) {
+  // ── Period Tab ────────────────────────────────────────────────────────────
+
+  Widget _buildPeriodTab(String period, Color color) {
     final isSelected = _selectedPeriod == period;
     return Expanded(
-      child: InkWell(
-        onTap: () {
-          setState(() {
-            _selectedPeriod = period;
-            _selectedDate = DateTime.now();
-          });
-        },
+      child: GestureDetector(
+        onTap: () => setState(() {
+          _selectedPeriod = period;
+          _selectedDate = DateTime.now();
+        }),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
             border: Border(
               bottom: BorderSide(
-                color: isSelected ? Colors.green : Colors.transparent,
-                width: 3,
+                color: isSelected ? Colors.white : Colors.transparent,
+                width: 2.5,
               ),
             ),
           ),
@@ -185,8 +183,10 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
             period,
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: isSelected ? Colors.green : Colors.grey,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              color: isSelected ? Colors.white : Colors.white.withOpacity(0.5),
+              fontWeight:
+                  isSelected ? FontWeight.bold : FontWeight.normal,
+              fontSize: 13,
             ),
           ),
         ),
@@ -194,75 +194,47 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
     );
   }
 
-  Widget _buildSummaryRow() {
+  // ── Summary Bar ───────────────────────────────────────────────────────────
+
+  Widget _buildSummaryBar(Color color) {
     return StreamBuilder<List<TransactionModel>>(
       stream: _transactionService.getTransactions(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return Container(
-            padding: const EdgeInsets.all(16),
-            color: Colors.grey[850],
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                SizedBox(height: 50),
-              ],
-            ),
-          );
-        }
+        double deposit = 0, withdrawal = 0;
 
-        final transactions = snapshot.data!;
-
-        final filtered = _filterTransactionsByPeriod(
-            transactions); // ✅ Change allTransactions to transactions
-
-        double deposit = 0;
-        double withdrawal = 0;
-
-        for (var txn in filtered) {
-          if (txn.type == 'income' && txn.toAccount == widget.account.id) {
-            deposit += txn.amount;
-          } else if (txn.type == 'expense' &&
-              txn.fromAccount == widget.account.id) {
-            withdrawal += txn.amount;
-          } else if (txn.type == 'transfer') {
-            if (txn.toAccount == widget.account.id) {
+        if (snapshot.hasData) {
+          for (final txn in _filterByPeriodAndAccount(snapshot.data!)) {
+            if (_isDepositFor(txn)) {
               deposit += txn.amount;
-            } else if (txn.fromAccount == widget.account.id) {
+            } else {
               withdrawal += txn.amount;
             }
           }
         }
 
-        final total = deposit - withdrawal;
-
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          color: Colors.grey[850],
+          color: Color.lerp(color, Colors.black, 0.45),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildSummaryItem('Deposit', deposit, Colors.blue),
-              _buildSummaryItem('Withdrawal', withdrawal, Colors.red),
-              _buildSummaryItem('Total', total, Colors.white),
-              StreamBuilder<QuerySnapshot>(
-                stream: _accountService.getAccounts(),
-                builder: (context, accSnapshot) {
-                  if (!accSnapshot.hasData) {
-                    return _buildSummaryItem('Balance', 0, Colors.grey);
-                  }
-
-                  final account = accSnapshot.data!.docs
-                      .map((doc) => AccountModel.fromMap(
-                          doc.data() as Map<String, dynamic>, doc.id))
-                      .firstWhere((a) => a.id == widget.account.id);
-
-                  return _buildSummaryItem(
-                    'Balance',
-                    account.balance,
-                    account.balance >= 0 ? Colors.green : Colors.red,
-                  );
-                },
+              Expanded(
+                child: _summaryItem(
+                    'Deposit', deposit, const Color(0xFF64B5F6)),
+              ),
+              Container(width: 1, height: 28, color: Colors.white24),
+              Expanded(
+                child: _summaryItem(
+                    'Withdrawal', withdrawal, const Color(0xFFEF9A9A)),
+              ),
+              Container(width: 1, height: 28, color: Colors.white24),
+              Expanded(
+                child: _summaryItem(
+                  'Total',
+                  deposit - withdrawal,
+                  (deposit - withdrawal) >= 0
+                      ? const Color(0xFF81C784)
+                      : const Color(0xFFEF9A9A),
+                ),
               ),
             ],
           ),
@@ -271,30 +243,26 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
     );
   }
 
-  Widget _buildSummaryItem(String label, double amount, Color color) {
+  Widget _summaryItem(String label, double amount, Color color) {
+    final isNeg = amount < 0;
     return Column(
       children: [
+        Text(label,
+            style: TextStyle(
+                color: Colors.white.withOpacity(0.6),
+                fontSize: 10,
+                fontWeight: FontWeight.w500)),
+        const SizedBox(height: 2),
         Text(
-          label,
-          style: const TextStyle(
-            color: Colors.grey,
-            fontSize: 11,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          amount >= 0
-              ? '₹${amount.toStringAsFixed(2)}'
-              : '-₹${(-amount).toStringAsFixed(2)}',
+          '${isNeg ? '-' : ''}₹${_fmt(amount.abs())}',
           style: TextStyle(
-            color: color,
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-          ),
+              color: color, fontSize: 13, fontWeight: FontWeight.bold),
         ),
       ],
     );
   }
+
+  // ── Transactions List ─────────────────────────────────────────────────────
 
   Widget _buildTransactionsList() {
     return StreamBuilder<List<TransactionModel>>(
@@ -302,43 +270,23 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
-            child: CircularProgressIndicator(color: Colors.green),
+            child: CircularProgressIndicator(color: Colors.white),
           );
         }
 
         if (!snapshot.hasData) {
-          return const Center(
-            child: Text(
-              'No transactions',
-              style: TextStyle(color: Colors.grey),
-            ),
-          );
+          return _emptyState();
         }
 
-        final transactions = snapshot.data!;
-
-        final filtered = _filterTransactionsByPeriod(
-            transactions); // ✅ Change allTransactions to transactions
+        final filtered = _filterByPeriodAndAccount(snapshot.data!);
 
         if (filtered.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.receipt_long, size: 64, color: Colors.grey[700]),
-                const SizedBox(height: 16),
-                Text(
-                  'No transactions for ${_getDateLabel()}',
-                  style: const TextStyle(color: Colors.grey, fontSize: 16),
-                ),
-              ],
-            ),
-          );
+          return _emptyState();
         }
 
         // Group by date
         final grouped = <String, List<TransactionModel>>{};
-        for (var txn in filtered) {
+        for (final txn in filtered) {
           final key = DateFormat('yyyy-MM-dd').format(txn.date);
           grouped.putIfAbsent(key, () => []).add(txn);
         }
@@ -347,74 +295,91 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
           ..sort((a, b) => b.compareTo(a));
 
         return ListView.builder(
+          padding: const EdgeInsets.only(bottom: 80),
           itemCount: sortedDates.length,
-          itemBuilder: (context, index) {
-            final dateKey = sortedDates[index];
-            final dayTxns = grouped[dateKey]!;
-            final date = DateTime.parse(dateKey);
+          itemBuilder: (context, i) {
+            final key = sortedDates[i];
+            final txns = grouped[key]!;
+            final date = DateTime.parse(key);
 
-            double dayDeposit = 0;
-            double dayWithdrawal = 0;
-
-            for (var txn in dayTxns) {
-              if (txn.type == 'income' && txn.toAccount == widget.account.id) {
-                dayDeposit += txn.amount;
-              } else if (txn.type == 'expense' &&
-                  txn.fromAccount == widget.account.id) {
-                dayWithdrawal += txn.amount;
-              } else if (txn.type == 'transfer') {
-                if (txn.toAccount == widget.account.id) {
-                  dayDeposit += txn.amount;
-                } else if (txn.fromAccount == widget.account.id) {
-                  dayWithdrawal += txn.amount;
-                }
+            double dayDeposit = 0, dayWithdraw = 0;
+            for (final t in txns) {
+              if (_isDepositFor(t)) {
+                dayDeposit += t.amount;
+              } else {
+                dayWithdraw += t.amount;
               }
             }
 
             return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Date Header
+                // Date header row
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  color: Colors.grey[850],
+                  color: const Color(0xFF12122A),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 6),
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        '${date.day} ${_getDayName(date.weekday)} ${DateFormat('MM/yyyy').format(date)}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w500,
+                      // Date box
+                      Container(
+                        width: 36,
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Column(
+                          children: [
+                            Text(
+                              DateFormat('d').format(date),
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold),
+                            ),
+                            Text(
+                              DateFormat('EEE').format(date).toUpperCase(),
+                              style: TextStyle(
+                                  color: Colors.white.withOpacity(0.5),
+                                  fontSize: 9),
+                            ),
+                          ],
                         ),
                       ),
-                      Row(
-                        children: [
-                          if (dayDeposit > 0)
-                            Text(
-                              '₹${dayDeposit.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                color: Colors.blue,
-                                fontSize: 13,
-                              ),
-                            ),
-                          if (dayDeposit > 0 && dayWithdrawal > 0)
-                            const SizedBox(width: 8),
-                          if (dayWithdrawal > 0)
-                            Text(
-                              '₹${dayWithdrawal.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                color: Colors.red,
-                                fontSize: 13,
-                              ),
-                            ),
-                        ],
+                      const SizedBox(width: 10),
+                      Text(
+                        DateFormat('MMM yyyy').format(date),
+                        style: TextStyle(
+                            color: Colors.white.withOpacity(0.7),
+                            fontSize: 12),
                       ),
+                      const Spacer(),
+                      if (dayDeposit > 0)
+                        Text(
+                          '+₹${_fmt(dayDeposit)}',
+                          style: const TextStyle(
+                              color: Color(0xFF64B5F6),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600),
+                        ),
+                      if (dayDeposit > 0 && dayWithdraw > 0)
+                        const SizedBox(width: 6),
+                      if (dayWithdraw > 0)
+                        Text(
+                          '-₹${_fmt(dayWithdraw)}',
+                          style: const TextStyle(
+                              color: Color(0xFFEF9A9A),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600),
+                        ),
                     ],
                   ),
                 ),
-                // Transactions
-                ...dayTxns.map((txn) => _buildTransactionTile(txn)),
+                // Transaction tiles
+                ...txns.map((txn) => _buildTile(txn)),
+                Divider(
+                    height: 1, color: Colors.white.withOpacity(0.05)),
               ],
             );
           },
@@ -423,95 +388,135 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
     );
   }
 
-  Widget _buildTransactionTile(TransactionModel transaction) {
-    bool isDeposit = false;
-    bool isWithdrawal = false;
+  Widget _buildTile(TransactionModel txn) {
+    final isDeposit = _isDepositFor(txn);
+    final amountColor =
+        isDeposit ? const Color(0xFF64B5F6) : const Color(0xFFEF9A9A);
+    final iconColor = isDeposit ? Colors.blue[300]! : Colors.red[300]!;
+    final iconBg = isDeposit
+        ? Colors.blue.withOpacity(0.15)
+        : Colors.red.withOpacity(0.15);
 
-    if (transaction.type == 'income' &&
-        transaction.toAccount == widget.account.id) {
-      isDeposit = true;
-    } else if (transaction.type == 'expense' &&
-        transaction.fromAccount == widget.account.id) {
-      isWithdrawal = true;
-    } else if (transaction.type == 'transfer') {
-      if (transaction.toAccount == widget.account.id) {
-        isDeposit = true;
-      } else if (transaction.fromAccount == widget.account.id) {
-        isWithdrawal = true;
-      }
-    }
-
-    if (!isDeposit && !isWithdrawal) {
-      return const SizedBox.shrink();
-    }
-
-    return ListTile(
+    return InkWell(
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) =>
-              TransactionDetailScreen(transaction: transaction),
+          builder: (context) => TransactionDetailScreen(transaction: txn),
         ),
       ),
-      leading: CircleAvatar(
-        backgroundColor: transaction.type == 'transfer'
-            ? Colors.blue.withOpacity(0.2)
-            : (isDeposit
-                ? Colors.blue.withOpacity(0.2)
-                : Colors.red.withOpacity(0.2)),
-        child: Icon(
-          transaction.type == 'transfer'
-              ? Icons.swap_horiz
-              : _getCategoryIcon(transaction.category),
-          color: transaction.type == 'transfer'
-              ? Colors.blue
-              : (isDeposit ? Colors.blue : Colors.red),
-          size: 20,
-        ),
-      ),
-      title: Text(
-        transaction.category,
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-      subtitle: Text(
-        transaction.subcategory ?? transaction.note ?? widget.account.name,
-        style: TextStyle(color: Colors.grey[400], fontSize: 12),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      trailing: Text(
-        isDeposit
-            ? '₹${transaction.amount.toStringAsFixed(2)}'
-            : '₹${transaction.amount.toStringAsFixed(2)}',
-        style: TextStyle(
-          color: isDeposit ? Colors.blue : Colors.red,
-          fontSize: 15,
-          fontWeight: FontWeight.bold,
+      child: Container(
+        color: const Color(0xFF1A1A2E),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        child: Row(
+          children: [
+            // Icon
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: iconBg,
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Icon(
+                txn.type == 'transfer'
+                    ? Icons.swap_horiz
+                    : _categoryIcon(txn.category),
+                color: iconColor,
+                size: 16,
+              ),
+            ),
+            const SizedBox(width: 10),
+            // Category + note/subcategory
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    txn.category,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w500,
+                      fontSize: 13,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if ((txn.subcategory?.isNotEmpty ?? false) ||
+                      (txn.note?.isNotEmpty ?? false))
+                    Text(
+                      txn.subcategory?.isNotEmpty == true
+                          ? txn.subcategory!
+                          : txn.note!,
+                      style: TextStyle(
+                        color: Colors.grey[500],
+                        fontSize: 11,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ],
+              ),
+            ),
+            // Amount
+            Text(
+              '${isDeposit ? '+' : '-'}₹${_fmt(txn.amount)}',
+              style: TextStyle(
+                color: amountColor,
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  List<TransactionModel> _filterTransactionsByPeriod(
-      List<TransactionModel> transactions) {
-    return transactions.where((txn) {
-      // Filter by account
-      if (txn.type == 'income' && txn.toAccount != widget.account.id) {
-        return false;
-      } else if (txn.type == 'expense' &&
-          txn.fromAccount != widget.account.id) {
-        return false;
-      } else if (txn.type == 'transfer') {
-        if (txn.fromAccount != widget.account.id &&
-            txn.toAccount != widget.account.id) {
-          return false;
-        }
-      }
+  Widget _emptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.receipt_long,
+              size: 56, color: Colors.grey[700]),
+          const SizedBox(height: 12),
+          Text(
+            'No transactions for ${_getDateLabel()}',
+            style: TextStyle(color: Colors.grey[500], fontSize: 14),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Tap + to add a transaction',
+            style: TextStyle(color: Colors.grey[600], fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
 
-      // Filter by period
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  bool _isDepositFor(TransactionModel txn) {
+    if (txn.type == 'income' && txn.toAccount == widget.account.id) return true;
+    if (txn.type == 'transfer' && txn.toAccount == widget.account.id) return true;
+    return false;
+  }
+
+  List<TransactionModel> _filterByPeriodAndAccount(
+      List<TransactionModel> all) {
+    return all.where((txn) {
+      // Must involve this account
+      final involvesAccount = (txn.type == 'income' &&
+              txn.toAccount == widget.account.id) ||
+          (txn.type == 'expense' &&
+              txn.fromAccount == widget.account.id) ||
+          (txn.type == 'transfer' &&
+              (txn.fromAccount == widget.account.id ||
+                  txn.toAccount == widget.account.id));
+
+      if (!involvesAccount) return false;
+
+      // Period filter
       switch (_selectedPeriod) {
         case 'Daily':
           return txn.date.year == _selectedDate.year &&
@@ -536,7 +541,8 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
           _selectedDate = _selectedDate.subtract(const Duration(days: 1));
           break;
         case 'Monthly':
-          _selectedDate = DateTime(_selectedDate.year, _selectedDate.month - 1);
+          _selectedDate =
+              DateTime(_selectedDate.year, _selectedDate.month - 1);
           break;
         case 'Annually':
           _selectedDate = DateTime(_selectedDate.year - 1);
@@ -552,7 +558,8 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
           _selectedDate = _selectedDate.add(const Duration(days: 1));
           break;
         case 'Monthly':
-          _selectedDate = DateTime(_selectedDate.year, _selectedDate.month + 1);
+          _selectedDate =
+              DateTime(_selectedDate.year, _selectedDate.month + 1);
           break;
         case 'Annually':
           _selectedDate = DateTime(_selectedDate.year + 1);
@@ -574,28 +581,37 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
     }
   }
 
-  String _getDayName(int weekday) {
-    switch (weekday) {
-      case 1:
-        return 'Mon';
-      case 2:
-        return 'Tue';
-      case 3:
-        return 'Wed';
-      case 4:
-        return 'Thu';
-      case 5:
-        return 'Fri';
-      case 6:
-        return 'Sat';
-      case 7:
-        return 'Sun';
+  Color _accountColor(String type) {
+    switch (type) {
+      case 'cash':
+        return Colors.green[700]!;
+      case 'bank':
+        return Colors.blue[700]!;
+      case 'credit_card':
+        return Colors.orange[700]!;
+      case 'loan':
+        return Colors.red[700]!;
       default:
-        return '';
+        return Colors.blueGrey[700]!;
     }
   }
 
-  IconData _getCategoryIcon(String category) {
+  IconData _accountIcon(String type) {
+    switch (type) {
+      case 'cash':
+        return Icons.payments;
+      case 'bank':
+        return Icons.account_balance;
+      case 'credit_card':
+        return Icons.credit_card;
+      case 'loan':
+        return Icons.money_off;
+      default:
+        return Icons.account_balance_wallet;
+    }
+  }
+
+  IconData _categoryIcon(String category) {
     switch (category) {
       case 'Food & Dining':
         return Icons.restaurant;
@@ -626,5 +642,20 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
       default:
         return Icons.category;
     }
+  }
+
+  String _fmt(double amount) {
+    if (amount >= 10000000) {
+      return '${(amount / 10000000).toStringAsFixed(1)}Cr';
+    }
+    if (amount >= 100000) return '${(amount / 100000).toStringAsFixed(1)}L';
+    if (amount >= 1000) {
+      final formatter = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
+      return amount
+          .toInt()
+          .toString()
+          .replaceAllMapped(formatter, (m) => '${m[1]},');
+    }
+    return amount.toStringAsFixed(0);
   }
 }

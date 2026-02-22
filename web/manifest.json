@@ -1,11 +1,11 @@
 {
-    "name": "money_manager_app",
-    "short_name": "money_manager_app",
+    "name": "Money Manager",
+    "short_name": "MoneyMgr",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#0A1A4A",
+    "theme_color": "#0A1A4A",
+    "description": "Track your income, expenses and accounts — Money Manager by Jegan",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

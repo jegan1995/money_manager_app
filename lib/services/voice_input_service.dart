@@ -299,22 +299,50 @@ class VoiceInputService {
 
     for (final acc in accounts) {
       final accName = acc.name.toLowerCase();
-      // Try matching words from account name
       int score = 0;
-      for (final word in accName.split(' ')) {
-        if (word.length > 2 && text.contains(word)) score += 2;
+
+      // Exact full name match = highest priority
+      if (text.contains(accName)) {
+        score += 20;
+      } else {
+        // Score each word in account name
+        final nameWords = accName.split(RegExp(r'[\s_-]+'));
+        int wordMatches = 0;
+        for (final word in nameWords) {
+          if (word.length > 1 && text.contains(word)) {
+            wordMatches++;
+            score += 3;
+          }
+        }
+        // Bonus: consecutive word matches (phrase match)
+        if (wordMatches >= 2) score += wordMatches * 2;
       }
-      // Also check account type keywords
-      final typeWords = acc.type.toLowerCase().split(' ');
-      for (final word in typeWords) {
-        if (word.length > 2 && text.contains(word)) score++;
+
+      // Account type keywords (cc, sb, savings, current, credit)
+      final typeAbbreviations = {
+        'cc': ['credit card', 'credit', 'cc'],
+        'sb': ['savings', 'saving', 'sb'],
+        'ca': ['current', 'ca'],
+        'fd': ['fixed deposit', 'fd'],
+        'wallet': ['wallet', 'paytm', 'gpay'],
+        'cash': ['cash'],
+        'loan': ['loan', 'emi'],
+      };
+
+      for (final entry in typeAbbreviations.entries) {
+        for (final kw in entry.value) {
+          if (accName.contains(kw) && text.contains(entry.key)) score += 5;
+          if (accName.contains(kw) && text.contains(kw)) score += 5;
+        }
       }
+
       if (score > bestScore) {
         bestScore = score;
         bestId = acc.id;
       }
     }
-    return bestId;
+    // Only return if we have reasonable confidence
+    return bestScore >= 3 ? bestId : null;
   }
 
   List<String?> _extractTransferAccounts(

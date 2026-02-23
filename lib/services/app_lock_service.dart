@@ -17,10 +17,9 @@ class AppLockService {
   static const _biometricKey = 'app_lock_biometric';
   static const _failedAttemptsKey = 'app_lock_failed_attempts';
 
-  // ── In-memory unlock state (reset on app kill) ───────────────────────────────
   bool _isUnlocked = false;
   DateTime? _unlockedAt;
-  static const _lockAfterMinutes = 5; // auto-lock after 5 min background
+  static const _lockAfterMinutes = 5;
 
   bool get isUnlocked => _isUnlocked;
 
@@ -34,7 +33,6 @@ class AppLockService {
     _unlockedAt = null;
   }
 
-  /// Call when app resumes from background
   bool shouldLock() {
     if (!_isUnlocked) return true;
     if (_unlockedAt == null) return true;
@@ -42,7 +40,6 @@ class AppLockService {
     return elapsed.inMinutes >= _lockAfterMinutes;
   }
 
-  // ── PIN Management ───────────────────────────────────────────────────────────
   Future<bool> isLockEnabled() async {
     if (kIsWeb) return false;
     final val = await _storage.read(key: _enabledKey);
@@ -83,7 +80,6 @@ class AppLockService {
     return correct;
   }
 
-  // ── Failed attempts ──────────────────────────────────────────────────────────
   Future<int> getFailedAttempts() async {
     final val = await _storage.read(key: _failedAttemptsKey);
     return int.tryParse(val ?? '0') ?? 0;
@@ -91,15 +87,13 @@ class AppLockService {
 
   Future<void> _incrementFailedAttempts() async {
     final current = await getFailedAttempts();
-    await _storage.write(
-        key: _failedAttemptsKey, value: (current + 1).toString());
+    await _storage.write(key: _failedAttemptsKey, value: (current + 1).toString());
   }
 
   Future<void> _resetFailedAttempts() async {
     await _storage.write(key: _failedAttemptsKey, value: '0');
   }
 
-  // ── Biometric ────────────────────────────────────────────────────────────────
   Future<bool> isBiometricEnabled() async {
     if (kIsWeb) return false;
     final val = await _storage.read(key: _biometricKey);
@@ -110,39 +104,69 @@ class AppLockService {
     await _storage.write(key: _biometricKey, value: enabled.toString());
   }
 
+  /// FIX: isDeviceSupported() is more reliable than canCheckBiometrics on Android
   Future<bool> isBiometricAvailable() async {
     if (kIsWeb) return false;
     try {
-      final canCheck = await _localAuth.canCheckBiometrics;
       final isSupported = await _localAuth.isDeviceSupported();
-      return canCheck && isSupported;
-    } catch (_) {
+      if (!isSupported) return false;
+      final biometrics = await _localAuth.getAvailableBiometrics();
+      return biometrics.isNotEmpty;
+    } catch (e) {
+      debugPrint('Biometric check error: $e');
       return false;
     }
   }
 
-  Future<List<BiometricType>> getAvailableBiometrics() async {
+  /// FIX: Returns BiometricResult with error message so UI can show feedback
+  Future<BiometricResult> authenticateWithBiometric() async {
+    if (kIsWeb) return BiometricResult(success: false, error: 'Not supported on web');
     try {
-      return await _localAuth.getAvailableBiometrics();
-    } catch (_) {
-      return [];
-    }
-  }
+      final isAvailable = await isBiometricAvailable();
+      if (!isAvailable) {
+        return BiometricResult(
+          success: false,
+          error: 'No biometrics enrolled. Go to phone Settings → Security → Fingerprint.',
+        );
+      }
 
-  Future<bool> authenticateWithBiometric() async {
-    if (kIsWeb) return false;
-    try {
       final result = await _localAuth.authenticate(
-        localizedReason: 'Unlock Money Manager',
+        localizedReason: 'Use fingerprint to unlock Money Manager',
         options: const AuthenticationOptions(
           stickyAuth: true,
           biometricOnly: false,
+          sensitiveTransaction: false,
         ),
       );
-      if (result) markUnlocked();
-      return result;
-    } catch (_) {
-      return false;
+
+      if (result) {
+        markUnlocked();
+        return BiometricResult(success: true);
+      } else {
+        return BiometricResult(success: false, error: 'Authentication cancelled');
+      }
+    } catch (e) {
+      debugPrint('Biometric auth error: $e');
+      final err = e.toString();
+      if (err.contains('NotEnrolled') || err.contains('not enrolled')) {
+        return BiometricResult(
+            success: false,
+            error: 'No fingerprint enrolled. Add one in Settings → Security.');
+      } else if (err.contains('LockedOut') || err.contains('PermanentlyLockedOut')) {
+        return BiometricResult(
+            success: false,
+            error: 'Biometric locked out. Unlock using device PIN first.');
+      } else if (err.contains('NotAvailable')) {
+        return BiometricResult(
+            success: false, error: 'Biometric not available on this device.');
+      }
+      return BiometricResult(success: false, error: 'Biometric failed. Try again.');
     }
   }
+}
+
+class BiometricResult {
+  final bool success;
+  final String? error;
+  const BiometricResult({required this.success, this.error});
 }

@@ -17,22 +17,27 @@ class _AppLockScreenState extends State<AppLockScreen>
   int _failedAttempts = 0;
   bool _biometricAvailable = false;
   bool _biometricEnabled = false;
-  bool _shaking = false;
   bool _loading = true;
+  bool _bioLoading = false;
+  String? _errorMessage;
 
   late AnimationController _shakeController;
-  late Animation<double> _shakeAnim;
+  late Animation<Offset> _shakeAnim;
 
   @override
   void initState() {
     super.initState();
     _shakeController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 500),
+      duration: const Duration(milliseconds: 400),
     );
-    _shakeAnim = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _shakeController, curve: Curves.elasticIn),
-    );
+    _shakeAnim = Tween<Offset>(
+      begin: Offset.zero,
+      end: const Offset(0.05, 0),
+    ).animate(CurvedAnimation(
+      parent: _shakeController,
+      curve: Curves.elasticIn,
+    ));
     _init();
   }
 
@@ -40,6 +45,8 @@ class _AppLockScreenState extends State<AppLockScreen>
     final bioAvail = await _lockService.isBiometricAvailable();
     final bioEnabled = await _lockService.isBiometricEnabled();
     final failed = await _lockService.getFailedAttempts();
+
+    if (!mounted) return;
     setState(() {
       _biometricAvailable = bioAvail;
       _biometricEnabled = bioEnabled;
@@ -47,9 +54,11 @@ class _AppLockScreenState extends State<AppLockScreen>
       _loading = false;
     });
 
-    // Auto-trigger biometric on open
-    if (bioAvail && bioEnabled) {
-      _authenticateBiometric();
+    // Auto-trigger biometric on open if enabled
+    if (bioEnabled) {
+      // Small delay so screen renders first
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (mounted) _authenticateBiometric();
     }
   }
 
@@ -61,21 +70,29 @@ class _AppLockScreenState extends State<AppLockScreen>
 
   void _addDigit(String digit) {
     if (_enteredPin.length >= 4) return;
-    setState(() => _enteredPin += digit);
     HapticFeedback.lightImpact();
+    setState(() {
+      _enteredPin += digit;
+      _errorMessage = null;
+    });
     if (_enteredPin.length == 4) {
-      _verifyPin();
+      Future.delayed(const Duration(milliseconds: 100), _verifyPin);
     }
   }
 
   void _removeDigit() {
     if (_enteredPin.isEmpty) return;
-    setState(() => _enteredPin = _enteredPin.substring(0, _enteredPin.length - 1));
     HapticFeedback.lightImpact();
+    setState(() {
+      _enteredPin = _enteredPin.substring(0, _enteredPin.length - 1);
+      _errorMessage = null;
+    });
   }
 
   Future<void> _verifyPin() async {
     final correct = await _lockService.verifyPin(_enteredPin);
+    if (!mounted) return;
+
     if (correct) {
       HapticFeedback.heavyImpact();
       widget.onUnlocked();
@@ -85,25 +102,38 @@ class _AppLockScreenState extends State<AppLockScreen>
       setState(() {
         _enteredPin = '';
         _failedAttempts++;
-        _shaking = true;
-      });
-      Future.delayed(const Duration(milliseconds: 600), () {
-        if (mounted) setState(() => _shaking = false);
+        _errorMessage = _failedAttempts >= 5
+            ? 'Too many attempts — use fingerprint below'
+            : 'Wrong PIN — ${5 - _failedAttempts} attempt${5 - _failedAttempts == 1 ? '' : 's'} left';
       });
     }
   }
 
   Future<void> _authenticateBiometric() async {
+    if (_bioLoading) return;
+    setState(() {
+      _bioLoading = true;
+      _errorMessage = null;
+    });
+
     final result = await _lockService.authenticateWithBiometric();
-    if (result && mounted) {
+
+    if (!mounted) return;
+    setState(() => _bioLoading = false);
+
+    if (result.success) {
       widget.onUnlocked();
+    } else if (result.error != null &&
+        result.error != 'Authentication cancelled') {
+      setState(() => _errorMessage = result.error);
     }
   }
 
+  bool get _bioButtonActive => _biometricEnabled;
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       backgroundColor:
@@ -114,9 +144,9 @@ class _AppLockScreenState extends State<AppLockScreen>
                 child: CircularProgressIndicator(color: Colors.white))
             : Column(
                 children: [
-                  const SizedBox(height: 60),
+                  const SizedBox(height: 52),
 
-                  // App icon + title
+                  // Icon
                   Container(
                     width: 72,
                     height: 72,
@@ -125,51 +155,43 @@ class _AppLockScreenState extends State<AppLockScreen>
                       shape: BoxShape.circle,
                     ),
                     child: const Center(
-                      child:
-                          Text('💰', style: TextStyle(fontSize: 36)),
+                        child: Text('💰', style: TextStyle(fontSize: 36))),
+                  ),
+                  const SizedBox(height: 14),
+
+                  const Text('Money Manager',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+
+                  // Status / error message
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 200),
+                    child: Text(
+                      _errorMessage ?? 'Enter your PIN to unlock',
+                      key: ValueKey(_errorMessage),
+                      style: TextStyle(
+                          color: _errorMessage != null
+                              ? Colors.red[300]
+                              : Colors.white60,
+                          fontSize: 13),
+                      textAlign: TextAlign.center,
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Money Manager',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    _failedAttempts > 0
-                        ? '$_failedAttempts failed attempt${_failedAttempts > 1 ? 's' : ''}'
-                        : 'Enter your PIN to unlock',
-                    style: TextStyle(
-                        color: _failedAttempts > 0
-                            ? Colors.red[300]
-                            : Colors.white60,
-                        fontSize: 14),
-                  ),
 
-                  const SizedBox(height: 48),
+                  const SizedBox(height: 44),
 
-                  // PIN dots
-                  AnimatedBuilder(
-                    animation: _shakeAnim,
-                    builder: (context, child) {
-                      final dx = _shaking
-                          ? 12 *
-                              (0.5 - _shakeAnim.value).abs() *
-                              (_shakeAnim.value > 0.5 ? 1 : -1)
-                          : 0.0;
-                      return Transform.translate(
-                        offset: Offset(dx * 10, 0),
-                        child: child,
-                      );
-                    },
+                  // PIN dots with shake animation
+                  SlideTransition(
+                    position: _shakeAnim,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: List.generate(4, (i) {
                         final filled = i < _enteredPin.length;
-                        return Container(
+                        return AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
                           margin: const EdgeInsets.symmetric(horizontal: 12),
                           width: 18,
                           height: 18,
@@ -187,7 +209,7 @@ class _AppLockScreenState extends State<AppLockScreen>
                     ),
                   ),
 
-                  const SizedBox(height: 48),
+                  const SizedBox(height: 44),
 
                   // PIN pad
                   Padding(
@@ -200,29 +222,48 @@ class _AppLockScreenState extends State<AppLockScreen>
                         const SizedBox(height: 16),
                         _buildRow(['7', '8', '9']),
                         const SizedBox(height: 16),
-                        // Bottom row: biometric | 0 | backspace
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            // Biometric button
-                            _buildActionButton(
-                              child: Icon(
-                                Icons.fingerprint,
-                                color: (_biometricAvailable && _biometricEnabled)
-                                    ? Colors.white
-                                    : Colors.white24,
-                                size: 30,
-                              ),
-                              onTap: (_biometricAvailable && _biometricEnabled)
+                            // Biometric button — FIX: always tappable if enabled
+                            GestureDetector(
+                              onTap: _bioButtonActive
                                   ? _authenticateBiometric
                                   : null,
+                              child: SizedBox(
+                                width: 72,
+                                height: 72,
+                                child: Center(
+                                  child: _bioLoading
+                                      ? const SizedBox(
+                                          width: 28,
+                                          height: 28,
+                                          child: CircularProgressIndicator(
+                                              color: Colors.white,
+                                              strokeWidth: 2.5),
+                                        )
+                                      : Icon(
+                                          Icons.fingerprint,
+                                          color: _bioButtonActive
+                                              ? Colors.white
+                                              : Colors.white24,
+                                          size: 36,
+                                        ),
+                                ),
+                              ),
                             ),
                             _buildDigitButton('0'),
                             // Backspace
-                            _buildActionButton(
-                              child: const Icon(Icons.backspace_outlined,
-                                  color: Colors.white, size: 24),
+                            GestureDetector(
                               onTap: _removeDigit,
+                              child: const SizedBox(
+                                width: 72,
+                                height: 72,
+                                child: Center(
+                                  child: Icon(Icons.backspace_outlined,
+                                      color: Colors.white, size: 24),
+                                ),
+                              ),
                             ),
                           ],
                         ),
@@ -230,19 +271,19 @@ class _AppLockScreenState extends State<AppLockScreen>
                     ),
                   ),
 
-                  const Spacer(),
+                  const SizedBox(height: 24),
 
-                  // Too many attempts
-                  if (_failedAttempts >= 5)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 24),
-                      child: Text(
-                        'Too many attempts. Use biometric or reinstall app.',
-                        style: TextStyle(
-                            color: Colors.red[300],
-                            fontSize: 12),
-                        textAlign: TextAlign.center,
-                      ),
+                  // Biometric hint text
+                  if (_biometricEnabled)
+                    Text(
+                      _biometricAvailable
+                          ? 'Touch the fingerprint icon to unlock'
+                          : 'Fingerprint not set up on this device',
+                      style: TextStyle(
+                          color: _biometricAvailable
+                              ? Colors.white38
+                              : Colors.orange[300],
+                          fontSize: 12),
                     ),
                 ],
               ),
@@ -275,17 +316,6 @@ class _AppLockScreenState extends State<AppLockScreen>
                   fontWeight: FontWeight.w400),
             ),
           ),
-        ),
-      );
-
-  Widget _buildActionButton(
-      {required Widget child, VoidCallback? onTap}) =>
-      GestureDetector(
-        onTap: onTap,
-        child: SizedBox(
-          width: 72,
-          height: 72,
-          child: Center(child: child),
         ),
       );
 }

@@ -57,6 +57,7 @@ class MoreScreen extends StatelessWidget {
 
           // ── App Lock ───────────────────────────────────────────────────────
           _buildAppLockTile(context),
+          
           // ── Notification Settings ──────────────────────────────────────────
           _buildMenuItem(
             context,
@@ -69,6 +70,7 @@ class MoreScreen extends StatelessWidget {
                 MaterialPageRoute(
                     builder: (_) => const NotificationSettingsScreen())),
           ),
+          
           // ── Bill Reminders ─────────────────────────────────────────────────
           StreamBuilder<int>(
             stream: billService.getOverdueCount(),
@@ -273,6 +275,7 @@ class MoreScreen extends StatelessWidget {
     );
   }
 
+  // ✅ FIXED: Properly closed _buildMenuItem method
   Widget _buildMenuItem(
     BuildContext context, {
     required IconData icon,
@@ -281,49 +284,6 @@ class MoreScreen extends StatelessWidget {
     required Color color,
     required VoidCallback onTap,
     int? badge,
-  }
-
-  Widget _buildAppLockTile(BuildContext context) {
-    return FutureBuilder<bool>(
-      future: AppLockService().isLockEnabled(),
-      builder: (context, snapshot) {
-        final isEnabled = snapshot.data ?? false;
-        return _buildMenuItem(
-          context,
-          icon: isEnabled ? Icons.lock : Icons.lock_open,
-          title: 'App Lock',
-          subtitle: isEnabled ? 'PIN lock is ON — tap to manage' : 'Protect app with PIN & biometric',
-          color: const Color(0xFF37474F),
-          onTap: () async {
-            final lockService = AppLockService();
-            final hasPin = await lockService.hasPin();
-            if (!context.mounted) return;
-            if (hasPin) {
-              // Show manage dialog
-              showModalBottomSheet(
-                context: context,
-                shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                ),
-                builder: (ctx) => _AppLockManageSheet(lockService: lockService),
-              );
-            } else {
-              final result = await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const PinSetupScreen()),
-              );
-              if (result == true && context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                  content: Text('✅ App lock enabled!'),
-                  backgroundColor: Colors.green,
-                  behavior: SnackBarBehavior.floating,
-                ));
-              }
-            }
-          },
-        );
-      },
-    );
   }) {
     return ListTile(
       leading: Stack(
@@ -371,7 +331,54 @@ class MoreScreen extends StatelessWidget {
     );
   }
 
+  // ✅ FIXED: Properly placed _buildAppLockTile method
+  Widget _buildAppLockTile(BuildContext context) {
+    return FutureBuilder<bool>(
+      future: AppLockService().isLockEnabled(),
+      builder: (context, snapshot) {
+        final isEnabled = snapshot.data ?? false;
+        return _buildMenuItem(
+          context,
+          icon: isEnabled ? Icons.lock : Icons.lock_open,
+          title: 'App Lock',
+          subtitle: isEnabled
+              ? 'PIN lock is ON — tap to manage'
+              : 'Protect app with PIN & biometric',
+          color: const Color(0xFF37474F),
+          onTap: () async {
+            final lockService = AppLockService();
+            final hasPin = await lockService.hasPin();
+            if (!context.mounted) return;
+            if (hasPin) {
+              // Show manage dialog
+              showModalBottomSheet(
+                context: context,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                builder: (ctx) => _AppLockManageSheet(lockService: lockService),
+              );
+            } else {
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const PinSetupScreen()),
+              );
+              if (result == true && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content: Text('✅ App lock enabled!'),
+                  backgroundColor: Colors.green,
+                  behavior: SnackBarBehavior.floating,
+                ));
+              }
+            }
+          },
+        );
+      },
+    );
+  }
+}
 
+// ✅ FIXED: Moved class OUTSIDE MoreScreen
 class _AppLockManageSheet extends StatelessWidget {
   final AppLockService lockService;
   const _AppLockManageSheet({required this.lockService});
@@ -459,6 +466,4 @@ class _AppLockManageSheet extends StatelessWidget {
       ),
     );
   }
-}
-
 }

@@ -20,6 +20,8 @@ import 'financial_insights_screen.dart';
 import 'sip_insurance_screen.dart';
 import 'predict_savings_screen.dart';
 import 'notification_settings_screen.dart';
+import 'pin_setup_screen.dart';
+import '../services/app_lock_service.dart';
 
 class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
@@ -53,6 +55,8 @@ class MoreScreen extends StatelessWidget {
             },
           ),
 
+          // ── App Lock ───────────────────────────────────────────────────────
+          _buildAppLockTile(context),
           // ── Notification Settings ──────────────────────────────────────────
           _buildMenuItem(
             context,
@@ -277,6 +281,49 @@ class MoreScreen extends StatelessWidget {
     required Color color,
     required VoidCallback onTap,
     int? badge,
+  }
+
+  Widget _buildAppLockTile(BuildContext context) {
+    return FutureBuilder<bool>(
+      future: AppLockService().isLockEnabled(),
+      builder: (context, snapshot) {
+        final isEnabled = snapshot.data ?? false;
+        return _buildMenuItem(
+          context,
+          icon: isEnabled ? Icons.lock : Icons.lock_open,
+          title: 'App Lock',
+          subtitle: isEnabled ? 'PIN lock is ON — tap to manage' : 'Protect app with PIN & biometric',
+          color: const Color(0xFF37474F),
+          onTap: () async {
+            final lockService = AppLockService();
+            final hasPin = await lockService.hasPin();
+            if (!context.mounted) return;
+            if (hasPin) {
+              // Show manage dialog
+              showModalBottomSheet(
+                context: context,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                builder: (ctx) => _AppLockManageSheet(lockService: lockService),
+              );
+            } else {
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const PinSetupScreen()),
+              );
+              if (result == true && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content: Text('✅ App lock enabled!'),
+                  backgroundColor: Colors.green,
+                  behavior: SnackBarBehavior.floating,
+                ));
+              }
+            }
+          },
+        );
+      },
+    );
   }) {
     return ListTile(
       leading: Stack(
@@ -323,4 +370,95 @@ class MoreScreen extends StatelessWidget {
       onTap: onTap,
     );
   }
+
+
+class _AppLockManageSheet extends StatelessWidget {
+  final AppLockService lockService;
+  const _AppLockManageSheet({required this.lockService});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('App Lock',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          Text('PIN lock is active',
+              style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+          const SizedBox(height: 20),
+          ListTile(
+            leading: const Icon(Icons.lock_reset, color: Colors.blue),
+            title: const Text('Change PIN'),
+            onTap: () async {
+              Navigator.pop(context);
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const PinSetupScreen(isChangingPin: true),
+                ),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.fingerprint, color: Colors.teal),
+            title: const Text('Biometric Unlock'),
+            trailing: FutureBuilder<bool>(
+              future: lockService.isBiometricEnabled(),
+              builder: (context, snap) {
+                return Switch(
+                  value: snap.data ?? false,
+                  onChanged: (v) async {
+                    await lockService.setBiometricEnabled(v);
+                    if (context.mounted) Navigator.pop(context);
+                  },
+                  activeColor: Colors.teal,
+                );
+              },
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.no_encryption, color: Colors.red),
+            title: const Text('Remove PIN Lock',
+                style: TextStyle(color: Colors.red)),
+            onTap: () async {
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Remove App Lock?'),
+                  content: const Text(
+                      'Anyone will be able to open the app without a PIN.'),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('Cancel')),
+                    TextButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text('Remove',
+                            style: TextStyle(color: Colors.red))),
+                  ],
+                ),
+              );
+              if (confirm == true) {
+                await lockService.deletePin();
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('App lock removed'),
+                    behavior: SnackBarBehavior.floating,
+                  ));
+                }
+              }
+            },
+          ),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+}
+
 }

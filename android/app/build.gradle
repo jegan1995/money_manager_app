@@ -17,12 +17,12 @@ def flutterVersionName = localProperties.getProperty('flutter.versionName') ?: '
 
 android {
     namespace "com.jegan.money_manager_app"
-    compileSdk 35
-    ndkVersion "27.0.12077973"
+    compileSdk 34
+    ndkVersion "26.1.10909125"
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_11
-        targetCompatibility JavaVersion.VERSION_11
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
     }
 
     defaultConfig {
@@ -49,5 +49,7 @@ flutter {
 
 dependencies {
     implementation 'androidx.multidex:multidex:2.0.1'
-    implementation platform('com.google.firebase:firebase-bom:33.7.0')
+    implementation platform('com.google.firebase:firebase-bom:32.7.4')
+    implementation 'com.google.firebase:firebase-auth'
+    implementation 'com.google.firebase:firebase-firestore'
 }

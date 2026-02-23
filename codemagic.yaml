@@ -11,9 +11,12 @@ workflows:
           echo "flutter.sdk=/Users/builder/programs/flutter" > android/local.properties
           echo "flutter.versionName=1.0.0" >> android/local.properties
           echo "flutter.versionCode=1" >> android/local.properties
-          cat android/local.properties
-      - name: Flutter clean
-        script: flutter clean
+      - name: Clean everything
+        script: |
+          flutter clean
+          rm -rf android/app/src/main/java/io/flutter/plugins/
+          rm -rf android/.gradle
+          rm -rf build/
       - name: Flutter pub get
         script: flutter pub get
       - name: Build APK

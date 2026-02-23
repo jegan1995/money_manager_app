@@ -17,6 +17,8 @@ import 'currency_settings_screen.dart';
 import 'import_transactions_screen.dart';
 import 'bill_reminders_screen.dart';
 import 'financial_insights_screen.dart';
+import 'sip_insurance_screen.dart';
+import 'predict_savings_screen.dart';
 
 class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
@@ -181,6 +183,28 @@ class MoreScreen extends StatelessWidget {
                 context,
                 MaterialPageRoute(
                     builder: (_) => const FinancialInsightsScreen())),
+          ),
+          _buildMenuItem(
+            context,
+            icon: Icons.savings,
+            title: 'SIP & Insurance Advisor',
+            subtitle: 'AI-powered investment suggestions',
+            color: const Color(0xFF4527A0),
+            onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const SipInsuranceScreen())),
+          ),
+          _buildMenuItem(
+            context,
+            icon: Icons.show_chart,
+            title: 'Predict Future Savings',
+            subtitle: 'Forecast & goal timeline simulator',
+            color: const Color(0xFF00695C),
+            onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const PredictSavingsScreen())),
           ),
           _buildMenuItem(
             context,

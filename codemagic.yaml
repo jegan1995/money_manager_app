@@ -4,49 +4,25 @@ workflows:
     max_build_duration: 120
     environment:
       flutter: stable
-      xcode: latest
-      cocoapods: default
+      java: 17
     scripts:
       - name: Set up local.properties
         script: |
           echo "flutter.sdk=$HOME/programs/flutter" > "$CM_BUILD_DIR/android/local.properties"
+      - name: Clean
+        script: |
+          flutter clean
+          rm -rf android/app/src/main/java/io/flutter/plugins/
       - name: Get Flutter packages
-        script: |
-          flutter packages pub get
+        script: flutter pub get
       - name: Build APK
-        script: |
-          flutter build apk --release
+        script: flutter build apk --release
     artifacts:
       - build/**/outputs/**/*.apk
-      - build/**/outputs/**/mapping.txt
-      - flutter_drive.log
-    publishing:
-      email:
-        recipients:
-          - your@email.com
-
-  ios-workflow:
-    name: iOS Build
-    max_build_duration: 120
-    environment:
-      flutter: stable
-      xcode: latest
-      cocoapods: default
-    scripts:
-      - name: Get Flutter packages
-        script: |
-          flutter packages pub get
-      - name: Pod install
-        script: |
-          cd ios && pod install
-      - name: Build IPA
-        script: |
-          flutter build ipa --release --export-options-plist=$CM_BUILD_DIR/ios/ExportOptions.plist
-    artifacts:
-      - build/ios/ipa/*.ipa
-      - /tmp/xcodebuild_logs/*.log
-      - flutter_drive.log
     publishing:
       email:
         recipients:
           - jeganmanogaran1995@gmail.com
+        notify:
+          success: true
+          failure: true

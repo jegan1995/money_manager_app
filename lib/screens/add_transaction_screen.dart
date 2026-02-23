@@ -745,16 +745,27 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
       if (mounted) {
         LoadingOverlay.hide(context);
-        CustomSnackBar.show(
-          context,
-          message: widget.isCopy
-              ? 'Transaction copied successfully!'
-              : (widget.transaction != null
-                  ? 'Transaction updated!'
-                  : 'Transaction saved successfully!'),
-          type: SnackBarType.success,
-        );
+        // Capture messenger before pop to avoid stale context crash
+        final messenger = ScaffoldMessenger.of(context);
         Navigator.pop(context);
+        messenger.clearSnackBars();
+        messenger.showSnackBar(
+          SnackBar(
+            content: Row(
+              children: const [
+                Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                SizedBox(width: 10),
+                Text('Transaction saved!',
+                    style: TextStyle(color: Colors.white, fontSize: 13)),
+              ],
+            ),
+            backgroundColor: Color(0xFF2E7D32),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(10))),
+            margin: EdgeInsets.fromLTRB(12, 0, 12, 12),
+            duration: Duration(seconds: 3),
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {

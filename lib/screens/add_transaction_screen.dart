@@ -6,13 +6,14 @@ import '../models/transaction_model.dart';
 import '../models/account_model.dart';
 import '../services/transaction_service.dart';
 import '../services/account_service.dart';
-import '../services/voice_input_service.dart';
-import '../widgets/voice_input_sheet.dart';
 import 'accounts_screen.dart';
 import '../widgets/custom_snackbar.dart';
 import '../widgets/loading_overlay.dart';
+import 'dart:typed_data';
 import '../services/storage_service.dart';
 import '../widgets/receipt_picker.dart';
+import 'receipt_scanner_screen.dart';
+import '../services/receipt_scanner_service.dart';
 
 class AddTransactionScreen extends StatefulWidget {
   final TransactionModel? transaction;
@@ -32,7 +33,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   final _formKey = GlobalKey<FormState>();
   final TransactionService _transactionService = TransactionService();
   final AccountService _accountService = AccountService();
+
+  // Receipt fields
   final StorageService _storageService = StorageService();
+  Uint8List? _receiptImage;
+  String? _receiptUrl;
 
   String _type = 'expense';
   final TextEditingController _amountController = TextEditingController();
@@ -52,8 +57,14 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
   List<AccountModel> _accounts = [];
 
-  // Voice input state
-  bool _voiceFilled = false;
+  final List<String> _paymentMethods = [
+    'Cash',
+    'Credit Card',
+    'Debit Card',
+    'UPI',
+    'Net Banking',
+    'Wallet',
+  ];
 
   @override
   void initState() {
@@ -70,12 +81,77 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       _selectedDate = widget.transaction!.date;
       _noteController.text = widget.transaction!.note ?? '';
       _descriptionController.text = widget.transaction!.description ?? '';
+      _receiptUrl = widget.transaction!.imageUrl;
+    }
+  }
+
+
+
+  bool _scannedDataApplied = false;
+
+  Future<void> _openReceiptScanner() async {
+    final result = await Navigator.push<ScannedReceiptData>(
+      context,
+      MaterialPageRoute(builder: (_) => const ReceiptScannerScreen()),
+    );
+    if (result == null || !result.success) return;
+
+    setState(() {
+      // Fill amount
+      if (result.amount != null) {
+        _amountController.text = result.amount!.toStringAsFixed(2);
+      }
+      // Fill category
+      if (result.category != null) {
+        _selectedCategory = result.category;
+        _selectedSubcategory = null;
+      }
+      // Fill note
+      if (result.note != null && _noteController.text.isEmpty) {
+        _noteController.text = result.note!;
+      }
+      // Fill date
+      if (result.date != null) {
+        try {
+          _selectedDate = DateTime.parse(result.date!);
+        } catch (_) {}
+      }
+      // Fill payment method
+      if (result.paymentMethod != null) {
+        _paymentMethod = result.paymentMethod;
+      }
+      // Set type to expense (receipts are usually expenses)
+      _type = 'expense';
+      _scannedDataApplied = true;
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Row(
+          children: [
+            const Text('✅ '),
+            Expanded(
+              child: Text(
+                'Receipt scanned! ${result.merchant != null ? "From ${result.merchant}. " : ""}Review & save.',
+                style: const TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        duration: const Duration(seconds: 4),
+      ));
     }
   }
 
   void _loadAccounts() {
     _accountService.getAccounts().listen((accountsList) {
-      if (mounted) setState(() => _accounts = accountsList);
+      setState(() {
+        _accounts = accountsList;
+      });
     });
   }
 
@@ -87,180 +163,73 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     super.dispose();
   }
 
-  // ── Voice Input ──────────────────────────────────────────────────────────────
-
-  Future<void> _openVoiceInput() async {
-    final result = await showModalBottomSheet<VoiceParseResult>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => VoiceInputSheet(accounts: _accounts),
-    );
-
-    if (result != null && mounted) {
-      _applyVoiceResult(result);
-    }
-  }
-
-  void _applyVoiceResult(VoiceParseResult result) {
-    setState(() {
-      _voiceFilled = true;
-
-      if (result.type != null) _type = result.type!;
-      if (result.amount != null) {
-        _amountController.text = result.amount!.toStringAsFixed(0);
-      }
-      if (result.category != null) _selectedCategory = result.category;
-      if (result.subcategory != null) _selectedSubcategory = result.subcategory;
-
-      if (result.fromAccount != null) {
-        if (_type == 'income') {
-          _toAccount = result.fromAccount;
-        } else {
-          _fromAccount = result.fromAccount;
-        }
-      }
-      if (result.toAccount != null) _toAccount = result.toAccount;
-
-      if (result.note != null && result.note!.isNotEmpty) {
-        _noteController.text = result.note!;
-      }
-      if (result.date != null) _selectedDate = result.date!;
-    });
-
-    // Show info about what was filled
-    final filled = <String>[];
-    if (result.amount != null) filled.add('Amount');
-    if (result.category != null) filled.add('Category');
-    if (result.fromAccount != null) filled.add('Account');
-
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.auto_awesome, color: Colors.white, size: 16),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Auto-filled: ${filled.join(', ')}. Review before saving.',
-                style: const TextStyle(fontSize: 12),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: Colors.indigo,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-        duration: const Duration(seconds: 4),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.transaction != null && !widget.isCopy;
-    final theme = Theme.of(context);
 
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.isCopy
             ? 'Copy Transaction'
             : (isEdit ? 'Edit Transaction' : 'Add Transaction')),
-        actions: [
-          // Voice input button
-          if (!isEdit)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Tooltip(
-                message: 'Voice Input',
-                child: InkWell(
-                  onTap: _openVoiceInput,
-                  borderRadius: BorderRadius.circular(24),
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: _voiceFilled
-                          ? Colors.indigo.withOpacity(0.15)
-                          : theme.colorScheme.primary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: _voiceFilled
-                            ? Colors.indigo
-                            : theme.colorScheme.primary.withOpacity(0.3),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          _voiceFilled ? Icons.auto_awesome : Icons.mic,
-                          size: 18,
-                          color: _voiceFilled
-                              ? Colors.indigo
-                              : theme.colorScheme.primary,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          _voiceFilled ? 'Auto-filled' : 'Voice',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: _voiceFilled
-                                ? Colors.indigo
-                                : theme.colorScheme.primary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
       ),
       body: Form(
         key: _formKey,
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // Voice fill banner
-            if (_voiceFilled) ...[
+            // ── Scan Receipt banner ──────────────────────────────────────────
+            if (widget.transaction == null && !widget.isCopy)
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                margin: const EdgeInsets.only(bottom: 20),
                 decoration: BoxDecoration(
-                  color: Colors.indigo.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(12),
-                  border:
-                      Border.all(color: Colors.indigo.withOpacity(0.25)),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF0D47A1), Color(0xFF1976D2)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.auto_awesome,
-                        size: 16, color: Colors.indigo),
-                    const SizedBox(width: 8),
-                    const Expanded(
-                      child: Text(
-                        'Fields auto-filled by voice. Please review.',
-                        style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.indigo,
-                            fontWeight: FontWeight.w500),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: _openReceiptScanner,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.15),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Text('📷', style: TextStyle(fontSize: 20)),
+                          ),
+                          const SizedBox(width: 14),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Scan Receipt',
+                                    style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 15)),
+                                Text('AI reads amount & category automatically',
+                                    style: TextStyle(
+                                        color: Colors.white70, fontSize: 12)),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.chevron_right, color: Colors.white70),
+                        ],
                       ),
                     ),
-                    InkWell(
-                      onTap: () => setState(() => _voiceFilled = false),
-                      child:
-                          const Icon(Icons.close, size: 16, color: Colors.indigo),
-                    ),
-                  ],
+                  ),
                 ),
               ),
-              const SizedBox(height: 14),
-            ],
 
             // Type Selector
             SegmentedButton<String>(
@@ -299,14 +268,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               controller: _amountController,
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 labelText: 'Amount *',
                 prefixText: '₹ ',
-                border: const OutlineInputBorder(),
-                suffixIcon: _voiceFilled && _amountController.text.isNotEmpty
-                    ? const Icon(Icons.auto_awesome,
-                        size: 16, color: Colors.indigo)
-                    : null,
+                border: OutlineInputBorder(),
               ),
               validator: (value) {
                 if (value == null || value.isEmpty) {
@@ -333,7 +298,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                         lastDate: DateTime(2100),
                       );
                       if (date != null) {
-                        setState(() => _selectedDate = date);
+                        setState(() {
+                          _selectedDate = date;
+                        });
                       }
                     },
                     child: InputDecorator(
@@ -350,9 +317,12 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   ),
                 ),
                 const SizedBox(width: 8),
+                // Repeat toggle
                 InkWell(
                   onTap: () {
-                    setState(() => _isRecurring = !_isRecurring);
+                    setState(() {
+                      _isRecurring = !_isRecurring;
+                    });
                   },
                   child: Container(
                     padding: const EdgeInsets.all(14),
@@ -365,16 +335,14 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       children: [
                         Icon(
                           Icons.repeat,
-                          color:
-                              _isRecurring ? Colors.blue : Colors.grey[600],
+                          color: _isRecurring ? Colors.blue : Colors.grey[600],
                         ),
                         const SizedBox(width: 4),
                         Text(
                           'Repeat',
                           style: TextStyle(
-                            color: _isRecurring
-                                ? Colors.blue
-                                : Colors.grey[600],
+                            color:
+                                _isRecurring ? Colors.blue : Colors.grey[600],
                           ),
                         ),
                       ],
@@ -385,6 +353,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             ),
             const SizedBox(height: 16),
 
+            // Recurring frequency
             if (_isRecurring) ...[
               DropdownButtonFormField<String>(
                 value: _recurringFrequency,
@@ -396,12 +365,13 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 items: const [
                   DropdownMenuItem(value: 'daily', child: Text('Daily')),
                   DropdownMenuItem(value: 'weekly', child: Text('Weekly')),
-                  DropdownMenuItem(
-                      value: 'monthly', child: Text('Monthly')),
+                  DropdownMenuItem(value: 'monthly', child: Text('Monthly')),
                   DropdownMenuItem(value: 'yearly', child: Text('Yearly')),
                 ],
                 onChanged: (value) {
-                  setState(() => _recurringFrequency = value!);
+                  setState(() {
+                    _recurringFrequency = value!;
+                  });
                 },
               ),
               const SizedBox(height: 16),
@@ -421,7 +391,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             // Note
             TextFormField(
               controller: _noteController,
-              maxLines: 2,
+              maxLines: 3,
               decoration: const InputDecoration(
                 labelText: 'Note (Optional)',
                 border: OutlineInputBorder(),
@@ -429,6 +399,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               ),
             ),
 
+            // Description
             const SizedBox(height: 16),
             TextFormField(
               controller: _descriptionController,
@@ -445,6 +416,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
             const SizedBox(height: 24),
 
+            // Save Button
             ElevatedButton(
               onPressed: _isLoading ? null : _saveTransaction,
               style: ElevatedButton.styleFrom(
@@ -462,7 +434,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                           fontSize: 16, fontWeight: FontWeight.bold),
                     ),
             ),
-            const SizedBox(height: 32),
           ],
         ),
       ),
@@ -478,7 +449,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                    builder: (context) => const AccountsScreen()),
+                  builder: (context) => const AccountsScreen(),
+                ),
               );
             },
             icon: const Icon(Icons.add),
@@ -572,12 +544,12 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             child: Text(
               _selectedCategory != null
                   ? _selectedSubcategory != null
-                      ? '$_selectedCategory › $_selectedSubcategory'
+                      ? '$_selectedCategory - $_selectedSubcategory'
                       : _selectedCategory!
                   : 'Select category',
               style: TextStyle(
                 fontSize: 16,
-                color: _selectedCategory != null ? null : Colors.grey,
+                color: _selectedCategory != null ? Colors.black : Colors.grey,
               ),
             ),
           ),
@@ -600,19 +572,23 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         builder: (context, scrollController) {
           return Column(
             children: [
+              // Header
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).cardColor,
-                  border:
-                      Border(bottom: BorderSide(color: Colors.grey[300]!)),
+                  color: Colors.grey[100],
+                  border: Border(bottom: BorderSide(color: Colors.grey[300]!)),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Select Category',
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold)),
+                    const Text(
+                      'Select Category',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     IconButton(
                       icon: const Icon(Icons.close),
                       onPressed: () => Navigator.pop(context),
@@ -620,6 +596,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   ],
                 ),
               ),
+
+              // Categories Grid
               Expanded(
                 child: ListView.builder(
                   controller: scrollController,
@@ -632,90 +610,104 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Category header - tap to select without subcategory
-                        InkWell(
-                          onTap: () {
-                            setState(() {
-                              _selectedCategory = category;
-                              _selectedSubcategory = null;
-                            });
-                            Navigator.pop(context);
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            color: Colors.grey[100],
-                            child: Row(
-                              children: [
-                                Icon(_getCategoryIcon(category),
-                                    color: _type == 'expense'
-                                        ? Colors.red
-                                        : Colors.green),
-                                const SizedBox(width: 12),
-                                Text(category,
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16)),
-                                const Spacer(),
-                                Icon(Icons.chevron_right,
-                                    color: Colors.grey[400], size: 18),
-                              ],
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          color: Colors.grey[200],
+                          child: Row(
+                            children: [
+                              Icon(
+                                _getCategoryIcon(category),
+                                color: _type == 'expense'
+                                    ? Colors.red
+                                    : Colors.green,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                category,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: GridView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 3,
+                              childAspectRatio: 2.5,
+                              crossAxisSpacing: 8,
+                              mainAxisSpacing: 8,
+                            ),
+                            itemCount: subcategories.length,
+                            itemBuilder: (context, subIndex) {
+                              final sub = subcategories[subIndex];
+                              final isSelected =
+                                  _selectedCategory == category &&
+                                      _selectedSubcategory == sub;
+
+                              return OutlinedButton(
+                                onPressed: () {
+                                  setState(() {
+                                    _selectedCategory = category;
+                                    _selectedSubcategory = sub;
+                                  });
+                                  Navigator.pop(context);
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  backgroundColor:
+                                      isSelected ? Colors.blue[50] : null,
+                                  side: BorderSide(
+                                    color: isSelected
+                                        ? Colors.blue
+                                        : Colors.grey[300]!,
+                                    width: isSelected ? 2 : 1,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 4),
+                                ),
+                                child: Text(
+                                  sub,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color:
+                                        isSelected ? Colors.blue : Colors.black,
+                                    fontWeight: isSelected
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: OutlinedButton.icon(
+                            onPressed: () {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                      'Custom categories coming in next update!'),
+                                  backgroundColor: Colors.blue,
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.add),
+                            label: const Text('Add New Category'),
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(48),
                             ),
                           ),
                         ),
-                        if (subcategories.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: subcategories.map((sub) {
-                                final isSelected =
-                                    _selectedCategory == category &&
-                                        _selectedSubcategory == sub;
-                                return InkWell(
-                                  onTap: () {
-                                    setState(() {
-                                      _selectedCategory = category;
-                                      _selectedSubcategory = sub;
-                                    });
-                                    Navigator.pop(context);
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 12, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: isSelected
-                                          ? Theme.of(context)
-                                              .colorScheme
-                                              .primary
-                                              .withOpacity(0.1)
-                                          : Colors.grey[100],
-                                      borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(
-                                        color: isSelected
-                                            ? Theme.of(context)
-                                                .colorScheme
-                                                .primary
-                                            : Colors.grey[300]!,
-                                      ),
-                                    ),
-                                    child: Text(sub,
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: isSelected
-                                              ? Theme.of(context)
-                                                  .colorScheme
-                                                  .primary
-                                              : null,
-                                          fontWeight: isSelected
-                                              ? FontWeight.w600
-                                              : FontWeight.normal,
-                                        )),
-                                  ),
-                                );
-                              }).toList(),
-                            ),
-                          ),
                       ],
                     );
                   },
@@ -745,7 +737,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                         '${account.name} (₹${account.balance.toStringAsFixed(0)})'),
                   ))
               .toList(),
-          onChanged: (value) => setState(() => _fromAccount = value),
+          onChanged: (value) {
+            setState(() {
+              _fromAccount = value;
+            });
+          },
           validator: (value) {
             if (value == null || value.isEmpty) {
               return 'Please select source account';
@@ -786,7 +782,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                         '${account.name} (₹${account.balance.toStringAsFixed(0)})'),
                   ))
               .toList(),
-          onChanged: (value) => setState(() => _toAccount = value),
+          onChanged: (value) {
+            setState(() {
+              _toAccount = value;
+            });
+          },
           validator: (value) {
             if (value == null || value.isEmpty) {
               return 'Please select destination account';
@@ -816,6 +816,16 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     LoadingOverlay.show(context, message: 'Saving...');
 
     try {
+      final tempId = DateTime.now().millisecondsSinceEpoch.toString();
+
+      String? uploadedImageUrl;
+      // if (_receiptImage != null) {
+      //   uploadedImageUrl = await _storageService.uploadReceipt(
+      //     _receiptImage!,
+      //     widget.transaction?.id ?? tempId,
+      //   );
+      // }
+
       final transaction = TransactionModel(
         userId: '',
         id: '',
@@ -837,40 +847,31 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             : (_type == 'income' ? _toAccount : null),
         isRecurring: _isRecurring,
         recurringFrequency: _isRecurring ? _recurringFrequency : null,
-        imageUrl: null,
+        imageUrl: uploadedImageUrl ?? _receiptUrl,
         createdAt: DateTime.now(),
       );
 
       if (widget.transaction != null && !widget.isCopy) {
         await _transactionService.updateTransaction(
-            widget.transaction!.id, transaction);
+          widget.transaction!.id,
+          transaction,
+        );
       } else {
         await _transactionService.addTransaction(transaction);
       }
 
       if (mounted) {
         LoadingOverlay.hide(context);
-        final messenger = ScaffoldMessenger.of(context);
-        Navigator.pop(context);
-        messenger.clearSnackBars();
-        messenger.showSnackBar(
-          SnackBar(
-            content: Row(
-              children: const [
-                Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
-                SizedBox(width: 8),
-                Text('Transaction saved!',
-                    style: TextStyle(color: Colors.white, fontSize: 13)),
-              ],
-            ),
-            backgroundColor: const Color(0xFF2E7D32),
-            behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-            duration: const Duration(seconds: 3),
-          ),
+        CustomSnackBar.show(
+          context,
+          message: widget.isCopy
+              ? 'Transaction copied successfully!'
+              : (widget.transaction != null
+                  ? 'Transaction updated!'
+                  : 'Transaction saved successfully!'),
+          type: SnackBarType.success,
         );
+        Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
@@ -901,21 +902,17 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       case 'Education':
         return Icons.school;
       case 'Personal Care':
-        return Icons.face;
+        return Icons.spa;
       case 'Travel':
         return Icons.flight;
       case 'Salary':
-        return Icons.work;
+        return Icons.account_balance_wallet;
       case 'Business':
         return Icons.business;
       case 'Investments':
         return Icons.trending_up;
-      case 'Freelance':
-        return Icons.computer;
       case 'Gifts':
         return Icons.card_giftcard;
-      case 'Rental Income':
-        return Icons.home;
       default:
         return Icons.category;
     }

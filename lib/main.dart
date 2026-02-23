@@ -8,6 +8,7 @@ import 'providers/theme_provider.dart';
 import 'services/theme_service.dart';
 import 'services/recurring_transaction_service.dart';
 import 'services/recurring_transfer_service.dart';
+import 'services/notification_service.dart';
 import 'screens/recurring_transactions_screen.dart';
 
 void main() async {
@@ -16,14 +17,16 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
+  // Initialize theme service
   final themeService = ThemeService();
   await themeService.loadSettings();
+
+  // Initialize notifications (Android only, safe on web)
+  await NotificationService().initialize();
 
   runApp(
     MultiProvider(
       providers: [
-        // ThemeService is the single source of truth for dark mode
-        ChangeNotifierProvider<ThemeService>.value(value: themeService),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
       ],
       child: MyApp(themeService: themeService),
@@ -33,20 +36,19 @@ void main() async {
 
 class MyApp extends StatelessWidget {
   final ThemeService themeService;
-
   const MyApp({super.key, required this.themeService});
 
   @override
   Widget build(BuildContext context) {
-    // Consumer<ThemeService> rebuilds MaterialApp when toggleDarkMode() is called
-    return Consumer<ThemeService>(
-      builder: (context, theme, _) {
+    return AnimatedBuilder(
+      animation: themeService,
+      builder: (context, child) {
         return MaterialApp(
           title: 'Money Manager',
           debugShowCheckedModeBanner: false,
-          theme: theme.lightTheme,
-          darkTheme: theme.darkTheme,
-          themeMode: theme.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+          theme: themeService.lightTheme,
+          darkTheme: themeService.darkTheme,
+          themeMode: themeService.isDarkMode ? ThemeMode.dark : ThemeMode.light,
           home: const AppInitializer(),
           routes: {
             '/accounts': (context) => const AccountsScreen(),
@@ -67,28 +69,44 @@ class AppInitializer extends StatefulWidget {
 
 class _AppInitializerState extends State<AppInitializer> {
   bool _initialized = false;
+  bool _error = false;
 
   @override
   void initState() {
     super.initState();
-    _init();
+    _initializeApp();
   }
 
-  Future<void> _init() async {
+  Future<void> _initializeApp() async {
     try {
-      await RecurringTransactionService().checkAndExecuteRecurring();
-      await RecurringTransferService().processRecurringTransfers();
+      final recurringTransactionService = RecurringTransactionService();
+      final recurringTransferService = RecurringTransferService();
+      await recurringTransactionService.checkAndExecuteRecurring();
+      await recurringTransferService.processRecurringTransfers();
+      setState(() => _initialized = true);
     } catch (e) {
-      debugPrint('Recurring init error: $e');
+      setState(() => _error = true);
+      debugPrint('Initialization error: $e');
     }
-    if (mounted) setState(() => _initialized = true);
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_error) {
+      return const Scaffold(body: Center(child: Text('Error initializing app')));
+    }
     if (!_initialized) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text('Loading Money Manager...', style: TextStyle(color: Colors.grey.shade600)),
+            ],
+          ),
+        ),
       );
     }
     return const AuthWrapper();

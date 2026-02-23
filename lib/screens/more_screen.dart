@@ -19,6 +19,7 @@ import 'bill_reminders_screen.dart';
 import 'financial_insights_screen.dart';
 import 'sip_insurance_screen.dart';
 import 'predict_savings_screen.dart';
+import 'notification_settings_screen.dart';
 
 class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
@@ -52,6 +53,18 @@ class MoreScreen extends StatelessWidget {
             },
           ),
 
+          // ── Notification Settings ──────────────────────────────────────────
+          _buildMenuItem(
+            context,
+            icon: Icons.notifications_active,
+            title: 'Notification Settings',
+            subtitle: 'Bills, daily summary & goal alerts',
+            color: const Color(0xFF00838F),
+            onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const NotificationSettingsScreen())),
+          ),
           // ── Bill Reminders ─────────────────────────────────────────────────
           StreamBuilder<int>(
             stream: billService.getOverdueCount(),

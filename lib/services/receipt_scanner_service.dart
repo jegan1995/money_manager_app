@@ -29,7 +29,7 @@ class ScannedReceiptData {
 
 class ReceiptScannerService {
   static const _geminiUrl =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
   static const _validCategories = [
     'Food & Dining',

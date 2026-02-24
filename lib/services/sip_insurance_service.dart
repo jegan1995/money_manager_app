@@ -66,7 +66,7 @@ class SipColor {
 
 class SipInsuranceService {
   static const _geminiUrl =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
   /// Build financial profile from last 3 months of transactions
   static FinancialProfile buildProfile(
@@ -207,7 +207,7 @@ class SipInsuranceService {
         title: 'Start a Monthly SIP',
         subtitle:
             '₹${sipAmount.toStringAsFixed(0)}/month can grow to ₹${_formatCrore(futureValue)} in $years years',
-        body: _sipBodyByAge(age, sipAmount.toDouble(), income),
+        body: _sipBodyByAge(age, sipAmount, income),
         actionLabel: 'Suggested SIP',
         actionValue: '₹${sipAmount.toStringAsFixed(0)}/month',
       ));

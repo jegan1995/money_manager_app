@@ -29,7 +29,7 @@ class ScannedReceiptData {
 
 class ReceiptScannerService {
   static const _geminiUrl =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent';
 
   static const _validCategories = [
     'Food & Dining',
@@ -121,10 +121,20 @@ Respond with exactly this JSON format:
           .timeout(const Duration(seconds: 30));
 
       if (response.statusCode != 200) {
+        // Extract real error message from API response
+        String errDetail = '';
+        try {
+          final errJson = jsonDecode(response.body);
+          errDetail = errJson['error']?['message'] ?? '';
+        } catch (_) {
+          errDetail = response.body.length > 150
+              ? response.body.substring(0, 150)
+              : response.body;
+        }
         return ScannedReceiptData(
           rawResponse: response.body,
           success: false,
-          error: 'API error ${response.statusCode}. Check your API key.',
+          error: 'API ${response.statusCode}: $errDetail',
         );
       }
 

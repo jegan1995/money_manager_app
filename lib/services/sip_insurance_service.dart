@@ -190,7 +190,7 @@ class SipInsuranceService {
 
     // ── 4. SIP Suggestions ───────────────────────────────────────────────────
     if (savings > 0) {
-      final sipAmount = (savings * 0.6).clamp(500, 50000); // 60% of savings
+      final sipAmount = (savings * 0.6).clamp(500, 50000).toDouble(); // 60% of savings
       final sipReturn = 12.0; // assumed CAGR %
       final years = (60 - age).clamp(5, 35).toDouble();
       final months = years * 12;
@@ -216,7 +216,7 @@ class SipInsuranceService {
     // ── 5. PPF / NPS ─────────────────────────────────────────────────────────
     if (income > 20000 && age < 50) {
       final ppfAmount =
-          (income * 0.1).clamp(500, 12500); // Max 1.5L/year
+          (income * 0.1).clamp(500, 12500).toDouble(); // Max 1.5L/year
       cards.add(SuggestionCard(
         emoji: '💼',
         type: 'tax',

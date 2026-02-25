@@ -1,4 +1,7 @@
 import '../utils/categories.dart';
+import '../models/custom_category_model.dart';
+import '../services/custom_category_service.dart';
+import 'custom_categories_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
@@ -12,8 +15,6 @@ import '../widgets/loading_overlay.dart';
 import 'dart:typed_data';
 import '../services/storage_service.dart';
 import '../widgets/receipt_picker.dart';
-import 'receipt_scanner_screen.dart';
-import '../services/receipt_scanner_service.dart';
 
 class AddTransactionScreen extends StatefulWidget {
   final TransactionModel? transaction;
@@ -33,6 +34,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   final _formKey = GlobalKey<FormState>();
   final TransactionService _transactionService = TransactionService();
   final AccountService _accountService = AccountService();
+  final CustomCategoryService _customCatSvc = CustomCategoryService();
 
   // Receipt fields
   final StorageService _storageService = StorageService();
@@ -85,68 +87,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     }
   }
 
-
-
-  bool _scannedDataApplied = false;
-
-  Future<void> _openReceiptScanner() async {
-    final result = await Navigator.push<ScannedReceiptData>(
-      context,
-      MaterialPageRoute(builder: (_) => const ReceiptScannerScreen()),
-    );
-    if (result == null || !result.success) return;
-
-    setState(() {
-      // Fill amount
-      if (result.amount != null) {
-        _amountController.text = result.amount!.toStringAsFixed(2);
-      }
-      // Fill category
-      if (result.category != null) {
-        _selectedCategory = result.category;
-        _selectedSubcategory = null;
-      }
-      // Fill note
-      if (result.note != null && _noteController.text.isEmpty) {
-        _noteController.text = result.note!;
-      }
-      // Fill date
-      if (result.date != null) {
-        try {
-          _selectedDate = DateTime.parse(result.date!);
-        } catch (_) {}
-      }
-      // Fill payment method
-      if (result.paymentMethod != null) {
-        _paymentMethod = result.paymentMethod;
-      }
-      // Set type to expense (receipts are usually expenses)
-      _type = 'expense';
-      _scannedDataApplied = true;
-    });
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Row(
-          children: [
-            const Text('✅ '),
-            Expanded(
-              child: Text(
-                'Receipt scanned! ${result.merchant != null ? "From ${result.merchant}. " : ""}Review & save.',
-                style: const TextStyle(color: Colors.white),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: Colors.green,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-        duration: const Duration(seconds: 4),
-      ));
-    }
-  }
-
   void _loadAccounts() {
     _accountService.getAccounts().listen((accountsList) {
       setState(() {
@@ -178,59 +118,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // ── Scan Receipt banner ──────────────────────────────────────────
-            if (widget.transaction == null && !widget.isCopy)
-              Container(
-                margin: const EdgeInsets.only(bottom: 20),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF0D47A1), Color(0xFF1976D2)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(14),
-                    onTap: _openReceiptScanner,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.15),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Text('📷', style: TextStyle(fontSize: 20)),
-                          ),
-                          const SizedBox(width: 14),
-                          const Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Scan Receipt',
-                                    style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 15)),
-                                Text('AI reads amount & category automatically',
-                                    style: TextStyle(
-                                        color: Colors.white70, fontSize: 12)),
-                              ],
-                            ),
-                          ),
-                          const Icon(Icons.chevron_right, color: Colors.white70),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-
             // Type Selector
             SegmentedButton<String>(
               segments: const [
@@ -559,162 +446,20 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   }
 
   void _showCategoryPicker() {
-    final categories = Categories.getMainCategories(_type);
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.9,
-        minChildSize: 0.5,
-        maxChildSize: 0.95,
-        expand: false,
-        builder: (context, scrollController) {
-          return Column(
-            children: [
-              // Header
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  border: Border(bottom: BorderSide(color: Colors.grey[300]!)),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Select Category',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Categories Grid
-              Expanded(
-                child: ListView.builder(
-                  controller: scrollController,
-                  itemCount: categories.length,
-                  itemBuilder: (context, index) {
-                    final category = categories[index];
-                    final subcategories =
-                        Categories.getSubcategories(_type, category);
-
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          color: Colors.grey[200],
-                          child: Row(
-                            children: [
-                              Icon(
-                                _getCategoryIcon(category),
-                                color: _type == 'expense'
-                                    ? Colors.red
-                                    : Colors.green,
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                category,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.all(8),
-                          child: GridView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            gridDelegate:
-                                const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 3,
-                              childAspectRatio: 2.5,
-                              crossAxisSpacing: 8,
-                              mainAxisSpacing: 8,
-                            ),
-                            itemCount: subcategories.length,
-                            itemBuilder: (context, subIndex) {
-                              final sub = subcategories[subIndex];
-                              final isSelected =
-                                  _selectedCategory == category &&
-                                      _selectedSubcategory == sub;
-
-                              return OutlinedButton(
-                                onPressed: () {
-                                  setState(() {
-                                    _selectedCategory = category;
-                                    _selectedSubcategory = sub;
-                                  });
-                                  Navigator.pop(context);
-                                },
-                                style: OutlinedButton.styleFrom(
-                                  backgroundColor:
-                                      isSelected ? Colors.blue[50] : null,
-                                  side: BorderSide(
-                                    color: isSelected
-                                        ? Colors.blue
-                                        : Colors.grey[300]!,
-                                    width: isSelected ? 2 : 1,
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 4),
-                                ),
-                                child: Text(
-                                  sub,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color:
-                                        isSelected ? Colors.blue : Colors.black,
-                                    fontWeight: isSelected
-                                        ? FontWeight.bold
-                                        : FontWeight.normal,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: OutlinedButton.icon(
-                            onPressed: () {
-                              Navigator.pop(context);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                      'Custom categories coming in next update!'),
-                                  backgroundColor: Colors.blue,
-                                ),
-                              );
-                            },
-                            icon: const Icon(Icons.add),
-                            label: const Text('Add New Category'),
-                            style: OutlinedButton.styleFrom(
-                              minimumSize: const Size.fromHeight(48),
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-              ),
-            ],
-          );
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _CategoryPickerSheet(
+        type: _type,
+        selectedCategory: _selectedCategory,
+        selectedSubcategory: _selectedSubcategory,
+        customCatSvc: _customCatSvc,
+        onSelected: (cat, sub) {
+          setState(() {
+            _selectedCategory = cat;
+            _selectedSubcategory = sub;
+          });
         },
       ),
     );
@@ -916,5 +661,380 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       default:
         return Icons.category;
     }
+  }
+}
+
+
+
+// ── Category Picker Bottom Sheet ─────────────────────────────────────────────
+class _CategoryPickerSheet extends StatefulWidget {
+  final String type;
+  final String? selectedCategory;
+  final String? selectedSubcategory;
+  final CustomCategoryService customCatSvc;
+  final void Function(String category, String? subcategory) onSelected;
+
+  const _CategoryPickerSheet({
+    required this.type,
+    required this.selectedCategory,
+    required this.selectedSubcategory,
+    required this.customCatSvc,
+    required this.onSelected,
+  });
+
+  @override
+  State<_CategoryPickerSheet> createState() => _CategoryPickerSheetState();
+}
+
+class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
+  List<CustomCategory> _customCats = [];
+  bool _loadingCustom = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCustom();
+  }
+
+  Future<void> _loadCustom() async {
+    final cats = await widget.customCatSvc.getCategoriesOnce(type: widget.type);
+    if (mounted) setState(() { _customCats = cats; _loadingCustom = false; });
+  }
+
+  Color get _accentColor =>
+      widget.type == 'expense' ? Colors.red : Colors.green;
+
+  @override
+  Widget build(BuildContext context) {
+    final builtIn  = Categories.getMainCategories(widget.type);
+    final isDark   = Theme.of(context).brightness == Brightness.dark;
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.92,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (ctx, scrollCtrl) {
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E2530) : Colors.white,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              // Handle
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.only(top: 10),
+                  width: 40, height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[400],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              // Header
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+                child: Row(
+                  children: [
+                    Text('Select Category',
+                        style: const TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold)),
+                    const Spacer(),
+                    TextButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) =>
+                                  const CustomCategoriesScreen()),
+                        );
+                      },
+                      icon: const Icon(Icons.edit, size: 14),
+                      label: const Text('Manage', style: TextStyle(fontSize: 12)),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+
+              Expanded(
+                child: ListView(
+                  controller: scrollCtrl,
+                  children: [
+
+                    // ── Custom categories (if any) ────────────────────────────
+                    if (_loadingCustom)
+                      const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Center(
+                            child: CircularProgressIndicator(strokeWidth: 2)),
+                      )
+                    else if (_customCats.isNotEmpty) ...[
+                      _sectionHeader('⭐ My Categories', _accentColor),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: _customCats.map((cat) {
+                            final isSel = widget.selectedCategory == cat.name;
+                            return GestureDetector(
+                              onTap: () {
+                                widget.onSelected(cat.name, null);
+                                Navigator.pop(context);
+                                // If has subcategories, show sub-picker
+                                if (cat.subcategories.isNotEmpty) {
+                                  _showSubPicker(context, cat.name,
+                                      cat.subcategories, cat.color);
+                                }
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 150),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: isSel
+                                      ? cat.color
+                                      : cat.color.withOpacity(0.08),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                      color: cat.color.withOpacity(0.4)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(cat.emoji,
+                                        style: const TextStyle(fontSize: 18)),
+                                    const SizedBox(width: 6),
+                                    Text(cat.name,
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                            color: isSel
+                                                ? Colors.white
+                                                : cat.color)),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      const Divider(),
+                    ],
+
+                    // ── Built-in categories ───────────────────────────────────
+                    _sectionHeader('📋 Default Categories', Colors.grey),
+                    ...builtIn.map((cat) {
+                      final subs    = Categories.getSubcategories(widget.type, cat);
+                      final isSel   = widget.selectedCategory == cat;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Category header row
+                          InkWell(
+                            onTap: () {
+                              widget.onSelected(cat, null);
+                              Navigator.pop(context);
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 12),
+                              color: isSel
+                                  ? _accentColor.withOpacity(0.08)
+                                  : isDark
+                                      ? const Color(0xFF252D3A)
+                                      : Colors.grey[100],
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 36, height: 36,
+                                    decoration: BoxDecoration(
+                                      color: _accentColor.withOpacity(0.12),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      _builtInIcon(cat),
+                                      color: _accentColor, size: 18,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(cat,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 15)),
+                                  ),
+                                  if (isSel)
+                                    Icon(Icons.check_circle,
+                                        color: _accentColor, size: 20),
+                                ],
+                              ),
+                            ),
+                          ),
+                          // Subcategory chips
+                          if (subs.isNotEmpty)
+                            Padding(
+                              padding:
+                                  const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                              child: Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: subs.map((sub) {
+                                  final isSubSel =
+                                      widget.selectedCategory == cat &&
+                                          widget.selectedSubcategory == sub;
+                                  return GestureDetector(
+                                    onTap: () {
+                                      widget.onSelected(cat, sub);
+                                      Navigator.pop(context);
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: isSubSel
+                                            ? _accentColor
+                                            : _accentColor.withOpacity(0.07),
+                                        borderRadius:
+                                            BorderRadius.circular(16),
+                                        border: Border.all(
+                                            color: _accentColor.withOpacity(
+                                                0.25)),
+                                      ),
+                                      child: Text(sub,
+                                          style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w500,
+                                              color: isSubSel
+                                                  ? Colors.white
+                                                  : _accentColor)),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+                          const Divider(height: 1),
+                        ],
+                      );
+                    }),
+
+                    // ── Add custom category button ─────────────────────────────
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const CustomCategoriesScreen()),
+                          );
+                        },
+                        icon: Icon(Icons.add, color: _accentColor),
+                        label: Text('Create Custom Category',
+                            style: TextStyle(color: _accentColor)),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(48),
+                          side: BorderSide(
+                              color: _accentColor.withOpacity(0.5)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _sectionHeader(String label, Color color) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+        child: Text(label,
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: color)),
+      );
+
+  IconData _builtInIcon(String cat) {
+    switch (cat) {
+      case 'Food & Dining':   return Icons.restaurant;
+      case 'Shopping':        return Icons.shopping_bag;
+      case 'Transportation':  return Icons.directions_car;
+      case 'Entertainment':   return Icons.movie;
+      case 'Bills & Utilities': return Icons.receipt_long;
+      case 'Healthcare':      return Icons.medical_services;
+      case 'Education':       return Icons.school;
+      case 'Personal Care':   return Icons.face;
+      case 'Travel':          return Icons.flight;
+      case 'Salary':          return Icons.work;
+      case 'Business':        return Icons.business;
+      case 'Investments':     return Icons.trending_up;
+      case 'Freelance':       return Icons.computer;
+      case 'Rental Income':   return Icons.home;
+      case 'Gifts':           return Icons.card_giftcard;
+      default:                return Icons.category;
+    }
+  }
+
+  void _showSubPicker(BuildContext context, String catName,
+      List<String> subs, Color color) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('$catName — pick subcategory',
+                style: const TextStyle(
+                    fontSize: 15, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: subs.map((s) => GestureDetector(
+                    onTap: () {
+                      widget.onSelected(catName, s);
+                      Navigator.pop(context);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: color.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(16),
+                        border:
+                            Border.all(color: color.withOpacity(0.3)),
+                      ),
+                      child: Text(s,
+                          style: TextStyle(
+                              fontSize: 13, color: color)),
+                    ),
+                  )).toList(),
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
   }
 }

@@ -23,6 +23,7 @@ import 'predict_savings_screen.dart';
 import 'notification_settings_screen.dart';
 import 'pin_setup_screen.dart';
 import 'emi_calculator_screen.dart';
+import 'custom_categories_screen.dart';
 import 'net_worth_screen.dart';
 
 class MoreScreen extends StatelessWidget {
@@ -102,6 +103,14 @@ class MoreScreen extends StatelessWidget {
             color: const Color(0xFF1A237E),
             onTap: () => Navigator.push(context,
                 MaterialPageRoute(builder: (_) => const NetWorthScreen()))),
+
+          _item(context,
+            icon: Icons.label,
+            title: 'Custom Categories',
+            subtitle: 'Create your own expense & income categories',
+            color: const Color(0xFF6A1B9A),
+            onTap: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const CustomCategoriesScreen()))),
 
           const Divider(),
 

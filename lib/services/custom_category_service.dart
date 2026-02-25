@@ -23,7 +23,6 @@ class CustomCategoryService {
     }
 
     return query
-        .orderBy('createdAt', descending: false)
         .snapshots()
         .map((s) => s.docs.map(CustomCategory.fromFirestore).toList());
   }
@@ -41,7 +40,7 @@ class CustomCategoryService {
       query = query.where('type', isEqualTo: type);
     }
 
-    final snap = await query.orderBy('createdAt').get();
+    final snap = await query.get();
     return snap.docs.map(CustomCategory.fromFirestore).toList();
   }
 
@@ -69,19 +68,11 @@ class CustomCategoryService {
     await _db.collection(_col).doc(id).delete();
   }
 
-  // ── Check name uniqueness ───────────────────────────────────────────────────
+  // ── Check name uniqueness (client-side to avoid composite index) ───────────
   Future<bool> nameExists(String name, String type, {String? excludeId}) async {
-    final uid = _uid;
-    if (uid == null) return false;
-    final snap = await _db
-        .collection(_col)
-        .where('userId', isEqualTo: uid)
-        .where('type', isEqualTo: type)
-        .where('name', isEqualTo: name.trim())
-        .get();
-    if (excludeId != null) {
-      return snap.docs.any((d) => d.id != excludeId);
-    }
-    return snap.docs.isNotEmpty;
+    final cats = await getCategoriesOnce(type: type);
+    return cats.any((c) =>
+        c.name.toLowerCase() == name.trim().toLowerCase() &&
+        c.id != excludeId);
   }
 }

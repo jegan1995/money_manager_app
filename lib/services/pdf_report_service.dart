@@ -177,21 +177,24 @@ class PdfReportService {
                     ],
                   ),
                   pw.SizedBox(height: 3),
-                  pw.Stack(children: [
-                    pw.Container(
-                        height: 7,
-                        decoration: pw.BoxDecoration(
-                            color: divider,
-                            borderRadius: pw.BorderRadius.circular(4))),
-                    pw.FractionallySizedBox(
-                      widthFactor: pct.clamp(0.01, 1.0),
-                      child: pw.Container(
-                          height: 7,
+                  pw.LayoutBuilder(
+                    builder: (ctx, constraints) {
+                      final totalW = constraints.maxWidth;
+                      final fillW  = (totalW * pct.clamp(0.01, 1.0));
+                      return pw.Stack(children: [
+                        pw.Container(
+                          width: totalW, height: 7,
+                          decoration: pw.BoxDecoration(
+                              color: divider,
+                              borderRadius: pw.BorderRadius.circular(4))),
+                        pw.Container(
+                          width: fillW, height: 7,
                           decoration: pw.BoxDecoration(
                               color: red,
                               borderRadius: pw.BorderRadius.circular(4))),
-                    ),
-                  ]),
+                      ]);
+                    },
+                  ),
                 ],
               ),
             );

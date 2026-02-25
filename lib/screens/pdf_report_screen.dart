@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:intl/intl.dart';
 import '../models/transaction_model.dart';
 import '../models/account_model.dart';
@@ -248,7 +249,7 @@ class _PdfReportScreenState extends State<PdfReportScreen> {
                                   ? const SizedBox(width: 18, height: 18,
                                       child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                                   : const Icon(Icons.preview),
-                              label: Text(_previewing ? 'Opening preview...' : '👁️  Preview PDF'),
+                              label: Text(_previewing ? 'Opening...' : kIsWeb ? '⬇️  Download PDF' : '👁️  Preview PDF'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF1565C0),
                                 foregroundColor: Colors.white,

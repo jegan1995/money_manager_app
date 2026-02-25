@@ -12,32 +12,15 @@ import '../models/transaction_model.dart';
 import '../models/account_model.dart';
 
 class PdfReportService {
-  // ── Generate, preview in-app ───────────────────────────────────────────────
+
+  // ── Preview: web = download, Android = in-app viewer ──────────────────────
   static Future<void> previewPdf({
     required List<TransactionModel> transactions,
     required List<AccountModel> accounts,
     required DateTime month,
     required String userName,
   }) async {
-    await Printing.layoutPdf(
-      onLayout: (_) async => _buildPdf(
-        transactions: transactions,
-        accounts: accounts,
-        month: month,
-        userName: userName,
-      ),
-      name: 'MoneyManager_${DateFormat('MMM_yyyy').format(month)}_Report',
-    );
-  }
-
-  // ── Generate and share/download ────────────────────────────────────────────
-  static Future<void> generateAndShare({
-    required List<TransactionModel> transactions,
-    required List<AccountModel> accounts,
-    required DateTime month,
-    required String userName,
-  }) async {
-    final pdfBytes = await _buildPdf(
+    final bytes = await _buildPdf(
       transactions: transactions,
       accounts: accounts,
       month: month,
@@ -47,7 +30,40 @@ class PdfReportService {
         'MoneyManager_${DateFormat('MMM_yyyy').format(month)}_Report.pdf';
 
     if (kIsWeb) {
-      final blob = html.Blob([pdfBytes], 'application/pdf');
+      // Web: download directly (Printing.layoutPdf not supported on web)
+      final blob = html.Blob([bytes], 'application/pdf');
+      final url  = html.Url.createObjectUrlFromBlob(blob);
+      html.AnchorElement(href: url)
+        ..setAttribute('download', filename)
+        ..click();
+      html.Url.revokeObjectUrl(url);
+    } else {
+      // Android: show in-app PDF viewer
+      await Printing.layoutPdf(
+        onLayout: (_) async => bytes,
+        name: filename,
+      );
+    }
+  }
+
+  // ── Share (Android share sheet / Web download) ─────────────────────────────
+  static Future<void> generateAndShare({
+    required List<TransactionModel> transactions,
+    required List<AccountModel> accounts,
+    required DateTime month,
+    required String userName,
+  }) async {
+    final bytes = await _buildPdf(
+      transactions: transactions,
+      accounts: accounts,
+      month: month,
+      userName: userName,
+    );
+    final filename =
+        'MoneyManager_${DateFormat('MMM_yyyy').format(month)}_Report.pdf';
+
+    if (kIsWeb) {
+      final blob = html.Blob([bytes], 'application/pdf');
       final url  = html.Url.createObjectUrlFromBlob(blob);
       html.AnchorElement(href: url)
         ..setAttribute('download', filename)
@@ -56,16 +72,15 @@ class PdfReportService {
     } else {
       final dir  = await getTemporaryDirectory();
       final file = File('${dir.path}/$filename');
-      await file.writeAsBytes(pdfBytes);
+      await file.writeAsBytes(bytes);
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'application/pdf')],
-        subject:
-            'Money Manager — ${DateFormat('MMMM yyyy').format(month)} Report',
+        subject: 'Money Manager - ${DateFormat('MMMM yyyy').format(month)} Report',
       );
     }
   }
 
-  // ── Core PDF builder ───────────────────────────────────────────────────────
+  // ── PDF Builder ────────────────────────────────────────────────────────────
   static Future<Uint8List> _buildPdf({
     required List<TransactionModel> transactions,
     required List<AccountModel> accounts,
@@ -87,7 +102,7 @@ class PdfReportService {
     final totalExpense = expenses.fold(0.0, (s, t) => s + t.amount);
     final netSavings   = totalIncome - totalExpense;
 
-    // Category map
+    // Category breakdown for expenses
     final catMap = <String, double>{};
     for (final t in expenses) {
       catMap[t.category] = (catMap[t.category] ?? 0) + t.amount;
@@ -95,68 +110,76 @@ class PdfReportService {
     final sortedCats = catMap.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
-    final monthLabel   = DateFormat('MMMM yyyy').format(month);
-    final generatedOn  = DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.now());
+    final monthLabel  = DateFormat('MMMM yyyy').format(month);
+    final generatedOn = DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.now());
 
-    // Colors
-    const primary    = PdfColor.fromInt(0xFF1565C0);
-    const green      = PdfColor.fromInt(0xFF2E7D32);
-    const red        = PdfColor.fromInt(0xFFC62828);
-    const greyText   = PdfColor.fromInt(0xFF757575);
-    const darkText   = PdfColor.fromInt(0xFF212121);
-    const divider    = PdfColor.fromInt(0xFFE0E0E0);
-    const lightBg    = PdfColor.fromInt(0xFFF5F6FA);
+    // ── Solid colors (no opacity tricks — avoids rendering issues) ────────────
+    const cPrimary  = PdfColors.indigo800;
+    const cGreen    = PdfColors.green800;
+    const cRed      = PdfColors.red800;
+    const cGreenBg  = PdfColors.green50;
+    const cRedBg    = PdfColors.red50;
+    const cBlueBg   = PdfColors.indigo50;
+    const cGrey     = PdfColors.grey600;
+    const cDark     = PdfColors.grey900;
+    const cDivider  = PdfColors.grey300;
+    const cWhite    = PdfColors.white;
+    const cAltRow   = PdfColors.grey50;
 
     // ── Page 1: Summary ───────────────────────────────────────────────────────
     pdf.addPage(pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.all(32),
-      header: (_) => _header(monthLabel, userName, primary, greyText),
-      footer: (ctx) => _footer(ctx, generatedOn, greyText),
+      header: (_) => _header(monthLabel, userName, cPrimary, cGrey),
+      footer: (ctx) => _footer(ctx, generatedOn, cGrey),
       build: (_) => [
         pw.SizedBox(height: 10),
 
-        // Summary cards
+        // ── 3 summary cards ─────────────────────────────────────────────────
         pw.Row(children: [
-          _card('Total Income',  _fmt(totalIncome),  green, '↑'),
+          _card('Total Income',  _fmtPdf(totalIncome),
+                cGreen, cGreenBg, '+'),
           pw.SizedBox(width: 10),
-          _card('Total Expense', _fmt(totalExpense), red,   '↓'),
+          _card('Total Expense', _fmtPdf(totalExpense),
+                cRed, cRedBg, '-'),
           pw.SizedBox(width: 10),
-          _card('Net Savings',   _fmt(netSavings),
-              netSavings >= 0 ? green : red,
-              netSavings >= 0 ? '✓' : '!'),
+          _card('Net Savings',   _fmtPdf(netSavings),
+                netSavings >= 0 ? cGreen : cRed,
+                netSavings >= 0 ? cGreenBg : cRedBg,
+                netSavings >= 0 ? '=' : '!'),
         ]),
 
-        pw.SizedBox(height: 16),
+        pw.SizedBox(height: 14),
 
-        // Savings rate banner
+        // ── Savings rate banner ─────────────────────────────────────────────
         if (totalIncome > 0)
           pw.Container(
-            padding: const pw.EdgeInsets.all(10),
+            padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: pw.BoxDecoration(
-              color: netSavings >= 0 ? lightBg : PdfColor.fromInt(0xFFFFF8E1),
+              color: netSavings >= 0 ? cGreenBg : cRedBg,
               borderRadius: pw.BorderRadius.circular(6),
               border: pw.Border.all(
-                  color: netSavings >= 0 ? green : red, width: 0.5),
+                  color: netSavings >= 0 ? cGreen : cRed, width: 0.5),
             ),
             child: pw.Text(
-              'Savings Rate: ${(netSavings / totalIncome * 100).toStringAsFixed(1)}%  •  '
-              '${netSavings >= 0 ? 'You saved' : 'Overspent by'} ${_fmt(netSavings.abs())} this month  •  '
-              '${monthTxns.length} transactions recorded',
+              'Savings Rate: ${(netSavings / totalIncome * 100).toStringAsFixed(1)}%  |  '
+              '${netSavings >= 0 ? 'Saved' : 'Overspent by'} ${_fmtPdf(netSavings.abs())} this month  |  '
+              '${monthTxns.length} transactions',
               style: pw.TextStyle(
                   fontSize: 10,
-                  color: netSavings >= 0 ? green : red),
+                  color: netSavings >= 0 ? cGreen : cRed),
             ),
           ),
 
         pw.SizedBox(height: 20),
 
-        // Category breakdown
+        // ── Category breakdown ──────────────────────────────────────────────
         if (sortedCats.isNotEmpty) ...[
-          _sectionTitle('Expense by Category', red),
+          _sectionTitle('Expense by Category', cRed, cRedBg),
           pw.SizedBox(height: 10),
           ...sortedCats.take(12).map((e) {
-            final pct = totalExpense > 0 ? (e.value / totalExpense) : 0.0;
+            final pct    = totalExpense > 0 ? (e.value / totalExpense) : 0.0;
+            final fillW  = (531 * pct.clamp(0.01, 1.0));
             return pw.Padding(
               padding: const pw.EdgeInsets.only(bottom: 9),
               child: pw.Column(
@@ -166,28 +189,27 @@ class PdfReportService {
                     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                     children: [
                       pw.Text(e.key,
-                          style: pw.TextStyle(fontSize: 10, color: darkText)),
+                          style: pw.TextStyle(fontSize: 10, color: cDark)),
                       pw.Text(
-                        '${_fmt(e.value)}   ${(pct * 100).toStringAsFixed(1)}%',
+                        '${_fmtPdf(e.value)}   ${(pct * 100).toStringAsFixed(1)}%',
                         style: pw.TextStyle(
                             fontSize: 10,
                             fontWeight: pw.FontWeight.bold,
-                            color: red),
+                            color: cRed),
                       ),
                     ],
                   ),
-                  pw.SizedBox(height: 3),
+                  pw.SizedBox(height: 4),
                   pw.Stack(children: [
                     pw.Container(
                       width: 531, height: 7,
                       decoration: pw.BoxDecoration(
-                          color: divider,
+                          color: cDivider,
                           borderRadius: pw.BorderRadius.circular(4))),
                     pw.Container(
-                      width: (531 * pct.clamp(0.01, 1.0)),
-                      height: 7,
+                      width: fillW, height: 7,
                       decoration: pw.BoxDecoration(
-                          color: red,
+                          color: cRed,
                           borderRadius: pw.BorderRadius.circular(4))),
                   ]),
                 ],
@@ -198,28 +220,41 @@ class PdfReportService {
 
         pw.SizedBox(height: 20),
 
-        // Account balances
+        // ── Account Balances ────────────────────────────────────────────────
         if (accounts.isNotEmpty) ...[
-          _sectionTitle('Account Balances', primary),
+          _sectionTitle('Account Balances', cPrimary, cBlueBg),
           pw.SizedBox(height: 8),
           pw.Table(
-            border: pw.TableBorder.all(color: divider, width: 0.5),
+            border: pw.TableBorder.all(color: cDivider, width: 0.5),
+            columnWidths: {
+              0: const pw.FlexColumnWidth(3),
+              1: const pw.FlexColumnWidth(2),
+              2: const pw.FlexColumnWidth(2),
+            },
             children: [
               pw.TableRow(
-                decoration: const pw.BoxDecoration(color: primary),
+                decoration: const pw.BoxDecoration(color: cPrimary),
                 children: [
-                  _th('Account', PdfColors.white),
-                  _th('Type',    PdfColors.white),
-                  _th('Balance', PdfColors.white),
+                  _th('Account', cWhite),
+                  _th('Type',    cWhite),
+                  _th('Balance', cWhite),
                 ],
               ),
-              ...accounts.map((a) => pw.TableRow(children: [
+              ...accounts.asMap().entries.map((entry) {
+                final a    = entry.value;
+                final even = entry.key % 2 == 0;
+                return pw.TableRow(
+                  decoration: pw.BoxDecoration(
+                      color: even ? cWhite : cAltRow),
+                  children: [
                     _td(a.name),
                     _td(a.typeDisplayName),
-                    _td(_fmt(a.balance),
-                        color: a.balance >= 0 ? green : red,
+                    _td(_fmtPdf(a.balance),
+                        color: a.balance >= 0 ? cGreen : cRed,
                         bold: true),
-                  ])),
+                  ],
+                );
+              }),
             ],
           ),
         ],
@@ -232,39 +267,37 @@ class PdfReportService {
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(32),
         header: (_) =>
-            _header('$monthLabel — Transactions', userName, primary, greyText),
-        footer: (ctx) => _footer(ctx, generatedOn, greyText),
+            _header('$monthLabel - Transactions', userName, cPrimary, cGrey),
+        footer: (ctx) => _footer(ctx, generatedOn, cGrey),
         build: (_) => [
           pw.SizedBox(height: 10),
 
           if (income.isNotEmpty) ...[
-            _sectionTitle('Income  (${income.length} entries)', green),
+            _sectionTitle('Income  (${income.length} entries)', cGreen, cGreenBg),
             pw.SizedBox(height: 6),
-            _txnTable(income, green, divider, greyText),
+            _txnTable(income, cGreen, cGreenBg, cDivider, cGrey, cAltRow),
             pw.SizedBox(height: 4),
             pw.Align(
               alignment: pw.Alignment.centerRight,
-              child: pw.Text('Total: ${_fmt(totalIncome)}',
+              child: pw.Text('Total Income: ${_fmtPdf(totalIncome)}',
                   style: pw.TextStyle(
                       fontWeight: pw.FontWeight.bold,
-                      color: green,
-                      fontSize: 11)),
+                      color: cGreen, fontSize: 11)),
             ),
             pw.SizedBox(height: 20),
           ],
 
           if (expenses.isNotEmpty) ...[
-            _sectionTitle('Expenses  (${expenses.length} entries)', red),
+            _sectionTitle('Expenses  (${expenses.length} entries)', cRed, cRedBg),
             pw.SizedBox(height: 6),
-            _txnTable(expenses, red, divider, greyText),
+            _txnTable(expenses, cRed, cRedBg, cDivider, cGrey, cAltRow),
             pw.SizedBox(height: 4),
             pw.Align(
               alignment: pw.Alignment.centerRight,
-              child: pw.Text('Total: ${_fmt(totalExpense)}',
+              child: pw.Text('Total Expense: ${_fmtPdf(totalExpense)}',
                   style: pw.TextStyle(
                       fontWeight: pw.FontWeight.bold,
-                      color: red,
-                      fontSize: 11)),
+                      color: cRed, fontSize: 11)),
             ),
           ],
         ],
@@ -274,50 +307,43 @@ class PdfReportService {
     return pdf.save();
   }
 
-  // ── Reusable widgets ───────────────────────────────────────────────────────
+  // ── Widgets ────────────────────────────────────────────────────────────────
+
   static pw.Widget _header(String title, String user,
       PdfColor primary, PdfColor grey) {
     return pw.Container(
       padding: const pw.EdgeInsets.only(bottom: 10),
       decoration: const pw.BoxDecoration(
-        border: pw.Border(
-            bottom: pw.BorderSide(
-                color: PdfColor.fromInt(0xFF1565C0), width: 2)),
-      ),
+          border: pw.Border(
+              bottom: pw.BorderSide(color: PdfColors.indigo800, width: 2))),
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text('Money Manager',
-                  style: pw.TextStyle(
-                      fontSize: 15,
-                      fontWeight: pw.FontWeight.bold,
-                      color: primary)),
-              pw.Text(title,
-                  style: pw.TextStyle(fontSize: 10, color: grey)),
-            ],
-          ),
-          pw.Text(user,
-              style: pw.TextStyle(fontSize: 9, color: grey)),
+          pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+            pw.Text('Money Manager',
+                style: pw.TextStyle(
+                    fontSize: 16,
+                    fontWeight: pw.FontWeight.bold,
+                    color: primary)),
+            pw.Text(title,
+                style: pw.TextStyle(fontSize: 10, color: grey)),
+          ]),
+          pw.Text(user, style: pw.TextStyle(fontSize: 9, color: grey)),
         ],
       ),
     );
   }
 
-  static pw.Widget _footer(
-      pw.Context ctx, String generatedOn, PdfColor grey) {
+  static pw.Widget _footer(pw.Context ctx, String gen, PdfColor grey) {
     return pw.Container(
       padding: const pw.EdgeInsets.only(top: 6),
       decoration: const pw.BoxDecoration(
           border: pw.Border(
-              top: pw.BorderSide(
-                  color: PdfColor.fromInt(0xFFE0E0E0), width: 0.5))),
+              top: pw.BorderSide(color: PdfColors.grey300, width: 0.5))),
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          pw.Text('Generated: $generatedOn',
+          pw.Text('Generated: $gen',
               style: pw.TextStyle(fontSize: 7, color: grey)),
           pw.Text('Page ${ctx.pageNumber} / ${ctx.pagesCount}',
               style: pw.TextStyle(fontSize: 7, color: grey)),
@@ -326,51 +352,61 @@ class PdfReportService {
     );
   }
 
-  static pw.Widget _card(
-      String label, String value, PdfColor color, String icon) {
+  static pw.Widget _card(String label, String value,
+      PdfColor textColor, PdfColor bgColor, String prefix) {
     return pw.Expanded(
       child: pw.Container(
         padding: const pw.EdgeInsets.all(12),
         decoration: pw.BoxDecoration(
-          color: PdfColor(color.red, color.green, color.blue, 0.06),
+          color: bgColor,
           borderRadius: pw.BorderRadius.circular(8),
-          border: pw.Border.all(color: color, width: 0.8),
+          border: pw.Border.all(color: textColor, width: 0.8),
         ),
         child: pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            pw.Text('$icon  $label',
-                style: pw.TextStyle(fontSize: 9, color: color)),
-            pw.SizedBox(height: 5),
-            pw.Text(value,
+            pw.Text(label,
                 style: pw.TextStyle(
-                    fontSize: 15,
+                    fontSize: 9,
+                    color: textColor,
+                    fontWeight: pw.FontWeight.bold)),
+            pw.SizedBox(height: 6),
+            pw.Text('$prefix $value',
+                style: pw.TextStyle(
+                    fontSize: 14,
                     fontWeight: pw.FontWeight.bold,
-                    color: color)),
+                    color: textColor)),
           ],
         ),
       ),
     );
   }
 
-  static pw.Widget _sectionTitle(String title, PdfColor color) {
+  static pw.Widget _sectionTitle(
+      String title, PdfColor textColor, PdfColor bgColor) {
     return pw.Container(
-      padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 8),
+      padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 10),
       decoration: pw.BoxDecoration(
-        color: PdfColor(color.red, color.green, color.blue, 0.07),
+        color: bgColor,
         borderRadius: pw.BorderRadius.circular(4),
-        border: pw.Border(left: pw.BorderSide(color: color, width: 3)),
+        border: pw.Border(
+            left: pw.BorderSide(color: textColor, width: 3)),
       ),
       child: pw.Text(title,
           style: pw.TextStyle(
               fontSize: 11,
               fontWeight: pw.FontWeight.bold,
-              color: color)),
+              color: textColor)),
     );
   }
 
-  static pw.Widget _txnTable(List<TransactionModel> txns,
-      PdfColor accent, PdfColor divider, PdfColor grey) {
+  static pw.Widget _txnTable(
+      List<TransactionModel> txns,
+      PdfColor accent,
+      PdfColor accentBg,
+      PdfColor divider,
+      PdfColor grey,
+      PdfColor altRow) {
     return pw.Table(
       border: pw.TableBorder.all(color: divider, width: 0.4),
       columnWidths: {
@@ -381,8 +417,7 @@ class PdfReportService {
       },
       children: [
         pw.TableRow(
-          decoration: pw.BoxDecoration(
-              color: PdfColor(accent.red, accent.green, accent.blue, 0.12)),
+          decoration: pw.BoxDecoration(color: accentBg),
           children: [
             _th('Date',     accent),
             _th('Category', accent),
@@ -391,20 +426,19 @@ class PdfReportService {
           ],
         ),
         ...txns.asMap().entries.map((entry) {
-          final even = entry.key % 2 == 0;
           final t    = entry.value;
+          final even = entry.key % 2 == 0;
+          final cat  = t.subcategory != null
+              ? '${t.category} / ${t.subcategory}'
+              : t.category;
           return pw.TableRow(
             decoration: pw.BoxDecoration(
-                color: even
-                    ? PdfColors.white
-                    : const PdfColor.fromInt(0xFFFAFAFA)),
+                color: even ? PdfColors.white : altRow),
             children: [
               _td(DateFormat('dd MMM').format(t.date)),
-              _td(t.subcategory != null
-                  ? '${t.category} / ${t.subcategory}'
-                  : t.category),
-              _td(t.note ?? t.description ?? '—', color: grey),
-              _td(_fmt(t.amount), color: accent, bold: true),
+              _td(cat),
+              _td(t.note ?? t.description ?? '-', color: grey),
+              _td(_fmtPdf(t.amount), color: accent, bold: true),
             ],
           );
         }),
@@ -428,18 +462,19 @@ class PdfReportService {
         child: pw.Text(text,
             style: pw.TextStyle(
                 fontSize: 9,
-                color: color ?? const PdfColor.fromInt(0xFF212121),
+                color: color ?? PdfColors.grey900,
                 fontWeight:
                     bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
       );
 
-  static String _fmt(double v) {
+  // ── Number formatter — no emoji, no ₹ (use Rs. for PDF font compat) ───────
+  static String _fmtPdf(double v) {
     final abs = v.abs();
     final str = abs >= 10000000
-        ? '${(abs / 10000000).toStringAsFixed(2)} Cr'
+        ? 'Rs.${(abs / 10000000).toStringAsFixed(2)}Cr'
         : abs >= 100000
-            ? '${(abs / 100000).toStringAsFixed(2)} L'
-            : NumberFormat('#,##,##0.##').format(abs);
-    return (v < 0 ? '-' : '') + '₹$str';
+            ? 'Rs.${(abs / 100000).toStringAsFixed(2)}L'
+            : 'Rs.${NumberFormat('#,##,##0').format(abs)}';
+    return v < 0 ? '-$str' : str;
   }
 }

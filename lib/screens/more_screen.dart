@@ -24,6 +24,7 @@ import 'notification_settings_screen.dart';
 import 'pin_setup_screen.dart';
 import 'emi_calculator_screen.dart';
 import 'custom_categories_screen.dart';
+import 'pdf_report_screen.dart';
 import 'net_worth_screen.dart';
 
 class MoreScreen extends StatelessWidget {
@@ -88,6 +89,14 @@ class MoreScreen extends StatelessWidget {
           ),
 
           // ── EMI Calculator ─────────────────────────────────────────────────
+          _item(context,
+            icon: Icons.picture_as_pdf,
+            title: 'Monthly PDF Report',
+            subtitle: 'Generate & share monthly financial summary',
+            color: const Color(0xFFC62828),
+            onTap: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const PdfReportScreen()))),
+
           _item(context,
             icon: Icons.calculate,
             title: 'EMI Calculator',

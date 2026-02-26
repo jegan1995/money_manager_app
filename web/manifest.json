@@ -1,7 +1,7 @@
 {
-  "name": "Money Manager",
-  "short_name": "MoneyMgr",
-  "description": "Track income, expenses & manage your finances",
+  "name": "PaisaTrack",
+  "short_name": "PaisaTrack",
+  "description": "Smart personal finance tracker - income, expenses & budgets",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#1565C0",
@@ -40,7 +40,6 @@
     {
       "name": "Add Transaction",
       "short_name": "Add",
-      "description": "Quick add transaction",
       "url": "/?action=add",
       "icons": [{ "src": "icons/Icon-192.png", "sizes": "192x192" }]
     }

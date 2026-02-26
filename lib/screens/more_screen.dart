@@ -25,6 +25,7 @@ import 'pin_setup_screen.dart';
 import 'emi_calculator_screen.dart';
 import 'custom_categories_screen.dart';
 import 'pdf_report_screen.dart';
+import 'pwa_install_screen.dart';
 import 'net_worth_screen.dart';
 
 class MoreScreen extends StatelessWidget {
@@ -112,6 +113,14 @@ class MoreScreen extends StatelessWidget {
             color: const Color(0xFF1A237E),
             onTap: () => Navigator.push(context,
                 MaterialPageRoute(builder: (_) => const NetWorthScreen()))),
+
+          _item(context,
+            icon: Icons.install_mobile,
+            title: 'Install App (PWA)',
+            subtitle: 'Add to iPhone or Android home screen',
+            color: const Color(0xFF00897B),
+            onTap: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const PwaInstallScreen()))),
 
           _item(context,
             icon: Icons.label,

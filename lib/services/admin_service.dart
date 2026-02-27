@@ -201,12 +201,15 @@ class UserAccessInfo {
     if (isAdmin) return true;
     if (features.containsKey(feature)) return features[feature]!;
     if (isLimited) {
-      const blocked = ['export', 'import', 'pdfReport'];
-      if (blocked.contains(feature)) return false;
+      // Limited: can only access features explicitly enabled via features map
+      // If feature not in map, it defaults to false for limited users
+      // (they only see what admin specifically granted)
+      if (!features.containsKey(feature)) return false;
     }
     if (isReadOnly) {
       const blocked = ['export', 'import', 'pdfReport',
-                       'budget', 'goals', 'transfers', 'recurring'];
+                       'budget', 'goals', 'transfers', 'recurring',
+                       'categories', 'emiCalc'];
       if (blocked.contains(feature)) return false;
     }
     return true;

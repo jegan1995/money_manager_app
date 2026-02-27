@@ -246,6 +246,12 @@ class _AdminUserDetailScreenState
         'Calculate loan EMIs'),
     _FeatureItem('netWorth',  'Net Worth',    Icons.account_balance,  Colors.indigo,
         'Track net worth tracker'),
+    _FeatureItem('search',    'Search',       Icons.search,           Colors.blueGrey,
+        'Search transactions'),
+    _FeatureItem('calendar',  'Calendar',     Icons.calendar_month,   Colors.teal,
+        'Calendar view'),
+    _FeatureItem('categories','Categories',   Icons.category,         Colors.brown,
+        'Custom categories'),
     _FeatureItem('family',    'Family Mode',  Icons.people_alt,       const Color(0xFF7B1FA2),
         'Access family group and shared finances'),
   ];

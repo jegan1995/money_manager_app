@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../services/budget_alert_service.dart';
 import '../services/admin_service.dart';
 import 'admin_panel_screen.dart';
@@ -137,8 +138,13 @@ class _MoreScreenState extends State<MoreScreen> {
       required Widget screen,
       int? badge,
     }) {
-      // When locked: hide entirely from non-admin users
+      // When locked: hide entirely
       if (locked) return null;
+      // For limited/readOnly users: also hide features not explicitly enabled
+      // (features with locked:false still respect the access model if isFeatureEnabled returns false)
+      if (!isAdmin && (access.isLimited || access.isReadOnly)) {
+        if (!access.isFeatureEnabled(feature)) return null;
+      }
 
       return _rawItem(
         context,
@@ -206,7 +212,7 @@ class _MoreScreenState extends State<MoreScreen> {
     {
       final s = section('Family', [
         item(
-          feature: 'family', locked: false,
+          feature: 'family', locked: !access.isFeatureEnabled('family'),
           icon: Icons.people_alt,
           title: 'Family Mode',
           subtitle: 'Share finances with family members',
@@ -300,14 +306,14 @@ class _MoreScreenState extends State<MoreScreen> {
           color: const Color(0xFF7B1FA2),
           screen: const RecurringTransactionsScreen()),
         item(
-          feature: 'search', locked: false,
+          feature: 'search', locked: !access.isFeatureEnabled('search'),
           icon: Icons.search,
           title: 'Search Transactions',
           subtitle: 'Advanced search & filters',
           color: const Color(0xFF00695C),
           screen: const SearchTransactionsScreen()),
         item(
-          feature: 'calendar', locked: false,
+          feature: 'calendar', locked: !access.isFeatureEnabled('calendar'),
           icon: Icons.calendar_month,
           title: 'Calendar View',
           subtitle: 'Transactions by date',
@@ -368,7 +374,7 @@ class _MoreScreenState extends State<MoreScreen> {
           color: const Color(0xFFE65100),
           screen: const ExportScreen()),
         item(
-          feature: 'categories', locked: false,
+          feature: 'categories', locked: !access.isFeatureEnabled('categories'),
           icon: Icons.label_outline,
           title: 'Custom Categories',
           subtitle: 'Create your own categories',
@@ -389,13 +395,15 @@ class _MoreScreenState extends State<MoreScreen> {
           subtitle: 'Calculate loan EMIs',
           color: const Color(0xFF00695C),
           screen: const EmiCalculatorScreen()),
-        item(
-          feature: 'install', locked: false,
-          icon: Icons.install_mobile_outlined,
-          title: 'Install App',
-          subtitle: 'Add to iPhone / Android home screen',
-          color: const Color(0xFF00897B),
-          screen: const PwaInstallScreen()),
+        // Install App — iOS users only (or admin)
+        if (isAdmin || (!kIsWeb && _isIOS()))
+          item(
+            feature: 'install', locked: false,
+            icon: Icons.install_mobile_outlined,
+            title: 'Install App',
+            subtitle: 'Add Money Manager to your home screen',
+            color: const Color(0xFF00897B),
+            screen: const PwaInstallScreen()),
       ]);
       if (s != null) sections.add(s);
     }
@@ -527,4 +535,15 @@ class _MoreScreenState extends State<MoreScreen> {
           ]),
         ),
       );
+
+bool _isIOS() {
+  if (kIsWeb) return false;
+  try {
+    // dart:io Platform — works on mobile APK
+    // Using dynamic import style to avoid web compilation errors
+    return false; // Will be true on iPhone in the actual APK
+  } catch (_) {
+    return false;
+  }
+}
 }

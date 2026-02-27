@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../models/account_model.dart';
 import '../services/account_service.dart';
 import 'add_account_screen.dart';
+import 'account_detail_screen.dart';
 
 class AccountsScreen extends StatelessWidget {
   const AccountsScreen({super.key});
@@ -240,7 +241,7 @@ class AccountsScreen extends StatelessWidget {
         HapticFeedback.lightImpact();
         Navigator.push(ctx,
             MaterialPageRoute(
-                builder: (_) => AddAccountScreen(account: acc)));
+                builder: (_) => AccountDetailScreen(account: acc)));
       },
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),

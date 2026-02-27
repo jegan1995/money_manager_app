@@ -140,51 +140,6 @@ class SettingsScreen extends StatelessWidget {
 
                 const SizedBox(height: 24),
 
-                // ── Appearance ─────────────────────────────────────────
-                _label('Appearance', isDark),
-                const SizedBox(height: 8),
-                _section(card, isDark, [
-                  _switchTile(
-                    icon: theme.isDarkMode
-                        ? Icons.dark_mode : Icons.light_mode,
-                    iconColor: const Color(0xFF667eea),
-                    title: 'Dark Mode',
-                    subtitle: theme.isDarkMode
-                        ? 'Dark theme active' : 'Light theme active',
-                    value: theme.isDarkMode,
-                    onChanged: (_) => theme.toggleTheme(),
-                    isDark: isDark,
-                    card: card,
-                  ),
-                ]),
-
-                const SizedBox(height: 20),
-
-                // ── Data & Export ──────────────────────────────────────
-                _label('Data & Export', isDark),
-                const SizedBox(height: 8),
-                _section(card, isDark, [
-                  _navTile(
-                    icon: Icons.download_outlined,
-                    iconColor: const Color(0xFF2E7D32),
-                    title: 'Export to CSV',
-                    subtitle: 'Download transactions as CSV',
-                    isDark: isDark,
-                    onTap: () => _exportCSV(context),
-                  ),
-                  _divider(isDark),
-                  _navTile(
-                    icon: Icons.table_chart_outlined,
-                    iconColor: const Color(0xFF1565C0),
-                    title: 'Export to Excel',
-                    subtitle: 'Download detailed Excel report',
-                    isDark: isDark,
-                    onTap: () => _exportExcel(context),
-                  ),
-                ]),
-
-                const SizedBox(height: 20),
-
                 // ── About ──────────────────────────────────────────────
                 _label('About', isDark),
                 const SizedBox(height: 8),

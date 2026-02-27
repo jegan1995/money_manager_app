@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/budget_alert_service.dart';
 import '../services/admin_service.dart';
 import 'admin_panel_screen.dart';
+import 'admin_force_update_screen.dart';
 import 'transfers_screen.dart';
 import 'budget_management_screen.dart';
 import 'budget_screen.dart';
@@ -52,7 +53,7 @@ class _MoreScreenState extends State<MoreScreen> {
         if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
           return Scaffold(
             backgroundColor:
-                isDark ? const Color(0xFF0D1117) : const Color(0xFFF5F6FA),
+                isDark ? const Color(0xFF0D1117) : const Color(0xFFF0F4FF),
             appBar: _appBar(),
             body: const Center(child: CircularProgressIndicator()),
           );
@@ -65,7 +66,7 @@ class _MoreScreenState extends State<MoreScreen> {
 
         return Scaffold(
           backgroundColor:
-              isDark ? const Color(0xFF0D1117) : const Color(0xFFF5F6FA),
+              isDark ? const Color(0xFF0D1117) : const Color(0xFFF0F4FF),
           appBar: _appBar(),
           body: _buildBody(context, access, isAdmin, isDark),
         );
@@ -74,9 +75,11 @@ class _MoreScreenState extends State<MoreScreen> {
   }
 
   AppBar _appBar() => AppBar(
-        title: const Text('More'),
-        backgroundColor: const Color(0xFF1565C0),
+        title: const Text('More',
+            style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xFF667eea),
         foregroundColor: Colors.white,
+        elevation: 0,
       );
 
   // ── Main body ──────────────────────────────────────────────────────────────
@@ -188,6 +191,13 @@ class _MoreScreenState extends State<MoreScreen> {
           subtitle: 'Manage users, access & app stats',
           color: const Color(0xFF1A237E),
           screen: const AdminPanelScreen()),
+        item(
+          feature: 'forceUpdate', locked: false,
+          icon: Icons.system_update_alt,
+          title: 'Force Update Control',
+          subtitle: 'Push update & block old versions',
+          color: const Color(0xFFC62828),
+          screen: AdminForceUpdateScreen()),
       ]);
       if (s != null) sections.add(s);
     }
@@ -427,7 +437,7 @@ class _MoreScreenState extends State<MoreScreen> {
   // ── Suspended screen ──────────────────────────────────────────────────────
   Widget _suspendedScreen(bool isDark) => Scaffold(
         backgroundColor:
-            isDark ? const Color(0xFF0D1117) : const Color(0xFFF5F6FA),
+            isDark ? const Color(0xFF0D1117) : const Color(0xFFF0F4FF),
         appBar: _appBar(),
         body: Center(
           child: Padding(

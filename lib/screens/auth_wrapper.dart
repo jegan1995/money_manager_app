@@ -1,70 +1,64 @@
+// lib/screens/auth_wrapper.dart
+// Entry point after Firebase init:
+// 1. Checks force update (blocks if needed)
+// 2. Listens to auth state → routes to Login or Main
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import '../services/admin_service.dart';
+import '../services/force_update_service.dart';
+import '../services/notification_service.dart';
 import 'login_screen.dart';
+import 'force_update_screen.dart';
 import 'main_navigation.dart';
 
-class AuthWrapper extends StatelessWidget {
+class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
+  @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  @override
+  void initState() {
+    super.initState();
+    // Init notifications silently — never block app load
+    Future.microtask(() async {
+      try { await NotificationService.initialize(); } catch (_) {}
+      try { await NotificationService.subscribeToUpdates(); } catch (_) {}
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, authSnap) {
+    // ── Layer 1: Force update check ──────────────────────────────────────────
+    return StreamBuilder<AppVersionInfo?>(
+      stream: ForceUpdateService.watchUpdateStatus(),
+      builder: (ctx, updateSnap) {
+        final info = updateSnap.data;
 
-        if (authSnap.connectionState == ConnectionState.waiting) {
-          return const _SplashScreen();
+        // If force update needed → show blocking screen (ignores auth state)
+        if (info != null && info.needsForceUpdate) {
+          return ForceUpdateScreen(info: info);
         }
 
-        // Not logged in → show login
-        if (!authSnap.hasData || authSnap.data == null) {
-          return const LoginScreen();
-        }
-
-        final user = authSnap.data!;
-
-        // Admin always gets in without status check
-        if (user.uid == kAdminUID) {
-          return const MainNavigation();
-        }
-
-        // ── Real-time suspension watch ─────────────────────────────────
-        // Watches the user's Firestore doc. If status becomes 'suspended',
-        // forces immediate sign-out across ALL screens instantly.
-        return StreamBuilder<DocumentSnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('users')
-              .doc(user.uid)
-              .snapshots(),
-          builder: (context, docSnap) {
-
-            // While loading the user doc — show the app
-            if (!docSnap.hasData) {
-              return const MainNavigation();
+        // ── Layer 2: Auth state ────────────────────────────────────────────
+        return StreamBuilder<User?>(
+          stream: FirebaseAuth.instance.authStateChanges(),
+          builder: (ctx, authSnap) {
+            if (authSnap.connectionState == ConnectionState.waiting) {
+              return const _SplashScreen();
             }
 
-            // If doc doesn't exist yet (new user) — allow in
-            if (!docSnap.data!.exists) {
-              return const MainNavigation();
+            final Widget body = authSnap.hasData
+                ? const MainNavigation()
+                : const LoginScreen();
+
+            // Soft update banner on top of main content (dismissable)
+            if (info != null && info.needsSoftUpdate && authSnap.hasData) {
+              return _SoftUpdateWrapper(info: info, child: body);
             }
 
-            final data   = docSnap.data!.data() as Map<String, dynamic>?;
-            final status = data?['status'] ?? 'active';
-
-            // SUSPENDED → force sign out + show suspended message
-            if (status == 'suspended') {
-              // Sign out asynchronously
-              Future.microtask(() async {
-                await FirebaseAuth.instance.signOut();
-              });
-
-              return const _SuspendedScreen();
-            }
-
-            // Active → normal app
-            return const MainNavigation();
+            return body;
           },
         );
       },
@@ -72,101 +66,128 @@ class AuthWrapper extends StatelessWidget {
   }
 }
 
-// ── Loading splash ─────────────────────────────────────────────────────────────
+// ── Splash screen shown while checking auth ──────────────────────────────────
 class _SplashScreen extends StatelessWidget {
   const _SplashScreen();
-
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF667eea),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 80, height: 80,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Icon(Icons.account_balance_wallet,
-                  color: Colors.white, size: 44),
+  Widget build(BuildContext context) => Scaffold(
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF667eea), Color(0xFF764ba2)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
-            const SizedBox(height: 20),
-            const Text('Money Manager',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold)),
-            const SizedBox(height: 32),
-            const CircularProgressIndicator(
-                valueColor:
-                    AlwaysStoppedAnimation<Color>(Colors.white70)),
-          ],
+          ),
+          child: Center(
+            child: Column(mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+              Container(
+                width: 80, height: 80,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.15),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                      color: Colors.white.withOpacity(0.3), width: 2),
+                ),
+                child: const Icon(Icons.account_balance_wallet,
+                    color: Colors.white, size: 38),
+              ),
+              const SizedBox(height: 20),
+              const Text('Money Manager',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold)),
+              const SizedBox(height: 32),
+              const SizedBox(
+                width: 24, height: 24,
+                child: CircularProgressIndicator(
+                    color: Colors.white, strokeWidth: 2),
+              ),
+            ]),
+          ),
         ),
-      ),
-    );
-  }
+      );
 }
 
-// ── Suspended screen ───────────────────────────────────────────────────────────
-class _SuspendedScreen extends StatelessWidget {
-  const _SuspendedScreen();
+// ── Soft update banner wrapper (dismissable) ─────────────────────────────────
+class _SoftUpdateWrapper extends StatefulWidget {
+  final AppVersionInfo info;
+  final Widget child;
+  const _SoftUpdateWrapper({required this.info, required this.child});
+  @override
+  State<_SoftUpdateWrapper> createState() => _SoftUpdateWrapperState();
+}
+
+class _SoftUpdateWrapperState extends State<_SoftUpdateWrapper> {
+  bool _dismissed = false;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F6FA),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 90, height: 90,
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.block,
-                    color: Colors.red, size: 48),
-              ),
-              const SizedBox(height: 24),
-              const Text('Account Suspended',
-                  style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 24,
-                      color: Color(0xFF1A1A2E))),
-              const SizedBox(height: 12),
-              Text(
-                'Your account has been suspended by the administrator.\n'
-                'Please contact support for assistance.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[500],
-                    height: 1.5),
-              ),
-              const SizedBox(height: 32),
-              OutlinedButton.icon(
+    if (_dismissed) return widget.child;
+
+    return Stack(children: [
+      widget.child,
+      // Update banner at bottom
+      Positioned(
+        left: 12, right: 12, bottom: 90,
+        child: Material(
+          elevation: 8,
+          borderRadius: BorderRadius.circular(14),
+          color: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFF667eea),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(children: [
+              const Icon(Icons.system_update_alt,
+                  color: Colors.white, size: 20),
+              const SizedBox(width: 10),
+              Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Update Available',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13)),
+                  Text('Version ${widget.info.minVersion} is ready',
+                      style: TextStyle(
+                          color: Colors.white.withOpacity(0.8),
+                          fontSize: 11)),
+                ],
+              )),
+              TextButton(
                 onPressed: () async {
-                  await FirebaseAuth.instance.signOut();
+                  try {
+                    final uri = Uri.parse(widget.info.updateUrl);
+                    // Use url_launcher to open store
+                  } catch (_) {}
                 },
-                icon: const Icon(Icons.logout),
-                label: const Text('Sign Out'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 24, vertical: 12),
-                  side: const BorderSide(color: Colors.red),
-                  foregroundColor: Colors.red,
-                ),
+                style: TextButton.styleFrom(
+                    backgroundColor: Colors.white.withOpacity(0.2),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8))),
+                child: const Text('Update',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12)),
               ),
-            ],
+              const SizedBox(width: 4),
+              GestureDetector(
+                onTap: () => setState(() => _dismissed = true),
+                child: Icon(Icons.close,
+                    color: Colors.white.withOpacity(0.7), size: 16),
+              ),
+            ]),
           ),
         ),
       ),
-    );
+    ]);
   }
 }

@@ -8,13 +8,17 @@ import 'providers/theme_provider.dart';
 import 'services/theme_service.dart';
 import 'services/recurring_transaction_service.dart';
 import 'services/recurring_transfer_service.dart';
+import 'services/notification_service.dart';  // ✅ ADD THIS
 import 'screens/recurring_transactions_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  await NotificationService.initialize();
 
   final themeService = ThemeService();
   await themeService.loadSettings();
@@ -73,13 +77,10 @@ class _AppInitializerState extends State<AppInitializer> {
   }
 
   Future<void> _initializeApp() async {
-    // ── Run recurring checks silently ──────────────────────────────────
-    // These run in background ONLY when a user is already logged in.
-    // Any failure (permission denied, network error, not logged in) is
-    // caught and ignored — it must NEVER block the app from loading.
+    // Run recurring checks silently
     _runRecurringChecks();
 
-    // App is ready — show login or home immediately
+    // App is ready
     if (mounted) {
       setState(() => _initialized = true);
     }
@@ -92,8 +93,7 @@ class _AppInitializerState extends State<AppInitializer> {
       await recurringTxnSvc.checkAndExecuteRecurring();
       await recurringTrfSvc.processRecurringTransfers();
     } catch (_) {
-      // Silently ignore — user may not be logged in yet, or network issue.
-      // Recurring checks will run again next time user opens the app.
+      // Silently ignore errors
     }
   }
 

@@ -1,525 +1,411 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:universal_html/html.dart' as html;
+import 'package:firebase_auth/firebase_auth.dart';
 import '../providers/theme_provider.dart';
 import '../services/transaction_service.dart';
 import '../services/account_service.dart';
 import '../services/export_service.dart';
 import '../services/auth_service.dart';
 
-class SettingsScreen extends StatefulWidget {
+class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
-  @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
-}
+  Future<void> _logout(BuildContext ctx) async {
+    final confirm = await showDialog<bool>(
+      context: ctx,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Sign Out'),
+        content: const Text('Are you sure you want to sign out?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Sign Out'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
 
-class _SettingsScreenState extends State<SettingsScreen> {
-  final _geminiKeyController = TextEditingController();
-  bool _keyObscured = true;
-  bool _keySaved = false;
-  bool _keyLoading = true;
-
-  static const _geminiPrefKey = 'gemini_api_key';
-
-  @override
-  void initState() {
-    super.initState();
-    _loadKey();
-  }
-
-  @override
-  void dispose() {
-    _geminiKeyController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadKey() async {
-    final prefs = await SharedPreferences.getInstance();
-    final key = prefs.getString(_geminiPrefKey) ?? '';
-    setState(() {
-      _geminiKeyController.text = key;
-      _keySaved = key.isNotEmpty;
-      _keyLoading = false;
-    });
-  }
-
-  Future<void> _saveKey() async {
-    final key = _geminiKeyController.text.trim();
-    if (key.isEmpty) {
-      _snack('Please enter your Gemini API key', Colors.red);
-      return;
-    }
-    if (!key.startsWith('AIza')) {
-      _snack('Invalid key — Gemini keys start with "AIza"', Colors.orange);
-      return;
-    }
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_geminiPrefKey, key);
-    setState(() => _keySaved = true);
-    _snack('✅ Gemini API key saved! AI features are now active.', Colors.green);
-  }
-
-  Future<void> _deleteKey() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_geminiPrefKey);
-    setState(() {
-      _geminiKeyController.clear();
-      _keySaved = false;
-    });
-    _snack('API key removed', Colors.grey);
-  }
-
-  void _snack(String msg, Color color) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg, style: const TextStyle(color: Colors.white)),
-      backgroundColor: color,
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-    ));
-  }
-
-  Future<void> _performLogout(BuildContext context) async {
-    final authService = AuthService();
     try {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const Center(child: CircularProgressIndicator()),
-      );
-      await authService.signOut();
-      if (context.mounted) Navigator.pop(context);
+      showDialog(context: ctx, barrierDismissible: false,
+          builder: (_) => const Center(child: CircularProgressIndicator()));
+      await AuthService().signOut();
+      if (ctx.mounted) Navigator.pop(ctx);
       if (kIsWeb) html.window.location.reload();
+    } catch (_) {
+      if (kIsWeb) html.window.location.reload();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark  = Theme.of(context).brightness == Brightness.dark;
+    final theme   = Provider.of<ThemeProvider>(context);
+    final auth    = AuthService();
+    final user    = FirebaseAuth.instance.currentUser;
+    final name    = user?.displayName ?? user?.email?.split('@').first ?? 'User';
+    final email   = user?.email ?? '';
+    final initials = name.isNotEmpty ? name[0].toUpperCase() : 'U';
+
+    final bg   = isDark ? const Color(0xFF0D1117) : const Color(0xFFF0F4FF);
+    final card = isDark ? const Color(0xFF1E2530) : Colors.white;
+
+    return Scaffold(
+      backgroundColor: bg,
+      body: CustomScrollView(
+        slivers: [
+          // ── Header ──────────────────────────────────────────────────
+          SliverAppBar(
+            pinned: true,
+            backgroundColor: const Color(0xFF667eea),
+            foregroundColor: Colors.white,
+            title: const Text('Settings',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 100),
+              child: Column(children: [
+
+                // ── Profile card ───────────────────────────────────────
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF667eea), Color(0xFF764ba2)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [BoxShadow(
+                        color: const Color(0xFF667eea).withOpacity(0.4),
+                        blurRadius: 16, offset: const Offset(0, 8))],
+                  ),
+                  child: Row(children: [
+                    Container(
+                      width: 60, height: 60,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                            color: Colors.white.withOpacity(0.4), width: 2),
+                      ),
+                      child: Center(
+                        child: Text(initials,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 24)),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(name,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 17)),
+                        const SizedBox(height: 2),
+                        Text(email,
+                            style: TextStyle(
+                                color: Colors.white.withOpacity(0.8),
+                                fontSize: 12)),
+                      ],
+                    )),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text('Free',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold)),
+                    ),
+                  ]),
+                ),
+
+                const SizedBox(height: 24),
+
+                // ── Appearance ─────────────────────────────────────────
+                _label('Appearance', isDark),
+                const SizedBox(height: 8),
+                _section(card, isDark, [
+                  _switchTile(
+                    icon: theme.isDarkMode
+                        ? Icons.dark_mode : Icons.light_mode,
+                    iconColor: const Color(0xFF667eea),
+                    title: 'Dark Mode',
+                    subtitle: theme.isDarkMode
+                        ? 'Dark theme active' : 'Light theme active',
+                    value: theme.isDarkMode,
+                    onChanged: (_) => theme.toggleTheme(),
+                    isDark: isDark,
+                    card: card,
+                  ),
+                ]),
+
+                const SizedBox(height: 20),
+
+                // ── Data & Export ──────────────────────────────────────
+                _label('Data & Export', isDark),
+                const SizedBox(height: 8),
+                _section(card, isDark, [
+                  _navTile(
+                    icon: Icons.download_outlined,
+                    iconColor: const Color(0xFF2E7D32),
+                    title: 'Export to CSV',
+                    subtitle: 'Download transactions as CSV',
+                    isDark: isDark,
+                    onTap: () => _exportCSV(context),
+                  ),
+                  _divider(isDark),
+                  _navTile(
+                    icon: Icons.table_chart_outlined,
+                    iconColor: const Color(0xFF1565C0),
+                    title: 'Export to Excel',
+                    subtitle: 'Download detailed Excel report',
+                    isDark: isDark,
+                    onTap: () => _exportExcel(context),
+                  ),
+                ]),
+
+                const SizedBox(height: 20),
+
+                // ── About ──────────────────────────────────────────────
+                _label('About', isDark),
+                const SizedBox(height: 8),
+                _section(card, isDark, [
+                  _navTile(
+                    icon: Icons.info_outline,
+                    iconColor: const Color(0xFF7B1FA2),
+                    title: 'Version',
+                    subtitle: 'Money Manager v1.2.0',
+                    isDark: isDark,
+                    onTap: null,
+                  ),
+                  _divider(isDark),
+                  _navTile(
+                    icon: Icons.privacy_tip_outlined,
+                    iconColor: Colors.teal,
+                    title: 'Privacy Policy',
+                    subtitle: 'How we handle your data',
+                    isDark: isDark,
+                    onTap: null,
+                  ),
+                ]),
+
+                const SizedBox(height: 20),
+
+                // ── Sign out ───────────────────────────────────────────
+                _section(card, isDark, [
+                  _navTile(
+                    icon: Icons.logout,
+                    iconColor: Colors.red,
+                    title: 'Sign Out',
+                    subtitle: 'Sign out of your account',
+                    isDark: isDark,
+                    titleColor: Colors.red,
+                    onTap: () => _logout(context),
+                  ),
+                ]),
+              ]),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  Widget _label(String text, bool isDark) => Padding(
+        padding: const EdgeInsets.only(left: 4, bottom: 0),
+        child: Text(text.toUpperCase(),
+            style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[500],
+                letterSpacing: 1.1)),
+      );
+
+  Widget _section(Color card, bool isDark, List<Widget> children) =>
+      Container(
+        decoration: BoxDecoration(
+          color: card,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [BoxShadow(
+              color: Colors.black.withOpacity(0.05), blurRadius: 8)],
+        ),
+        child: Column(children: children),
+      );
+
+  Widget _divider(bool isDark) => Divider(
+      height: 1, indent: 60,
+      color: isDark
+          ? Colors.white.withOpacity(0.06)
+          : Colors.grey.shade100);
+
+  Widget _switchTile({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+    required bool isDark,
+    required Color card,
+  }) =>
+      SwitchListTile(
+        contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16, vertical: 4),
+        secondary: Container(
+          width: 36, height: 36,
+          decoration: BoxDecoration(
+            color: iconColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: iconColor, size: 18),
+        ),
+        title: Text(title,
+            style: const TextStyle(
+                fontWeight: FontWeight.w600, fontSize: 14)),
+        subtitle: Text(subtitle,
+            style: TextStyle(fontSize: 11, color: Colors.grey[400])),
+        value: value,
+        onChanged: onChanged,
+        activeColor: const Color(0xFF667eea),
+      );
+
+  Widget _navTile({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    required bool isDark,
+    required VoidCallback? onTap,
+    Color? titleColor,
+  }) =>
+      ListTile(
+        contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16, vertical: 4),
+        leading: Container(
+          width: 36, height: 36,
+          decoration: BoxDecoration(
+            color: iconColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: iconColor, size: 18),
+        ),
+        title: Text(title,
+            style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+                color: titleColor)),
+        subtitle: Text(subtitle,
+            style: TextStyle(fontSize: 11, color: Colors.grey[400])),
+        trailing: onTap != null
+            ? Icon(Icons.chevron_right,
+                color: Colors.grey[300], size: 18)
+            : null,
+        onTap: onTap,
+      );
+
+  // ── Export helpers ─────────────────────────────────────────────────────────
+  Future<void> _exportCSV(BuildContext ctx) async {
+    final txnSvc = TransactionService();
+    final accSvc = AccountService();
+    final expSvc = ExportService();
+    try {
+      showDialog(context: ctx, barrierDismissible: false,
+          builder: (_) => const Center(child: CircularProgressIndicator()));
+      final txns = await txnSvc.getTransactionsList();
+      final accs = await accSvc.getAccountsList().first;
+      final path = await expSvc.exportTransactionsToCSV(
+          txns, accs,
+          includeTransfers: true,
+          includeIncome: true,
+          includeExpense: true);
+      if (ctx.mounted) {
+        Navigator.pop(ctx);
+        if (path != null) {
+          ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+            content: Text('Exported: $path'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10)),
+            margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          ));
+        }
+      }
     } catch (e) {
-      if (kIsWeb) {
-        html.window.location.reload();
-      } else if (context.mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Logout error: $e'),
+      if (ctx.mounted) {
+        Navigator.pop(ctx);
+        ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+          content: Text('Export failed: $e'),
           backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10)),
+          margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
         ));
       }
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final themeProvider = Provider.of<ThemeProvider>(context);
-    final transactionService = TransactionService();
-    final accountService = AccountService();
-    final exportService = ExportService();
-    final authService = AuthService();
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Settings'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-      ),
-      body: ListView(
-        children: [
-          const SizedBox(height: 10),
-
-          // ── Account ──────────────────────────────────────────────────────────
-          _header('Account'),
-          FutureBuilder<String?>(
-            future: authService.getUserName(),
-            builder: (context, snapshot) {
-              final name = snapshot.data ?? authService.currentUser?.email ?? 'User';
-              return ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: Colors.blue.shade100,
-                  child: Text(name[0].toUpperCase(),
-                      style: const TextStyle(
-                          color: Colors.blue, fontWeight: FontWeight.bold)),
-                ),
-                title: Text(name),
-                subtitle: Text(authService.currentUser?.email ?? ''),
-              );
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.logout, color: Colors.red),
-            title: const Text('Logout', style: TextStyle(color: Colors.red)),
-            onTap: () async {
-              final confirm = await showDialog<bool>(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text('Logout'),
-                  content: const Text('Are you sure you want to logout?'),
-                  actions: [
-                    TextButton(
-                        onPressed: () => Navigator.pop(ctx, false),
-                        child: const Text('Cancel')),
-                    TextButton(
-                        onPressed: () => Navigator.pop(ctx, true),
-                        child: const Text('Logout',
-                            style: TextStyle(color: Colors.red))),
-                  ],
-                ),
-              );
-              if (confirm == true) await _performLogout(context);
-            },
-          ),
-          const Divider(),
-
-          // ── Gemini AI ────────────────────────────────────────────────────────
-          _header('🤖 Gemini AI Settings'),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Status banner
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: _keySaved
-                        ? Colors.green.withOpacity(0.1)
-                        : Colors.orange.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: _keySaved
-                          ? Colors.green.withOpacity(0.4)
-                          : Colors.orange.withOpacity(0.4),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Text(_keySaved ? '✅' : '⚠️',
-                          style: const TextStyle(fontSize: 16)),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          _keySaved
-                              ? 'AI features active — Receipt Scanner, SIP Advisor, Predict Savings, Voice Input'
-                              : 'Add your Gemini API key to enable all AI features',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: _keySaved
-                                  ? Colors.green[700]
-                                  : Colors.orange[800]),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 14),
-
-                // Key input field
-                _keyLoading
-                    ? const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(8),
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      )
-                    : TextFormField(
-                        controller: _geminiKeyController,
-                        obscureText: _keyObscured,
-                        style: const TextStyle(
-                            fontFamily: 'monospace', fontSize: 13),
-                        decoration: InputDecoration(
-                          labelText: 'Gemini API Key',
-                          hintText: 'AIzaSy...',
-                          border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10)),
-                          prefixIcon: const Icon(Icons.key, color: Colors.blue),
-                          suffixIcon: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: Icon(_keyObscured
-                                    ? Icons.visibility_outlined
-                                    : Icons.visibility_off_outlined),
-                                onPressed: () => setState(
-                                    () => _keyObscured = !_keyObscured),
-                                tooltip: 'Show/Hide key',
-                              ),
-                              if (_geminiKeyController.text.isNotEmpty)
-                                IconButton(
-                                  icon: const Icon(Icons.copy_outlined,
-                                      size: 18),
-                                  onPressed: () {
-                                    Clipboard.setData(ClipboardData(
-                                        text: _geminiKeyController.text));
-                                    _snack('Copied!', Colors.blue);
-                                  },
-                                  tooltip: 'Copy key',
-                                ),
-                            ],
-                          ),
-                        ),
-                        onChanged: (_) => setState(() {}),
-                      ),
-
-                const SizedBox(height: 10),
-
-                // Action buttons row
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 2,
-                      child: ElevatedButton.icon(
-                        onPressed: _saveKey,
-                        icon: const Icon(Icons.save_outlined, size: 18),
-                        label: const Text('Save Key'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF1565C0),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10)),
-                        ),
-                      ),
-                    ),
-                    if (_keySaved) ...[
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _deleteKey,
-                          icon: const Icon(Icons.delete_outline,
-                              size: 18, color: Colors.red),
-                          label: const Text('Remove',
-                              style: TextStyle(color: Colors.red)),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            side: const BorderSide(color: Colors.red),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-
-                const SizedBox(height: 12),
-
-                // How to get key info
-                GestureDetector(
-                  onTap: () => _showGetKeyDialog(context),
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? Colors.blue.withOpacity(0.08)
-                          : Colors.blue.shade50,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.blue.withOpacity(0.2)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.help_outline,
-                            size: 18, color: Colors.blue),
-                        const SizedBox(width: 8),
-                        const Expanded(
-                          child: Text(
-                            'How to get a free Gemini API key? Tap here.',
-                            style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.blue,
-                                decoration: TextDecoration.underline),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const Divider(),
-
-          // ── Appearance ───────────────────────────────────────────────────────
-          _header('Appearance'),
-          SwitchListTile(
-            title: const Text('Dark Mode'),
-            subtitle: const Text('Enable dark theme'),
-            secondary: Icon(
-                themeProvider.isDarkMode ? Icons.dark_mode : Icons.light_mode),
-            value: themeProvider.isDarkMode,
-            onChanged: (_) => themeProvider.toggleTheme(),
-          ),
-          const Divider(),
-
-          // ── Data ─────────────────────────────────────────────────────────────
-          _header('Data'),
-          ListTile(
-            leading: const Icon(Icons.download),
-            title: const Text('Export to CSV'),
-            subtitle: const Text('Download transactions as CSV'),
-            onTap: () async {
-              try {
-                showDialog(
-                  context: context,
-                  barrierDismissible: false,
-                  builder: (ctx) =>
-                      const Center(child: CircularProgressIndicator()),
-                );
-                final transactions = await transactionService.getTransactionsList();
-                final accounts = await accountService.getAccountsList().first;
-                final path = await exportService.exportTransactionsToCSV(
-                  transactions, accounts,
-                  includeTransfers: true,
-                  includeIncome: true,
-                  includeExpense: true,
-                );
-                if (context.mounted) Navigator.pop(context);
-                if (path != null) {
-                  _snack('Exported: $path', Colors.green);
-                }
-              } catch (e) {
-                if (context.mounted) Navigator.pop(context);
-                _snack('Export failed: $e', Colors.red);
-              }
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.table_chart),
-            title: const Text('Export to Excel'),
-            subtitle: const Text('Download detailed Excel report'),
-            onTap: () async {
-              try {
-                showDialog(
-                  context: context,
-                  barrierDismissible: false,
-                  builder: (ctx) =>
-                      const Center(child: CircularProgressIndicator()),
-                );
-                final transactions = await transactionService.getTransactionsList();
-                final accounts = await accountService.getAccountsList().first;
-                final path = await exportService.exportTransactionsToExcel(
-                  transactions, accounts,
-                  includeTransfers: true,
-                  includeIncome: true,
-                  includeExpense: true,
-                );
-                if (context.mounted) Navigator.pop(context);
-                if (path != null) {
-                  _snack('Exported: $path', Colors.green);
-                }
-              } catch (e) {
-                if (context.mounted) Navigator.pop(context);
-                _snack('Export failed: $e', Colors.red);
-              }
-            },
-          ),
-          const Divider(),
-
-          // ── About ────────────────────────────────────────────────────────────
-          _header('About'),
-          const ListTile(
-            leading: Icon(Icons.info),
-            title: Text('Version'),
-            subtitle: Text('1.2.0 — Smart Dashboard + AI Scanner'),
-          ),
-          const ListTile(
-            leading: Icon(Icons.account_balance_wallet),
-            title: Text('Money Manager'),
-            subtitle: Text('Track income, expenses & grow savings'),
-          ),
-          const ListTile(
-            leading: Icon(Icons.person),
-            title: Text('Developer'),
-            subtitle: Text('Built by Jegan'),
-          ),
-          const SizedBox(height: 32),
-        ],
-      ),
-    );
-  }
-
-  Widget _header(String title) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-        child: Text(title,
-            style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                color: Colors.blue)),
-      );
-
-  void _showGetKeyDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('🤖 Get Free Gemini API Key'),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Follow these steps:',
-                style: TextStyle(fontWeight: FontWeight.bold)),
-            SizedBox(height: 10),
-            _Step('1', 'Open Google AI Studio'),
-            _Step('2', 'Go to: aistudio.google.com'),
-            _Step('3', 'Sign in with your Google account'),
-            _Step('4', 'Click "Get API Key" → "Create API Key"'),
-            _Step('5', 'Copy the key (starts with AIza...)'),
-            _Step('6', 'Paste it here and tap Save Key'),
-            SizedBox(height: 10),
-            Text(
-              '✅ Free tier: 15 requests/min — more than enough!',
-              style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.green,
-                  fontWeight: FontWeight.w500),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Got it'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Step extends StatelessWidget {
-  final String number;
-  final String text;
-  const _Step(this.number, this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 22,
-            height: 22,
-            decoration: BoxDecoration(
-              color: Colors.blue.withOpacity(0.15),
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(number,
-                  style: const TextStyle(
-                      fontSize: 11,
-                      color: Colors.blue,
-                      fontWeight: FontWeight.bold)),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(text, style: const TextStyle(fontSize: 13)),
-          ),
-        ],
-      ),
-    );
+  Future<void> _exportExcel(BuildContext ctx) async {
+    final txnSvc = TransactionService();
+    final accSvc = AccountService();
+    final expSvc = ExportService();
+    try {
+      showDialog(context: ctx, barrierDismissible: false,
+          builder: (_) => const Center(child: CircularProgressIndicator()));
+      final txns = await txnSvc.getTransactionsList();
+      final accs = await accSvc.getAccountsList().first;
+      final path = await expSvc.exportTransactionsToExcel(
+          txns, accs,
+          includeTransfers: true,
+          includeIncome: true,
+          includeExpense: true);
+      if (ctx.mounted) {
+        Navigator.pop(ctx);
+        if (path != null) {
+          ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+            content: Text('Exported: $path'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10)),
+            margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          ));
+        }
+      }
+    } catch (e) {
+      if (ctx.mounted) {
+        Navigator.pop(ctx);
+        ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+          content: Text('Export failed: $e'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10)),
+          margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        ));
+      }
+    }
   }
 }

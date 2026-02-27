@@ -129,13 +129,16 @@ class AdminService {
 
   // ── Admin write actions ────────────────────────────────────────────────────
   Future<void> updateUserStatus(String uid, String status) =>
-      _db.collection('users').doc(uid).update({'status': status});
+      _db.collection('users').doc(uid).set(
+        {'status': status}, SetOptions(merge: true));
 
   Future<void> updateUserAccess(String uid, String access) =>
-      _db.collection('users').doc(uid).update({'access': access});
+      _db.collection('users').doc(uid).set(
+        {'access': access}, SetOptions(merge: true));
 
   Future<void> updateUserFeatures(String uid, Map<String, bool> f) =>
-      _db.collection('users').doc(uid).update({'features': f});
+      _db.collection('users').doc(uid).set(
+        {'features': f}, SetOptions(merge: true));
 
   Future<void> sendBroadcast(String title, String msg) =>
       _db.collection('broadcasts').add({

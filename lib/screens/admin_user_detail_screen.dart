@@ -246,6 +246,8 @@ class _AdminUserDetailScreenState
         'Calculate loan EMIs'),
     _FeatureItem('netWorth',  'Net Worth',    Icons.account_balance,  Colors.indigo,
         'Track net worth tracker'),
+    _FeatureItem('family',    'Family Mode',  Icons.people_alt,       const Color(0xFF7B1FA2),
+        'Access family group and shared finances'),
   ];
 
   Widget _sectionLabel(String label) => Padding(

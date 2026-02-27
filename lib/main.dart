@@ -8,7 +8,6 @@ import 'providers/theme_provider.dart';
 import 'services/theme_service.dart';
 import 'services/recurring_transaction_service.dart';
 import 'services/recurring_transfer_service.dart';
-import 'services/notification_service.dart';
 import 'screens/recurring_transactions_screen.dart';
 
 void main() async {
@@ -17,12 +16,8 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // Initialize theme service
   final themeService = ThemeService();
   await themeService.loadSettings();
-
-  // Initialize notifications (Android only, safe on web)
-  await NotificationService().initialize();
 
   runApp(
     MultiProvider(
@@ -48,11 +43,12 @@ class MyApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           theme: themeService.lightTheme,
           darkTheme: themeService.darkTheme,
-          themeMode: themeService.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+          themeMode:
+              themeService.isDarkMode ? ThemeMode.dark : ThemeMode.light,
           home: const AppInitializer(),
           routes: {
-            '/accounts': (context) => const AccountsScreen(),
-            '/recurring': (context) => RecurringTransactionsScreen(),
+            '/accounts':   (context) => const AccountsScreen(),
+            '/recurring':  (context) => RecurringTransactionsScreen(),
           },
         );
       },
@@ -69,7 +65,6 @@ class AppInitializer extends StatefulWidget {
 
 class _AppInitializerState extends State<AppInitializer> {
   bool _initialized = false;
-  bool _error = false;
 
   @override
   void initState() {
@@ -78,23 +73,32 @@ class _AppInitializerState extends State<AppInitializer> {
   }
 
   Future<void> _initializeApp() async {
-    try {
-      final recurringTransactionService = RecurringTransactionService();
-      final recurringTransferService = RecurringTransferService();
-      await recurringTransactionService.checkAndExecuteRecurring();
-      await recurringTransferService.processRecurringTransfers();
+    // ── Run recurring checks silently ──────────────────────────────────
+    // These run in background ONLY when a user is already logged in.
+    // Any failure (permission denied, network error, not logged in) is
+    // caught and ignored — it must NEVER block the app from loading.
+    _runRecurringChecks();
+
+    // App is ready — show login or home immediately
+    if (mounted) {
       setState(() => _initialized = true);
-    } catch (e) {
-      setState(() => _error = true);
-      debugPrint('Initialization error: $e');
+    }
+  }
+
+  Future<void> _runRecurringChecks() async {
+    try {
+      final recurringTxnSvc = RecurringTransactionService();
+      final recurringTrfSvc = RecurringTransferService();
+      await recurringTxnSvc.checkAndExecuteRecurring();
+      await recurringTrfSvc.processRecurringTransfers();
+    } catch (_) {
+      // Silently ignore — user may not be logged in yet, or network issue.
+      // Recurring checks will run again next time user opens the app.
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_error) {
-      return const Scaffold(body: Center(child: Text('Error initializing app')));
-    }
     if (!_initialized) {
       return Scaffold(
         body: Center(
@@ -103,12 +107,16 @@ class _AppInitializerState extends State<AppInitializer> {
             children: [
               const CircularProgressIndicator(),
               const SizedBox(height: 16),
-              Text('Loading Money Manager...', style: TextStyle(color: Colors.grey.shade600)),
+              Text(
+                'Loading Money Manager...',
+                style: TextStyle(color: Colors.grey.shade600),
+              ),
             ],
           ),
         ),
       );
     }
+
     return const AuthWrapper();
   }
 }

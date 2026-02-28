@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../services/onboarding_service.dart';
+import 'onboarding_screen.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:universal_html/html.dart' as html;
@@ -151,6 +153,24 @@ class SettingsScreen extends StatelessWidget {
                     subtitle: 'Money Manager v1.2.0',
                     isDark: isDark,
                     onTap: null,
+                  ),
+                  _divider(isDark),
+                  _navTile(
+                    icon: Icons.auto_awesome_outlined,
+                    iconColor: const Color(0xFF667eea),
+                    title: 'Replay Onboarding',
+                    subtitle: 'See the intro slides again',
+                    isDark: isDark,
+                    onTap: () async {
+                      await OnboardingService.reset();
+                      if (!context.mounted) return;
+                      Navigator.pushAndRemoveUntil(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const OnboardingScreen()),
+                        (route) => false,
+                      );
+                    },
                   ),
                   _divider(isDark),
                   _navTile(

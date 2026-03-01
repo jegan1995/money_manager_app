@@ -25,9 +25,10 @@ void main() async {
   // to regular HTTP polling when WebChannel is blocked — fixes ERR_BLOCKED_BY_CLIENT.
   if (kIsWeb) {
     FirebaseFirestore.instance.settings = const Settings(
-      persistenceEnabled: false,             // Web doesn't support offline cache
-      webExperimentalAutoDetectLongPolling: true, // ← FIX for ad blockers
-      webExperimentalForceLongPolling: false,
+      persistenceEnabled: false,
+      // Force long-polling — bypasses ad blockers blocking WebChannel
+      // This is safe: slightly more latency but 100% reliable
+      webExperimentalForceLongPolling: true,
     );
   }
 

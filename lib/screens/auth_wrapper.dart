@@ -1,20 +1,15 @@
 // lib/screens/auth_wrapper.dart
-// ROOT of the app — handles ALL routing via setState (no Navigator.push).
+// ROOT of the app — pure setState routing, no Navigator stack conflicts.
 //
-// FIX: Entire app state machine is ONE widget — no Navigator stack conflicts.
-// Previously, OnboardingScreen called Navigator.pushReplacement(LoginScreen)
-// which pushed LoginScreen ON TOP of AuthWrapper. After login, AuthWrapper
-// rebuilt with MainNavigation but LoginScreen remained on the navigator stack.
-// Now: every transition is just setState() — single widget, single screen.
+// KEY FIX (Android loading forever + login not navigating):
+//   Notifications are fired with unawaited() — they NEVER block _init().
+//   _init() now only awaits OnboardingService.isComplete() — takes <5ms.
+//   This means _onboardingDone flips immediately, inner auth StreamBuilder
+//   mounts right away, and auth state changes are always detected.
 //
 // Flow:
-//  ┌─ App open ─────────────────────────────────────────────────────────┐
-//  │  1. SplashScreen (loading prefs + auth check)                      │
-//  │  2a. First install → OnboardingScreen (5 slides)                   │
-//  │  2b. Returning user → skip onboarding                              │
-//  │  3. Not logged in  → LoginScreen  (user logs in via Firebase)      │
-//  │  4. Logged in      → ForceUpdate check → AppLock → MainNavigation  │
-//  └────────────────────────────────────────────────────────────────────┘
+//  App open → _init() (instant) → shows correct screen immediately
+//  Login → authStateChanges() fires → MainNavigation shows ✅
 
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -35,7 +30,7 @@ class AuthWrapper extends StatefulWidget {
 }
 
 class _AuthWrapperState extends State<AuthWrapper> {
-  bool? _onboardingDone; // null = still loading
+  bool? _onboardingDone; // null = checking, true/false = done
 
   @override
   void initState() {
@@ -44,62 +39,72 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 
   Future<void> _init() async {
-    // Run in parallel — faster startup
-    final results = await Future.wait([
-      OnboardingService.isComplete(),
-      _initNotifications(),
-    ]);
-    if (mounted) setState(() => _onboardingDone = results[0] as bool);
+    // ── Only await the one fast thing we NEED before showing UI ──────────────
+    // OnboardingService reads SharedPreferences — takes <5ms on all platforms.
+    final done = await OnboardingService.isComplete();
+    if (mounted) setState(() => _onboardingDone = done);
+
+    // ── Notifications fire in background — NEVER block app startup ────────────
+    // NotificationService.initialize() calls requestPermission() on Android
+    // which shows a system dialog and WAITS for user to respond.
+    // Awaiting this kept _onboardingDone = null forever → splash stuck.
+    // Awaiting this also prevented the auth StreamBuilder from mounting,
+    // so login events were silently ignored → signin appeared broken.
+    _initNotificationsBackground();
   }
 
-  Future<bool> _initNotifications() async {
-    try { await NotificationService.initialize(); } catch (_) {}
-    try { await NotificationService.subscribeToUpdates(); } catch (_) {}
-    return true;
+  void _initNotificationsBackground() {
+    // Fire and forget — errors silently ignored
+    Future.microtask(() async {
+      try { await NotificationService.initialize(); } catch (_) {}
+      try { await NotificationService.subscribeToUpdates(); } catch (_) {}
+    });
   }
 
-  // Called by OnboardingScreen when user taps "Get Started" or "Sign In"
-  // Instead of Navigator.push, we just flip the flag → LoginScreen renders directly
   void _onOnboardingComplete() {
     setState(() => _onboardingDone = true);
   }
 
   @override
   Widget build(BuildContext context) {
-    // ── Layer 1: Force update ────────────────────────────────────────────────
+    // ── Layer 1: Force update (wraps everything, checks Firestore) ───────────
     return StreamBuilder<AppVersionInfo?>(
       stream: ForceUpdateService.watchUpdateStatus(),
       builder: (ctx, updateSnap) {
         final info = updateSnap.data;
+
+        // Force update blocks the app entirely
         if (info != null && info.needsForceUpdate) {
           return ForceUpdateScreen(info: info);
         }
 
-        // ── Layer 2: Loading prefs ───────────────────────────────────────────
+        // ── Layer 2: Loading onboarding pref ─────────────────────────────────
+        // This is now near-instant (SharedPreferences read only)
         if (_onboardingDone == null) return const _SplashScreen();
 
-        // ── Layer 3: Onboarding — uses callback, NO Navigator.push ───────────
+        // ── Layer 3: Onboarding — first install only ──────────────────────────
         if (_onboardingDone == false) {
-          return OnboardingScreen(
-            onComplete: _onOnboardingComplete,
-          );
+          return OnboardingScreen(onComplete: _onOnboardingComplete);
         }
 
-        // ── Layer 4: Auth state ──────────────────────────────────────────────
+        // ── Layer 4: Auth state ───────────────────────────────────────────────
+        // This StreamBuilder is now mounted immediately after _init() completes.
+        // So login events from LoginScreen are always caught and reflected here.
         return StreamBuilder<User?>(
           stream: FirebaseAuth.instance.authStateChanges(),
           builder: (ctx, authSnap) {
+            // Brief Firebase auth initialization — show splash
             if (authSnap.connectionState == ConnectionState.waiting) {
               return const _SplashScreen();
             }
 
-            // Not logged in → show login
+            // Not logged in
             if (!authSnap.hasData) return const LoginScreen();
 
-            // Logged in → lock check → app
+            // Logged in → wrap with app lock → main app
             final Widget body = AppLockScreen(child: const MainNavigation());
 
-            // Soft update banner
+            // Optional soft update banner
             if (info != null && info.needsSoftUpdate) {
               return _SoftUpdateWrapper(info: info, child: body);
             }
@@ -135,9 +140,6 @@ class _SplashScreen extends StatelessWidget {
               shape: BoxShape.circle,
               border: Border.all(
                   color: Colors.white.withOpacity(0.3), width: 2),
-              boxShadow: [BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
-                  blurRadius: 30, offset: const Offset(0, 10))],
             ),
             child: const Icon(Icons.account_balance_wallet_rounded,
                 color: Colors.white, size: 42),
@@ -172,7 +174,6 @@ class _SoftUpdateWrapper extends StatefulWidget {
 
 class _SoftUpdateWrapperState extends State<_SoftUpdateWrapper> {
   bool _dismissed = false;
-
   @override
   Widget build(BuildContext context) {
     if (_dismissed) return widget.child;
@@ -214,8 +215,7 @@ class _SoftUpdateWrapperState extends State<_SoftUpdateWrapper> {
                   try {
                     final uri = Uri.parse(widget.info.updateUrl);
                     if (await canLaunchUrl(uri)) {
-                      await launchUrl(uri,
-                          mode: LaunchMode.externalApplication);
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
                     }
                   } catch (_) {}
                 },

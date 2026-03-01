@@ -209,7 +209,7 @@ class UserAccessInfo {
     if (isReadOnly) {
       const blocked = ['export', 'import', 'pdfReport',
                        'budget', 'goals', 'transfers', 'recurring',
-                       'categories', 'emiCalc'];
+                       'categories', 'emiCalc', 'investments'];
       if (blocked.contains(feature)) return false;
     }
     return true;

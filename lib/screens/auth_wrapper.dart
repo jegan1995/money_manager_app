@@ -14,6 +14,7 @@ import 'login_screen.dart';
 import 'force_update_screen.dart';
 import 'onboarding_screen.dart';
 import 'main_navigation.dart';
+import 'app_lock_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class AuthWrapper extends StatefulWidget {
@@ -84,7 +85,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
             }
 
             final Widget body = authSnap.hasData
-                ? const MainNavigation()
+                ? AppLockScreen(child: const MainNavigation())
                 : const LoginScreen();
 
             // ── Layer 4: Soft update banner ────────────────────────────────

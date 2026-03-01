@@ -1,284 +1,326 @@
+// lib/screens/app_lock_screen.dart
+// Shows when biometric lock is required.
+// Full-screen lock — user must authenticate to proceed.
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import '../services/app_lock_service.dart';
+import '../services/biometric_service.dart';
 
 class AppLockScreen extends StatefulWidget {
-  final VoidCallback onUnlocked;
-  const AppLockScreen({super.key, required this.onUnlocked});
-
+  final Widget child; // The app to show after unlock
+  const AppLockScreen({super.key, required this.child});
   @override
   State<AppLockScreen> createState() => _AppLockScreenState();
 }
 
 class _AppLockScreenState extends State<AppLockScreen>
-    with SingleTickerProviderStateMixin {
-  final _svc = AppLockService();
-
-  String _pin = '';
-  int _failed = 0;
-  bool _biometricEnabled = false;
-  bool _loading = true;
-  bool _bioLoading = false;
-  String? _message; // null = default hint
-
-  late AnimationController _shake;
-  late Animation<Offset> _shakeAnim;
+    with WidgetsBindingObserver {
+  bool _locked   = false;
+  bool _checking = true;
+  bool _failed   = false;
+  DateTime? _backgroundedAt;
 
   @override
   void initState() {
     super.initState();
-    _shake = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 450));
-    _shakeAnim = Tween<Offset>(
-            begin: Offset.zero, end: const Offset(0.06, 0))
-        .animate(CurvedAnimation(parent: _shake, curve: Curves.elasticIn));
-    _init();
-  }
-
-  Future<void> _init() async {
-    final bioEnabled = await _svc.isBiometricEnabled();
-    final failed = await _svc.getFailedAttempts();
-    if (!mounted) return;
-    setState(() {
-      _biometricEnabled = bioEnabled;
-      _failed = failed;
-      _loading = false;
-    });
-    // Auto-trigger if biometric enabled
-    if (bioEnabled) {
-      await Future.delayed(const Duration(milliseconds: 600));
-      if (mounted) _doBiometric();
-    }
+    WidgetsBinding.instance.addObserver(this);
+    _checkLock();
   }
 
   @override
   void dispose() {
-    _shake.dispose();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  void _tap(String d) {
-    if (_pin.length >= 4) return;
-    HapticFeedback.lightImpact();
-    setState(() { _pin += d; _message = null; });
-    if (_pin.length == 4) {
-      Future.delayed(const Duration(milliseconds: 120), _verify);
+  // App lifecycle — lock on background
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _backgroundedAt = DateTime.now();
+      BiometricService.updateLastActive();
+    }
+    if (state == AppLifecycleState.resumed) {
+      _checkLock();
     }
   }
 
-  void _del() {
-    if (_pin.isEmpty) return;
-    HapticFeedback.lightImpact();
-    setState(() { _pin = _pin.substring(0, _pin.length - 1); _message = null; });
+  Future<void> _checkLock() async {
+    setState(() { _checking = true; _failed = false; });
+    final required = await BiometricService.isLockRequired();
+    if (!required) {
+      await BiometricService.updateLastActive();
+      setState(() { _locked = false; _checking = false; });
+      return;
+    }
+    setState(() { _locked = true; _checking = false; });
+    await _authenticate();
   }
 
-  Future<void> _verify() async {
-    final ok = await _svc.verifyPin(_pin);
-    if (!mounted) return;
+  Future<void> _authenticate() async {
+    setState(() { _failed = false; });
+    final ok = await BiometricService.authenticate(
+      reason: 'Authenticate to open Money Manager',
+    );
     if (ok) {
-      HapticFeedback.heavyImpact();
-      widget.onUnlocked();
+      await BiometricService.updateLastActive();
+      setState(() => _locked = false);
     } else {
-      HapticFeedback.vibrate();
-      _shake.forward(from: 0);
-      setState(() {
-        _failed++;
-        _pin = '';
-        _message = _failed >= 5
-            ? 'Too many attempts — tap fingerprint icon'
-            : 'Wrong PIN (${_failed}/5)';
-      });
+      setState(() => _failed = true);
     }
   }
 
-  Future<void> _doBiometric() async {
-    if (_bioLoading) return;
-    setState(() { _bioLoading = true; _message = null; });
+  @override
+  Widget build(BuildContext context) {
+    if (_checking) return const _SplashLock();
+    if (!_locked) return widget.child;
+    return _LockScreen(
+      failed: _failed,
+      onAuthenticate: _authenticate,
+    );
+  }
+}
 
-    final r = await _svc.authenticateWithBiometric();
+// ── Lock UI ───────────────────────────────────────────────────────────────────
+class _LockScreen extends StatelessWidget {
+  final bool failed;
+  final VoidCallback onAuthenticate;
+  const _LockScreen({required this.failed, required this.onAuthenticate});
 
-    if (!mounted) return;
-    setState(() => _bioLoading = false);
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF667eea), Color(0xFF764ba2)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Lock icon
+                Container(
+                  width: 100, height: 100,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                        color: Colors.white.withOpacity(0.3), width: 2),
+                  ),
+                  child: const Icon(Icons.fingerprint,
+                      color: Colors.white, size: 50),
+                ),
+                const SizedBox(height: 28),
+                const Text('Money Manager',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Text(
+                  failed
+                      ? 'Authentication failed. Try again.'
+                      : 'Your app is locked.\nAuthenticate to continue.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: failed
+                          ? Colors.red[200]
+                          : Colors.white.withOpacity(0.8),
+                      fontSize: 15,
+                      height: 1.5),
+                ),
+                const SizedBox(height: 48),
+                // Authenticate button
+                SizedBox(
+                  width: 200,
+                  height: 56,
+                  child: ElevatedButton.icon(
+                    onPressed: onAuthenticate,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: const Color(0xFF667eea),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(28)),
+                      elevation: 0,
+                    ),
+                    icon: const Icon(Icons.fingerprint, size: 22),
+                    label: const Text('Unlock',
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                if (failed) ...[
+                  const SizedBox(height: 16),
+                  TextButton(
+                    onPressed: onAuthenticate,
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                    ),
+                    child: const Text('Try Again'),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
-    if (r.success) {
-      widget.onUnlocked();
-    } else if (r.error != null) {
-      // Show error in the status line
-      setState(() => _message = r.error);
-    }
-    // null error = user cancelled silently → do nothing
+class _SplashLock extends StatelessWidget {
+  const _SplashLock();
+  @override
+  Widget build(BuildContext context) => const Scaffold(
+    body: Center(child: CircularProgressIndicator()),
+  );
+}
+
+// ── Settings Widget (used in settings screen) ─────────────────────────────────
+class BiometricSettingsTile extends StatefulWidget {
+  const BiometricSettingsTile({super.key});
+  @override
+  State<BiometricSettingsTile> createState() => _BiometricSettingsTileState();
+}
+
+class _BiometricSettingsTileState extends State<BiometricSettingsTile> {
+  bool _enabled     = false;
+  bool _available   = false;
+  bool _loading     = true;
+  int  _timeout     = 1;
+  List<String> _types = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final available = await BiometricService.isAvailable();
+    final enabled   = await BiometricService.isEnabled();
+    final timeout   = await BiometricService.getLockTimeout();
+    final types     = await BiometricService.availableTypes();
+    if (mounted) setState(() {
+      _available = available;
+      _enabled   = enabled;
+      _timeout   = timeout;
+      _types     = types;
+      _loading   = false;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? const Color(0xFF0D1117) : const Color(0xFF1565C0);
 
-    return Scaffold(
-      backgroundColor: bg,
-      body: SafeArea(
-        child: _loading
-            ? const Center(child: CircularProgressIndicator(color: Colors.white))
-            : Column(
-                children: [
-                  const SizedBox(height: 56),
-
-                  // App icon
-                  Container(
-                    width: 76,
-                    height: 76,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.14),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Center(
-                        child: Text('💰', style: TextStyle(fontSize: 38))),
-                  ),
-                  const SizedBox(height: 14),
-
-                  const Text('Money Manager',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-
-                  // Status message (animates between texts)
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 250),
-                    child: Text(
-                      _message ?? 'Enter PIN to unlock',
-                      key: ValueKey(_message),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: _message != null
-                            ? Colors.red[300]
-                            : Colors.white60,
-                        fontSize: 13,
-                        height: 1.4,
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 48),
-
-                  // PIN dots
-                  SlideTransition(
-                    position: _shakeAnim,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: List.generate(4, (i) {
-                        return AnimatedContainer(
-                          duration: const Duration(milliseconds: 150),
-                          margin: const EdgeInsets.symmetric(horizontal: 14),
-                          width: 18,
-                          height: 18,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: i < _pin.length
-                                ? Colors.white
-                                : Colors.white.withOpacity(0.22),
-                            border: Border.all(
-                                color: Colors.white.withOpacity(0.55),
-                                width: 1.5),
-                          ),
-                        );
-                      }),
-                    ),
-                  ),
-
-                  const SizedBox(height: 48),
-
-                  // PIN pad
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 44),
-                    child: Column(
-                      children: [
-                        _row(['1','2','3']),
-                        const SizedBox(height: 14),
-                        _row(['4','5','6']),
-                        const SizedBox(height: 14),
-                        _row(['7','8','9']),
-                        const SizedBox(height: 14),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            // ── Fingerprint button ──────────────────────────
-                            // Always shown if enabled — tapping triggers auth
-                            _bioBtn(),
-                            _digit('0'),
-                            // ── Backspace ───────────────────────────────────
-                            GestureDetector(
-                              onTap: _del,
-                              child: const SizedBox(
-                                width: 72, height: 72,
-                                child: Center(
-                                  child: Icon(Icons.backspace_outlined,
-                                      color: Colors.white, size: 24),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // Fingerprint hint text
-                  if (_biometricEnabled)
-                    Text(
-                      'Tap 👆 fingerprint icon to use biometric',
-                      style: TextStyle(
-                          color: Colors.white.withOpacity(0.35),
-                          fontSize: 12),
-                    ),
-                ],
-              ),
-      ),
-    );
-  }
-
-  Widget _row(List<String> ds) => Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: ds.map(_digit).toList());
-
-  Widget _digit(String d) => GestureDetector(
-    onTap: () => _tap(d),
-    child: Container(
-      width: 72, height: 72,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: Colors.white.withOpacity(0.11),
-        border: Border.all(color: Colors.white.withOpacity(0.18), width: 1),
-      ),
-      child: Center(
-        child: Text(d,
-            style: const TextStyle(
-                color: Colors.white, fontSize: 28, fontWeight: FontWeight.w300)),
-      ),
-    ),
-  );
-
-  Widget _bioBtn() {
-    if (!_biometricEnabled) {
-      // Empty placeholder so layout stays balanced
-      return const SizedBox(width: 72, height: 72);
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Center(child: SizedBox(
+            width: 20, height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2))),
+      );
     }
-    return GestureDetector(
-      onTap: _doBiometric,
-      child: SizedBox(
-        width: 72, height: 72,
-        child: Center(
-          child: _bioLoading
-              ? const SizedBox(
-                  width: 30, height: 30,
-                  child: CircularProgressIndicator(
-                      color: Colors.white, strokeWidth: 2.5))
-              : const Icon(Icons.fingerprint, color: Colors.white, size: 40),
-        ),
+
+    if (!_available) {
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(children: [
+          const Icon(Icons.fingerprint, color: Colors.grey, size: 28),
+          const SizedBox(width: 12),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Biometric Lock',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+            Text('Not available on this device',
+                style: TextStyle(fontSize: 12, color: Colors.grey[400])),
+          ])),
+        ]),
+      );
+    }
+
+    return Column(children: [
+      // Main toggle
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        child: Row(children: [
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              color: const Color(0xFF667eea).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.fingerprint,
+                color: Color(0xFF667eea), size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Biometric Lock',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+            Text(_types.isNotEmpty ? _types.join(' / ') : 'Fingerprint / Face ID',
+                style: TextStyle(fontSize: 11, color: Colors.grey[400])),
+          ])),
+          Switch(
+            value: _enabled,
+            activeColor: const Color(0xFF667eea),
+            onChanged: (v) async {
+              if (v) {
+                // Verify once before enabling
+                final ok = await BiometricService.authenticate(
+                    reason: 'Confirm to enable biometric lock');
+                if (!ok) return;
+              }
+              await BiometricService.setEnabled(v);
+              setState(() => _enabled = v);
+            },
+          ),
+        ]),
       ),
-    );
+      // Timeout picker (only when enabled)
+      if (_enabled) ...[
+        Divider(height: 1, indent: 64,
+            color: isDark
+                ? Colors.white.withOpacity(0.06)
+                : Colors.grey.shade100),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(children: [
+            const SizedBox(width: 48),
+            Text('Lock after: ',
+                style: TextStyle(
+                    fontSize: 12, color: Colors.grey[500])),
+            ...[1, 2, 5, 15].map((m) => GestureDetector(
+              onTap: () async {
+                await BiometricService.setLockTimeout(m);
+                setState(() => _timeout = m);
+              },
+              child: Container(
+                margin: const EdgeInsets.only(left: 6),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _timeout == m
+                      ? const Color(0xFF667eea)
+                      : Colors.grey.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text('${m}m',
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: _timeout == m
+                            ? Colors.white : Colors.grey)),
+              ),
+            )),
+          ]),
+        ),
+      ],
+    ]);
   }
 }

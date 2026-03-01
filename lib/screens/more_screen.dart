@@ -23,6 +23,9 @@ import 'emi_calculator_screen.dart';
 import 'custom_categories_screen.dart';
 import 'pdf_report_screen.dart';
 import 'pwa_install_screen.dart';
+import 'subscription_screen.dart';
+import 'bill_reminders_screen.dart';
+import 'investment_screen.dart';
 import 'net_worth_screen.dart';
 import 'family_screen.dart';
 
@@ -380,6 +383,37 @@ class _MoreScreenState extends State<MoreScreen> {
           subtitle: 'Create your own categories',
           color: const Color(0xFF6A1B9A),
           screen: const CustomCategoriesScreen()),
+      ]);
+      if (s != null) sections.add(s);
+    }
+
+    // ── FINANCE TRACKERS ─────────────────────────────────────────────────────
+    {
+      final s = section('Finance Trackers', [
+        item(
+          feature: 'subscriptions',
+          locked: !access.isFeatureEnabled('subscriptions'),
+          icon: Icons.subscriptions_outlined,
+          title: 'Subscriptions',
+          subtitle: 'Track Netflix, Spotify & more',
+          color: const Color(0xFF667eea),
+          screen: const SubscriptionScreen()),
+        item(
+          feature: 'bills',
+          locked: !access.isFeatureEnabled('bills'),
+          icon: Icons.receipt_outlined,
+          title: 'Bill Reminders',
+          subtitle: 'Electricity, rent, phone bills',
+          color: const Color(0xFF1A237E),
+          screen: const BillRemindersScreen()),
+        item(
+          feature: 'investments',
+          locked: !access.isFeatureEnabled('investments'),
+          icon: Icons.trending_up_outlined,
+          title: 'Investments',
+          subtitle: 'Stocks, MF, Gold, FD portfolio',
+          color: const Color(0xFF1B5E20),
+          screen: const InvestmentScreen()),
       ]);
       if (s != null) sections.add(s);
     }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/onboarding_service.dart';
+import 'app_lock_screen.dart';
 import 'onboarding_screen.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
@@ -140,7 +141,23 @@ class SettingsScreen extends StatelessWidget {
                   ]),
                 ),
 
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
+
+                // ── Security ──────────────────────────────────────────
+                _label('Security', isDark),
+                const SizedBox(height: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    color: card,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 8)],
+                  ),
+                  child: const BiometricSettingsTile(),
+                ),
+
+                const SizedBox(height: 20),
 
                 // ── About ──────────────────────────────────────────────
                 _label('About', isDark),

@@ -75,6 +75,11 @@ class _AppLockScreenState extends State<AppLockScreen>
 }
 
 // ── Lock UI ───────────────────────────────────────────────────────────────────
+// Biometric flow:
+//   1. App opens  → biometric dialog shows immediately
+//   2. Fail 1–2x  → "Try Again" button + "Use PIN instead" button visible
+//   3. Fail 3x    → auto-switches to PIN pad (no user action needed)
+//   4. PIN correct → unlocks. PIN wrong → shake + red dots
 class _LockUI extends StatefulWidget {
   final VoidCallback onUnlocked;
   const _LockUI({required this.onUnlocked});
@@ -88,6 +93,8 @@ class _LockUIState extends State<_LockUI> with SingleTickerProviderStateMixin {
   bool   _pinEnabled = false;
   bool   _bioLoading = false;
   bool   _bioFailed  = false;
+  int    _bioFailCount = 0;          // ← tracks consecutive bio failures
+  static const _maxBioAttempts = 3; // ← after 3 fails → auto PIN
   String _pin        = '';
   bool   _pinWrong   = false;
   late AnimationController _shakeCtrl;
@@ -112,20 +119,45 @@ class _LockUIState extends State<_LockUI> with SingleTickerProviderStateMixin {
     if (mounted) setState(() {
       _bioEnabled = bio;
       _pinEnabled = pin;
-      _showPin    = !bio; // show PIN pad if no biometric
+      // Default: show biometric screen if bio enabled,
+      // else show PIN pad directly
+      _showPin = !bio;
     });
+    // Auto-trigger biometric on open
     if (bio) _tryBiometric();
   }
 
   Future<void> _tryBiometric() async {
+    if (!mounted) return;
     setState(() { _bioLoading = true; _bioFailed = false; });
     final ok = await BiometricService.authenticateBiometric();
     if (!mounted) return;
+
     if (ok) {
       widget.onUnlocked();
-    } else {
-      setState(() { _bioLoading = false; _bioFailed = true; });
+      return;
     }
+
+    // Biometric failed — increment counter
+    _bioFailCount++;
+    setState(() { _bioLoading = false; _bioFailed = true; });
+
+    // ── After 3 failures → auto-switch to PIN ────────────────────────────
+    if (_bioFailCount >= _maxBioAttempts && _pinEnabled) {
+      await Future.delayed(const Duration(milliseconds: 300));
+      if (mounted) setState(() { _showPin = true; _bioFailed = false; });
+    }
+  }
+
+  // Switch to PIN manually (user tapped "Use PIN instead")
+  void _switchToPin() {
+    setState(() { _showPin = true; _pin = ''; _pinWrong = false; _bioFailed = false; });
+  }
+
+  // Switch back to biometric (user tapped fingerprint icon on PIN pad)
+  void _switchToBio() {
+    setState(() { _showPin = false; _pin = ''; _bioFailed = false; _bioFailCount = 0; });
+    _tryBiometric();
   }
 
   Future<void> _tapDigit(String d) async {
@@ -182,7 +214,9 @@ class _LockUIState extends State<_LockUI> with SingleTickerProviderStateMixin {
           const SizedBox(height: 6),
           Text(
             _showPin ? 'Enter your 4-digit PIN'
-                     : 'Touch fingerprint to unlock',
+                : _bioFailCount >= _maxBioAttempts
+                    ? 'Use PIN to continue'
+                    : 'Touch fingerprint to unlock',
             style: TextStyle(
                 color: Colors.white.withOpacity(0.55), fontSize: 13),
           ),
@@ -238,10 +272,7 @@ class _LockUIState extends State<_LockUI> with SingleTickerProviderStateMixin {
                   SizedBox(width: 72, height: 72,
                     child: _bioEnabled
                         ? TextButton(
-                            onPressed: () {
-                              setState(() { _showPin = false; _pin = ''; });
-                              _tryBiometric();
-                            },
+                            onPressed: _switchToBio,
                             style: TextButton.styleFrom(shape: const CircleBorder()),
                             child: const Icon(Icons.fingerprint,
                                 color: Colors.white60, size: 32),
@@ -262,13 +293,16 @@ class _LockUIState extends State<_LockUI> with SingleTickerProviderStateMixin {
 
           // ── Biometric view ──────────────────────────────────────────
           else ...[
+            // Fingerprint icon — tap to retry
             GestureDetector(
               onTap: _bioLoading ? null : _tryBiometric,
-              child: Container(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
                 width: 90, height: 90,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withOpacity(_bioLoading ? 0.07 : 0.13),
+                  color: Colors.white.withOpacity(
+                      _bioLoading ? 0.07 : _bioFailed ? 0.05 : 0.13),
                   border: Border.all(
                     color: _bioFailed
                         ? Colors.red.withOpacity(0.5)
@@ -285,52 +319,66 @@ class _LockUIState extends State<_LockUI> with SingleTickerProviderStateMixin {
                         size: 48),
               ),
             ),
-            const SizedBox(height: 12),
-            if (_bioFailed)
-              Text('Authentication failed',
-                  style: TextStyle(color: Colors.red[300], fontSize: 13)),
+            const SizedBox(height: 14),
+
+            // Status text — shows attempt count after first failure
+            if (!_bioFailed && !_bioLoading)
+              Text('Touch sensor to unlock',
+                  style: TextStyle(
+                      color: Colors.white.withOpacity(0.45), fontSize: 12)),
             if (_bioFailed) ...[
-              const SizedBox(height: 12),
-              TextButton.icon(
-                onPressed: _tryBiometric,
-                icon: const Icon(Icons.refresh, color: Colors.white54, size: 16),
-                label: const Text('Try again',
-                    style: TextStyle(color: Colors.white54)),
-              ),
+              Text(
+                _bioFailCount >= _maxBioAttempts
+                    ? 'Too many failed attempts'
+                    : 'Couldn\'t verify fingerprint',
+                style: TextStyle(color: Colors.red[300], fontSize: 13)),
+              if (_bioFailCount < _maxBioAttempts) ...[
+                const SizedBox(height: 4),
+                Text(
+                  '${_maxBioAttempts - _bioFailCount} attempt${_maxBioAttempts - _bioFailCount == 1 ? '' : 's'} left',
+                  style: TextStyle(
+                      color: Colors.orange.withOpacity(0.8), fontSize: 11)),
+              ],
             ],
+            const SizedBox(height: 20),
+
+            // Action buttons row
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              // Retry biometric (only before max attempts)
+              if (_bioFailed && _bioFailCount < _maxBioAttempts) ...[
+                _actionButton(
+                  icon: Icons.refresh_rounded,
+                  label: 'Try Again',
+                  onTap: _tryBiometric,
+                ),
+                const SizedBox(width: 12),
+              ],
+
+              // "Use PIN instead" — ALWAYS visible on biometric screen if PIN is set
+              if (_pinEnabled)
+                _actionButton(
+                  icon: Icons.dialpad_rounded,
+                  label: 'Use PIN instead',
+                  onTap: _switchToPin,
+                  highlight: _bioFailCount >= _maxBioAttempts, // glow after 3 fails
+                ),
+            ]),
           ],
 
           const Spacer(),
 
-          // ── Bottom toggle PIN ↔ Biometric ─────────────────────────
+          // ── Bottom: on PIN pad → show "Use fingerprint" if bio enabled ────
           Padding(
             padding: const EdgeInsets.only(bottom: 36),
-            child: Column(children: [
-              if (_bioEnabled && _pinEnabled)
-                TextButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _showPin = !_showPin;
-                      _pin     = '';
-                      _pinWrong = false;
-                      if (!_showPin) _tryBiometric();
-                    });
-                  },
-                  icon: Icon(_showPin ? Icons.fingerprint : Icons.dialpad,
-                      color: Colors.white38, size: 18),
-                  label: Text(
-                    _showPin ? 'Use Fingerprint instead'
-                             : 'Use PIN instead',
-                    style: const TextStyle(color: Colors.white38, fontSize: 13)),
-                ),
-              if (!_bioEnabled && _pinEnabled && !_showPin)
-                TextButton.icon(
-                  onPressed: () => setState(() => _showPin = true),
-                  icon: const Icon(Icons.dialpad, color: Colors.white38, size: 18),
-                  label: const Text('Enter PIN',
-                      style: TextStyle(color: Colors.white38, fontSize: 13)),
-                ),
-            ]),
+            child: _showPin && _bioEnabled
+                ? TextButton.icon(
+                    onPressed: _switchToBio,
+                    icon: const Icon(Icons.fingerprint,
+                        color: Colors.white38, size: 18),
+                    label: const Text('Use fingerprint instead',
+                        style: TextStyle(color: Colors.white38, fontSize: 13)),
+                  )
+                : const SizedBox.shrink(),
           ),
         ])),
       ),
@@ -354,6 +402,47 @@ class _LockUIState extends State<_LockUI> with SingleTickerProviderStateMixin {
           fontSize: 24, fontWeight: FontWeight.w300, color: Colors.white)),
     ),
   );
+
+  Widget _actionButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    bool highlight = false,
+  }) =>
+      GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: highlight
+                ? Colors.white.withOpacity(0.18)
+                : Colors.white.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: highlight
+                  ? Colors.white.withOpacity(0.5)
+                  : Colors.white.withOpacity(0.15),
+            ),
+            boxShadow: highlight ? [
+              BoxShadow(
+                color: Colors.white.withOpacity(0.15),
+                blurRadius: 12,
+                spreadRadius: 2,
+              ),
+            ] : [],
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, color: Colors.white, size: 16),
+            const SizedBox(width: 8),
+            Text(label,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500)),
+          ]),
+        ),
+      );
 }
 
 // ── Settings tile (embedded in settings screen) ───────────────────────────────

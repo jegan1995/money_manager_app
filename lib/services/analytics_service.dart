@@ -263,12 +263,13 @@ class AnalyticsService {
 
   // ── Claude AI insights ────────────────────────────────────────────────────
   // Returns null if on web (dart:io not available) or API call fails.
+  // Returns null on success path issue, throws String on known error for UI display
   static Future<String?> fetchClaudeInsights({
     required List<TransactionModel> transactions,
     required String apiKey,
   }) async {
-    if (kIsWeb) return null; // dart:io not available on web
-    if (apiKey.trim().isEmpty) return null;
+    if (kIsWeb) throw 'Claude AI is only available on the Android app.';
+    if (apiKey.trim().isEmpty) throw 'Please enter your Anthropic API key.';
 
     final now       = DateTime.now();
     final thisMonth = transactions.where((t) =>
@@ -277,62 +278,86 @@ class AnalyticsService {
     final income  = _sum(thisMonth, 'income');
     final expense = _sum(thisMonth, 'expense');
 
-    // Build category summary
     final catMap = <String, double>{};
     for (final t in thisMonth.where((t) => t.type == 'expense')) {
       catMap[t.category] = (catMap[t.category] ?? 0) + t.amount;
     }
     final catSummary = catMap.entries
-        .map((e) => '${e.key}: ₹${e.value.toStringAsFixed(0)}')
+        .map((e) => '\${e.key}: ₹\${e.value.toStringAsFixed(0)}')
         .join(', ');
 
-    final prompt = '''You are a personal finance advisor analyzing a user's monthly spending in India.
-Here is their ${now.year}-${now.month.toString().padLeft(2, '0')} financial summary:
-- Total Income: ₹${income.toStringAsFixed(0)}
-- Total Expenses: ₹${expense.toStringAsFixed(0)}
-- Savings: ₹${(income - expense).toStringAsFixed(0)} (${income > 0 ? ((income - expense) / income * 100).toStringAsFixed(1) : 0}%)
-- Expense breakdown: $catSummary
-- Total transactions: ${thisMonth.length}
+    final prompt = 'You are a personal finance advisor for an Indian user. '
+        'Month: \${now.year}-\${now.month.toString().padLeft(2, "0")}. '
+        'Income: ₹\${income.toStringAsFixed(0)}, '
+        'Expenses: ₹\${expense.toStringAsFixed(0)}, '
+        'Savings: ₹\${(income - expense).toStringAsFixed(0)} (\${income > 0 ? ((income - expense) / income * 100).toStringAsFixed(1) : 0}%). '
+        'Breakdown: \$catSummary. Transactions: \${thisMonth.length}. '
+        'Give exactly 3 specific actionable insights as JSON only (no markdown): '
+        '{"insights":[{"title":"...","message":"...","type":"warning|tip|positive"}]}. '
+        'Each message under 120 chars. Be specific with rupee amounts.';
 
-Give exactly 3 specific, actionable insights in this exact JSON format (no other text):
-{"insights":[{"title":"...","message":"...","type":"warning|tip|positive"}]}
-
-Keep each message under 120 characters. Be specific with numbers. Be friendly but direct.''';
+    final bodyMap = {
+      'model': 'claude-haiku-4-5-20251001',
+      'max_tokens': 500,
+      'messages': [{'role': 'user', 'content': prompt}],
+    };
+    final bodyStr   = jsonEncode(bodyMap);
+    final bodyBytes = utf8.encode(bodyStr);
 
     try {
-      final body = jsonEncode({
-        'model': 'claude-haiku-4-5-20251001',
-        'max_tokens': 400,
-        'messages': [{'role': 'user', 'content': prompt}],
-      });
+      final client = HttpClient();
+      client.connectionTimeout = const Duration(seconds: 20);
 
-      final client  = HttpClient();
-      client.connectionTimeout = const Duration(seconds: 15);
-      final request = await client.postUrl(
-          Uri.parse('https://api.anthropic.com/v1/messages'));
-      request.headers.set('content-type',   'application/json');
-      request.headers.set('x-api-key',       apiKey.trim());
+      // Disable bad certificate check (some Android versions have SSL issues)
+      client.badCertificateCallback = (cert, host, port) => false;
+
+      final request = await client
+          .postUrl(Uri.parse('https://api.anthropic.com/v1/messages'));
+
+      // Set all headers before writing body
+      request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+      request.headers.set(HttpHeaders.contentLengthHeader, bodyBytes.length);
+      request.headers.set('x-api-key', apiKey.trim());
       request.headers.set('anthropic-version', '2023-06-01');
-      request.write(body);
+      // Prevent keep-alive issues on Android
+      request.headers.set(HttpHeaders.connectionHeader, 'close');
 
+      request.add(bodyBytes);
       final response = await request.close();
       final respBody = await response.transform(utf8.decoder).join();
       client.close();
 
-      if (response.statusCode != 200) return null;
+      if (response.statusCode == 401) {
+        throw 'Invalid API key. Get your key at console.anthropic.com';
+      }
+      if (response.statusCode == 429) {
+        throw 'Rate limit reached. Wait a moment and try again.';
+      }
+      if (response.statusCode != 200) {
+        throw 'API error \${response.statusCode}. Please try again.';
+      }
 
       final decoded = jsonDecode(respBody);
-      final text    = decoded['content']?[0]?['text'] as String?;
-      if (text == null) return null;
+      final text    = (decoded['content'] as List?)?.firstWhere(
+        (b) => b['type'] == 'text', orElse: () => null)?['text'] as String?;
+      if (text == null) throw 'Empty response from Claude.';
 
-      // Parse inner JSON
-      final start = text.indexOf('{');
-      final end   = text.lastIndexOf('}');
-      if (start < 0 || end < 0) return null;
+      // Extract JSON from response (strip any markdown fences)
+      final clean = text.replaceAll(RegExp(r'```json|```'), '').trim();
+      final start = clean.indexOf('{');
+      final end   = clean.lastIndexOf('}');
+      if (start < 0 || end < 0) throw 'Could not parse AI response.';
 
-      return text.substring(start, end + 1);
-    } catch (_) {
-      return null;
+      return clean.substring(start, end + 1);
+
+    } on SocketException catch (e) {
+      throw 'No internet connection: \${e.message}';
+    } on HttpException catch (e) {
+      throw 'Network error: \${e.message}';
+    } on String {
+      rethrow;
+    } catch (e) {
+      throw 'Error: \$e';
     }
   }
 

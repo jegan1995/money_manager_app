@@ -112,27 +112,20 @@ class _EnhancedReportsScreenState extends State<EnhancedReportsScreen>
   }
 
   Future<void> _runClaudeAI() async {
-    if (kIsWeb) {
-      setState(() => _aiError = 'Claude AI is only available on the Android app.');
-      return;
-    }
-    if (_apiKey.isEmpty) {
+    if (_apiKey.isEmpty && !kIsWeb) {
       setState(() => _showApiKeyField = true);
       return;
     }
     setState(() { _aiLoading = true; _aiError = null; _aiResult = null; });
-    final result = await AnalyticsService.fetchClaudeInsights(
-      transactions: _all,
-      apiKey: _apiKey,
-    );
-    setState(() {
-      _aiLoading = false;
-      if (result == null) {
-        _aiError = 'Could not reach Claude API. Check your API key and internet connection.';
-      } else {
-        _aiResult = result;
-      }
-    });
+    try {
+      final result = await AnalyticsService.fetchClaudeInsights(
+        transactions: _all,
+        apiKey: _apiKey,
+      );
+      setState(() { _aiLoading = false; _aiResult = result; });
+    } catch (e) {
+      setState(() { _aiLoading = false; _aiError = e.toString(); });
+    }
   }
 
   @override

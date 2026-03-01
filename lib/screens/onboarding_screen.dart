@@ -66,7 +66,10 @@ const _slides = [
 
 // ── Main widget ──────────────────────────────────────────────────────────────
 class OnboardingScreen extends StatefulWidget {
-  const OnboardingScreen({super.key});
+  // onComplete: called instead of Navigator.push — lets AuthWrapper
+  // switch screens via setState (no navigator stack conflict on Android)
+  final VoidCallback? onComplete;
+  const OnboardingScreen({super.key, this.onComplete});
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
 }
@@ -140,10 +143,16 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     HapticFeedback.mediumImpact();
     await OnboardingService.markComplete();
     if (!mounted) return;
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
-    );
+    // Use callback if AuthWrapper provided one (no navigator conflict)
+    // Falls back to Navigator.pushReplacement for standalone use
+    if (widget.onComplete != null) {
+      widget.onComplete!();
+    } else {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+      );
+    }
   }
 
   @override

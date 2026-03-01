@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/transaction_model.dart';
 import '../services/transaction_service.dart';
 import '../services/analytics_service.dart';
+import 'tax_calculator_tab.dart';
 
 // Currency formatter
 final _fmt = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
@@ -55,7 +56,7 @@ class _EnhancedReportsScreenState extends State<EnhancedReportsScreen>
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 5, vsync: this, initialIndex: 0);
+    _tab = TabController(length: 6, vsync: this, initialIndex: 0);
     _loadApiKey();
     _loadData();
   }
@@ -155,6 +156,7 @@ class _EnhancedReportsScreenState extends State<EnhancedReportsScreen>
             Tab(text: '💯 Health'),
             Tab(text: '📈 Cashflow'),
             Tab(text: '📉 Trends'),
+            Tab(text: '🧾 Tax'),
           ],
         ),
       ),
@@ -203,6 +205,7 @@ class _EnhancedReportsScreenState extends State<EnhancedReportsScreen>
                   cardBg: cardBg,
                   isDark: isDark,
                 ),
+                const TaxCalculatorTab(),
               ],
             ),
     );

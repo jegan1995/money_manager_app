@@ -283,15 +283,15 @@ class AnalyticsService {
       catMap[t.category] = (catMap[t.category] ?? 0) + t.amount;
     }
     final catSummary = catMap.entries
-        .map((e) => '\${e.key}: ₹\${e.value.toStringAsFixed(0)}')
+        .map((e) => '${e.key}: ₹${e.value.toStringAsFixed(0)}')
         .join(', ');
 
     final prompt = 'You are a personal finance advisor for an Indian user. '
-        'Month: \${now.year}-\${now.month.toString().padLeft(2, "0")}. '
-        'Income: ₹\${income.toStringAsFixed(0)}, '
-        'Expenses: ₹\${expense.toStringAsFixed(0)}, '
-        'Savings: ₹\${(income - expense).toStringAsFixed(0)} (\${income > 0 ? ((income - expense) / income * 100).toStringAsFixed(1) : 0}%). '
-        'Breakdown: \$catSummary. Transactions: \${thisMonth.length}. '
+        'Month: ${now.year}-${now.month.toString().padLeft(2, "0")}. '
+        'Income: ₹${income.toStringAsFixed(0)}, '
+        'Expenses: ₹${expense.toStringAsFixed(0)}, '
+        'Savings: ₹${(income - expense).toStringAsFixed(0)} (${income > 0 ? ((income - expense) / income * 100).toStringAsFixed(1) : 0}%). '
+        'Breakdown: $catSummary. Transactions: ${thisMonth.length}. '
         'Give exactly 3 specific actionable insights as JSON only (no markdown): '
         '{"insights":[{"title":"...","message":"...","type":"warning|tip|positive"}]}. '
         'Each message under 120 chars. Be specific with rupee amounts.';
@@ -334,7 +334,7 @@ class AnalyticsService {
         throw 'Rate limit reached. Wait a moment and try again.';
       }
       if (response.statusCode != 200) {
-        throw 'API error \${response.statusCode}. Please try again.';
+        throw 'API error ${response.statusCode}. Please try again.';
       }
 
       final decoded = jsonDecode(respBody);
@@ -351,13 +351,13 @@ class AnalyticsService {
       return clean.substring(start, end + 1);
 
     } on SocketException catch (e) {
-      throw 'No internet connection: \${e.message}';
+      throw 'No internet connection: ${e.message}';
     } on HttpException catch (e) {
-      throw 'Network error: \${e.message}';
+      throw 'Network error: ${e.message}';
     } on String {
       rethrow;
     } catch (e) {
-      throw 'Error: \$e';
+      throw 'Error: $e';
     }
   }
 

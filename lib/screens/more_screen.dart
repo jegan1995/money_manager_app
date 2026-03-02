@@ -22,6 +22,7 @@ import 'search_transactions_screen.dart';
 import 'theme_settings_screen.dart';
 import 'net_worth_screen.dart';
 import 'loan_screen.dart';
+import 'split_expense_screen.dart';
 import 'currency_settings_screen.dart';
 import 'import_transactions_screen.dart';
 
@@ -245,6 +246,17 @@ class MoreScreen extends StatelessWidget {
             onTap: () => Navigator.push(context,
                 MaterialPageRoute(
                     builder: (context) => const NetWorthScreen())),
+          ),
+
+          _buildMenuItem(
+            context,
+            icon: Icons.group_rounded,
+            title: 'Split Expenses',
+            subtitle: 'Split bills with friends',
+            color: Colors.orange,
+            onTap: () => Navigator.push(context,
+                MaterialPageRoute(
+                    builder: (context) => const SplitExpenseScreen())),
           ),
 
           _buildMenuItem(

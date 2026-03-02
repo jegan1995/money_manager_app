@@ -1,81 +1,86 @@
+// lib/screens/net_worth_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/net_worth_model.dart';
-import '../models/account_model.dart';
 import '../services/net_worth_service.dart';
-import '../services/account_service.dart';
 
+// ── Constants ─────────────────────────────────────────────────────────────────
+final _inr = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
+String _f(double v) => _inr.format(v.abs());
+String _fs(double v) => '${v < 0 ? '-' : ''}${_f(v)}';
+
+const _assetCategories = [
+  ('Cash & Bank',     Icons.account_balance_rounded,   Color(0xFF4facfe)),
+  ('Investments',     Icons.trending_up_rounded,        Color(0xFF43e97b)),
+  ('Real Estate',     Icons.home_rounded,               Color(0xFF667eea)),
+  ('Gold & Jewellery',Icons.diamond_rounded,            Color(0xFFf9ca24)),
+  ('Vehicles',        Icons.directions_car_rounded,     Color(0xFFf093fb)),
+  ('Retirement',      Icons.savings_rounded,            Color(0xFF56ab2f)),
+];
+
+const _liabilityCategories = [
+  ('Home Loan',       Icons.home_work_rounded,          Color(0xFFfa709a)),
+  ('Car Loan',        Icons.car_rental_rounded,         Color(0xFFfda085)),
+  ('Personal Loan',   Icons.person_rounded,             Color(0xFFf5576c)),
+  ('Credit Card',     Icons.credit_card_rounded,        Color(0xFFee0979)),
+  ('Education Loan',  Icons.school_rounded,             Color(0xFFff6b6b)),
+  ('Other Loans',     Icons.receipt_long_rounded,       Color(0xFFfd746c)),
+];
+
+// ── Screen ────────────────────────────────────────────────────────────────────
 class NetWorthScreen extends StatefulWidget {
   const NetWorthScreen({super.key});
-
   @override
   State<NetWorthScreen> createState() => _NetWorthScreenState();
 }
 
 class _NetWorthScreenState extends State<NetWorthScreen>
     with SingleTickerProviderStateMixin {
-  final _svc     = NetWorthService();
-  final _accSvc  = AccountService();
+  final _svc = NetWorthService();
   late TabController _tab;
-  bool _balanceHidden = false;
+  int _touchedAsset = -1;
 
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 3, vsync: this);
+    _tab = TabController(length: 2, vsync: this);
   }
 
   @override
-  void dispose() {
-    _tab.dispose();
-    super.dispose();
-  }
+  void dispose() { _tab.dispose(); super.dispose(); }
 
-  // ── Helpers ─────────────────────────────────────────────────────────────────
-  String _fmt(double v) {
-    final abs = v.abs();
-    String str;
-    if (abs >= 10000000)      str = '₹${(abs / 10000000).toStringAsFixed(2)} Cr';
-    else if (abs >= 100000)   str = '₹${(abs / 100000).toStringAsFixed(2)} L';
-    else if (abs >= 1000)     str = '₹${(abs / 1000).toStringAsFixed(1)}k';
-    else                      str = '₹${abs.toStringAsFixed(0)}';
-    return v < 0 ? '-$str' : str;
-  }
-
-  String _fmtFull(double v) =>
-      '₹${NumberFormat('#,##,##0').format(v.abs())}';
-
-  // ── Build ────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg     = isDark ? const Color(0xFF0D1117) : const Color(0xFFF5F6FA);
+    final cardBg = isDark ? const Color(0xFF1E2530) : Colors.white;
 
     return Scaffold(
-      backgroundColor:
-          isDark ? const Color(0xFF0D1117) : const Color(0xFFF5F6FA),
+      backgroundColor: bg,
       appBar: AppBar(
-        title: const Text('Net Worth'),
-        backgroundColor: const Color(0xFF1A237E),
-        foregroundColor: Colors.white,
+        title: const Text('Net Worth',
+            style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: isDark ? const Color(0xFF1E2530) : Colors.white,
+        foregroundColor: isDark ? Colors.white : Colors.black87,
+        elevation: 0,
         actions: [
           IconButton(
-            icon: Icon(_balanceHidden
-                ? Icons.visibility_off
-                : Icons.visibility,
-                color: Colors.white70),
-            onPressed: () => setState(() => _balanceHidden = !_balanceHidden),
+            icon: const Icon(Icons.add_rounded),
+            onPressed: () => _showAddSheet(context, isDark),
+            tooltip: 'Add item',
           ),
         ],
         bottom: TabBar(
           controller: _tab,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white54,
+          indicatorColor: const Color(0xFF667eea),
+          labelColor: const Color(0xFF667eea),
+          unselectedLabelColor: Colors.grey,
           tabs: const [
-            Tab(icon: Icon(Icons.dashboard), text: 'Overview'),
-            Tab(icon: Icon(Icons.account_balance), text: 'Assets'),
-            Tab(icon: Icon(Icons.credit_card), text: 'Liabilities'),
+            Tab(text: 'Overview'),
+            Tab(text: 'Details'),
           ],
         ),
       ),
@@ -85,1040 +90,825 @@ class _NetWorthScreenState extends State<NetWorthScreen>
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
+          final items      = snap.data ?? [];
+          final assets     = items.where((i) => i.type == 'asset').toList();
+          final liabilities = items.where((i) => i.type == 'liability').toList();
+          final totalAssets = assets.fold(0.0, (s, i) => s + i.value);
+          final totalLiab   = liabilities.fold(0.0, (s, i) => s + i.value);
+          final netWorth    = totalAssets - totalLiab;
 
-          final items       = snap.data ?? [];
-          final assets      = items.where((i) => i.isAsset).toList();
-          final liabilities = items.where((i) => i.isLiability).toList();
-
-          // Also pull in account balances as assets
-          return StreamBuilder<List<AccountModel>>(
-            stream: _accSvc.getAccounts(),
-            builder: (context, accSnap) {
-              final accounts = accSnap.data ?? [];
-
-              // Accounts that are positive = assets, negative/debt = liabilities
-              double accAssets = 0, accLiabilities = 0;
-              for (final a in accounts) {
-                if (a.isDebt) {
-                  accLiabilities += a.balance.abs();
-                } else {
-                  if (a.balance > 0) accAssets += a.balance;
-                }
-              }
-
-              final manualAssets      = assets.fold(0.0, (s, i) => s + i.value);
-              final manualLiabilities = liabilities.fold(0.0, (s, i) => s + i.value);
-
-              final totalAssets      = manualAssets + accAssets;
-              final totalLiabilities = manualLiabilities + accLiabilities;
-              final netWorth         = totalAssets - totalLiabilities;
-
-              return TabBarView(
-                controller: _tab,
-                children: [
-                  _buildOverview(isDark, items, accounts,
-                      totalAssets, totalLiabilities, netWorth, accAssets, accLiabilities),
-                  _buildItemList(isDark, assets, 'asset', accounts),
-                  _buildItemList(isDark, liabilities, 'liability', accounts),
-                ],
-              );
-            },
+          return TabBarView(
+            controller: _tab,
+            children: [
+              _OverviewTab(
+                items: items,
+                assets: assets,
+                liabilities: liabilities,
+                totalAssets: totalAssets,
+                totalLiab: totalLiab,
+                netWorth: netWorth,
+                isDark: isDark,
+                cardBg: cardBg,
+                touchedAsset: _touchedAsset,
+                onTouchAsset: (i) => setState(() => _touchedAsset = i),
+                onAdd: () => _showAddSheet(context, isDark),
+              ),
+              _DetailsTab(
+                items: items,
+                isDark: isDark,
+                cardBg: cardBg,
+                onEdit:   (item) => _showEditSheet(context, item, isDark),
+                onDelete: (item) => _confirmDelete(context, item),
+              ),
+            ],
           );
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddSheet(context),
-        backgroundColor: const Color(0xFF1A237E),
+        onPressed: () => _showAddSheet(context, isDark),
+        backgroundColor: const Color(0xFF667eea),
         foregroundColor: Colors.white,
-        icon: const Icon(Icons.add),
-        label: const Text('Add Item'),
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('Add Item',
+            style: TextStyle(fontWeight: FontWeight.bold)),
       ),
     );
   }
 
-  // ── Tab 1: Overview ──────────────────────────────────────────────────────────
-  Widget _buildOverview(
-    bool isDark,
-    List<NetWorthItem> items,
-    List<AccountModel> accounts,
-    double totalAssets,
-    double totalLiabilities,
-    double netWorth,
-    double accAssets,
-    double accLiabilities,
-  ) {
-    final isPositive = netWorth >= 0;
-    final debtRatio  = totalAssets > 0
-        ? (totalLiabilities / totalAssets * 100).clamp(0.0, 100.0)
-        : 0.0;
+  // ── Add / Edit sheet ──────────────────────────────────────────────────────
+  void _showAddSheet(BuildContext ctx, bool isDark) =>
+      _showItemSheet(ctx, null, isDark);
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          // ── Net Worth Hero card ─────────────────────────────────────────────
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: isPositive
-                    ? [const Color(0xFF1A237E), const Color(0xFF3949AB)]
-                    : [const Color(0xFF7B1FA2), const Color(0xFFC62828)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                    color: (isPositive
-                            ? const Color(0xFF1A237E)
-                            : const Color(0xFF7B1FA2))
-                        .withOpacity(0.4),
-                    blurRadius: 16,
-                    offset: const Offset(0, 8)),
-              ],
-            ),
-            child: Column(
-              children: [
-                const Text('Net Worth',
-                    style: TextStyle(color: Colors.white60, fontSize: 14)),
-                const SizedBox(height: 8),
-                Text(
-                  _balanceHidden ? '₹ ••••••' : _fmt(netWorth),
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 42,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: -1),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  isPositive ? '💚 Positive net worth!' : '⚠️ Liabilities exceed assets',
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
-                ),
-                const SizedBox(height: 20),
-                const Divider(color: Colors.white24),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _heroStat('Total Assets',      _fmt(totalAssets),      Colors.greenAccent),
-                    Container(width: 1, height: 40, color: Colors.white24),
-                    _heroStat('Total Liabilities', _fmt(totalLiabilities), Colors.redAccent),
-                  ],
-                ),
-              ],
-            ),
-          ),
+  void _showEditSheet(BuildContext ctx, NetWorthItem item, bool isDark) =>
+      _showItemSheet(ctx, item, isDark);
 
-          const SizedBox(height: 20),
+  void _showItemSheet(BuildContext ctx, NetWorthItem? existing, bool isDark) {
+    String type     = existing?.type     ?? 'asset';
+    String category = existing?.category ?? _assetCategories[0].$1;
+    final nameCtrl  = TextEditingController(text: existing?.name  ?? '');
+    final valueCtrl = TextEditingController(
+        text: existing != null ? existing.value.toStringAsFixed(0) : '');
+    final noteCtrl  = TextEditingController(text: existing?.note  ?? '');
 
-          // ── Debt ratio card ─────────────────────────────────────────────────
-          _card(isDark,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Debt-to-Asset Ratio',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: (debtRatio < 30
-                                ? Colors.green
-                                : debtRatio < 60
-                                    ? Colors.orange
-                                    : Colors.red)
-                            .withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        '${debtRatio.toStringAsFixed(1)}%',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                            color: debtRatio < 30
-                                ? Colors.green
-                                : debtRatio < 60
-                                    ? Colors.orange
-                                    : Colors.red),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: LinearProgressIndicator(
-                    value: debtRatio / 100,
-                    backgroundColor: Colors.green.withOpacity(0.15),
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                        debtRatio < 30
-                            ? Colors.green
-                            : debtRatio < 60
-                                ? Colors.orange
-                                : Colors.red),
-                    minHeight: 12,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  debtRatio < 30
-                      ? '✅ Excellent! Low debt relative to assets.'
-                      : debtRatio < 60
-                          ? '⚠️ Moderate debt. Aim to reduce liabilities.'
-                          : '🚨 High debt! Focus on paying off loans.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                ),
-              ],
-            ),
-          ),
+    showModalBottomSheet(
+      context: ctx,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) {
+        final cats = type == 'asset' ? _assetCategories : _liabilityCategories;
+        // Reset category if switching type
+        if (!cats.any((c) => c.$1 == category)) {
+          category = cats[0].$1;
+        }
 
-          const SizedBox(height: 16),
-
-          // ── Asset vs Liability breakdown ─────────────────────────────────────
-          _card(isDark,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Breakdown',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                const SizedBox(height: 14),
-
-                // Assets row
-                _breakdownSection('Assets', [
-                  if (accAssets > 0)
-                    _breakdownRow('💳 Bank & Cash (accounts)',
-                        accAssets, Colors.blue, totalAssets),
-                  ..._groupByCategory(
-                      items.where((i) => i.isAsset).toList(),
-                      totalAssets,
-                      isDark),
-                ]),
-
-                const SizedBox(height: 14),
-
-                // Liabilities row
-                _breakdownSection('Liabilities', [
-                  if (accLiabilities > 0)
-                    _breakdownRow('💳 Account Debts',
-                        accLiabilities, Colors.red, totalLiabilities),
-                  ..._groupByCategory(
-                      items.where((i) => i.isLiability).toList(),
-                      totalLiabilities,
-                      isDark),
-                ]),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // ── Quick stats ──────────────────────────────────────────────────────
-          Row(
-            children: [
-              Expanded(
-                child: _miniStatCard(isDark, '🏦',
-                    'Accounts synced', '${accounts.length}', Colors.blue),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _miniStatCard(isDark, '📋',
-                    'Manual items', '${items.length}', Colors.purple),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _miniStatCard(isDark, '📈',
-                    'Assets', '${items.where((i) => i.isAsset).length}', Colors.green),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 80),
-        ],
-      ),
-    );
-  }
-
-  List<Widget> _groupByCategory(
-      List<NetWorthItem> items, double total, bool isDark) {
-    final map = <String, double>{};
-    for (final i in items) {
-      map[i.category] = (map[i.category] ?? 0) + i.value;
-    }
-    final colors = [
-      Colors.green, Colors.teal, Colors.blue,
-      Colors.indigo, Colors.purple, Colors.orange,
-      Colors.red, Colors.pink, Colors.brown,
-    ];
-    return map.entries.toList().asMap().entries.map((e) {
-      final c = colors[e.key % colors.length];
-      return _breakdownRow(e.value.key, e.value.value, c, total);
-    }).toList();
-  }
-
-  Widget _breakdownSection(String label, List<Widget> rows) {
-    if (rows.isEmpty) return const SizedBox();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label,
-            style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey)),
-        const SizedBox(height: 8),
-        ...rows,
-      ],
-    );
-  }
-
-  Widget _breakdownRow(
-      String label, double value, Color color, double total) {
-    final pct = total > 0 ? value / total : 0.0;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(label,
-                    style: const TextStyle(fontSize: 12),
-                    overflow: TextOverflow.ellipsis),
-              ),
-              Text(
-                _balanceHidden ? '••••' : _fmt(value),
-                style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: color),
-              ),
-            ],
-          ),
-          const SizedBox(height: 5),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: pct,
-              backgroundColor: color.withOpacity(0.1),
-              valueColor: AlwaysStoppedAnimation<Color>(color),
-              minHeight: 6,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _heroStat(String label, String value, Color color) => Column(
-        children: [
-          Text(label,
-              style:
-                  const TextStyle(color: Colors.white60, fontSize: 11)),
-          const SizedBox(height: 4),
-          Text(value,
-              style: TextStyle(
-                  color: color,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16)),
-        ],
-      );
-
-  Widget _miniStatCard(
-      bool isDark, String emoji, String label, String value, Color color) {
-    return _card(isDark,
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          children: [
-            Text(emoji, style: const TextStyle(fontSize: 22)),
-            const SizedBox(height: 4),
-            Text(value,
-                style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: color)),
-            Text(label,
-                style: TextStyle(fontSize: 10, color: Colors.grey[500]),
-                textAlign: TextAlign.center),
-          ],
-        ));
-  }
-
-  // ── Tab 2 & 3: Items list ────────────────────────────────────────────────────
-  Widget _buildItemList(bool isDark, List<NetWorthItem> items,
-      String type, List<AccountModel> accounts) {
-    final isAsset = type == 'asset';
-    final color   = isAsset ? Colors.green : Colors.red;
-    final total   = items.fold(0.0, (s, i) => s + i.value);
-
-    // For assets tab: show account balances at top
-    final accItems = isAsset
-        ? accounts.where((a) => !a.isDebt && a.balance > 0).toList()
-        : accounts.where((a) => a.isDebt).toList();
-
-    return CustomScrollView(
-      slivers: [
-        // Total bar
-        SliverToBoxAdapter(
+        return Padding(
+          padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom),
           child: Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: color.withOpacity(0.3)),
+              color: isDark ? const Color(0xFF1E2530) : Colors.white,
+              borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(24)),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  isAsset ? '💰 Total Assets' : '💳 Total Liabilities',
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 15),
-                ),
-                Text(
-                  _balanceHidden ? '₹ ••••••' : _fmtFull(total),
-                  style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 17,
-                      color: color),
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        // Accounts section (auto-synced)
-        if (accItems.isNotEmpty) ...[
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: Row(
-                children: [
-                  const Icon(Icons.sync, size: 14, color: Colors.blue),
-                  const SizedBox(width: 4),
-                  Text('Auto-synced from Accounts',
-                      style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.blue[700],
-                          fontWeight: FontWeight.w600)),
-                ],
-              ),
-            ),
-          ),
-          SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (ctx, i) {
-                final acc = accItems[i];
-                return _accountTile(isDark, acc, isAsset);
-              },
-              childCount: accItems.length,
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-              child: Row(
-                children: [
-                  const Icon(Icons.edit_note, size: 14, color: Colors.grey),
-                  const SizedBox(width: 4),
-                  Text('Manual Items',
-                      style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                          fontWeight: FontWeight.w600)),
-                ],
-              ),
-            ),
-          ),
-        ],
-
-        // Manual items
-        if (items.isEmpty)
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(48),
-              child: Column(
-                children: [
-                  Text(isAsset ? '🏠' : '💳',
-                      style: const TextStyle(fontSize: 52)),
-                  const SizedBox(height: 16),
-                  Text(
-                    isAsset
-                        ? 'No assets added yet'
-                        : 'No liabilities added yet',
-                    style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    isAsset
-                        ? 'Add real estate, gold, investments etc.'
-                        : 'Add loans, credit card debts etc.',
-                    style: TextStyle(
-                        color: Colors.grey[500], fontSize: 13),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 20),
-                  ElevatedButton.icon(
-                    onPressed: () => _showAddSheet(context, type: type),
-                    icon: const Icon(Icons.add),
-                    label: Text(
-                        isAsset ? 'Add Asset' : 'Add Liability'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: color,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          )
-        else
-          SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (ctx, i) => _itemTile(isDark, items[i], color),
-              childCount: items.length,
-            ),
-          ),
-
-        const SliverToBoxAdapter(child: SizedBox(height: 80)),
-      ],
-    );
-  }
-
-  Widget _accountTile(bool isDark, AccountModel acc, bool isAsset) {
-    final value = acc.balance.abs();
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E2530) : Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.blue.withOpacity(0.15)),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 6,
-              offset: const Offset(0, 2))
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
-                shape: BoxShape.circle),
-            child: const Icon(Icons.account_balance,
-                color: Colors.blue, size: 18),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(acc.name,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w600, fontSize: 13)),
-                Text(acc.typeDisplayName,
-                    style: TextStyle(
-                        fontSize: 11, color: Colors.grey[500])),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                _balanceHidden ? '₹ ••••' : _fmtFull(value),
-                style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    color: isAsset ? Colors.green : Colors.red),
-              ),
-              Container(
-                margin: const EdgeInsets.only(top: 2),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Text('Auto-synced',
-                    style: TextStyle(fontSize: 9, color: Colors.blue)),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _itemTile(bool isDark, NetWorthItem item, Color color) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E2530) : Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 6,
-              offset: const Offset(0, 2))
-        ],
-      ),
-      child: ListTile(
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-        leading: Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-              color: color.withOpacity(0.1), shape: BoxShape.circle),
-          child: Center(
-            child: Text(
-              _categoryEmoji(item.category),
-              style: const TextStyle(fontSize: 18),
-            ),
-          ),
-        ),
-        title: Text(item.name,
-            style: const TextStyle(
-                fontWeight: FontWeight.w600, fontSize: 13)),
-        subtitle: Text(item.category,
-            style: TextStyle(fontSize: 11, color: Colors.grey[500])),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              _balanceHidden ? '₹ ••••' : _fmtFull(item.value),
-              style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                  color: color),
-            ),
-          ],
-        ),
-        onTap: () => _showEditSheet(context, item),
-        onLongPress: () => _confirmDelete(context, item),
-      ),
-    );
-  }
-
-  // ── Add / Edit bottom sheet ────────────────────────────────────────────────
-  void _showAddSheet(BuildContext context, {String? type}) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _ItemSheet(
-        svc: _svc,
-        initialType: type ?? 'asset',
-      ),
-    );
-  }
-
-  void _showEditSheet(BuildContext context, NetWorthItem item) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _ItemSheet(
-        svc: _svc,
-        item: item,
-        initialType: item.type,
-      ),
-    );
-  }
-
-  Future<void> _confirmDelete(BuildContext context, NetWorthItem item) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Delete "${item.name}"?'),
-        content: const Text('This item will be removed from your net worth.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Delete',
-                  style: TextStyle(color: Colors.red))),
-        ],
-      ),
-    );
-    if (ok == true) await _svc.deleteItem(item.id!);
-  }
-
-  // ── Helpers ─────────────────────────────────────────────────────────────────
-  Widget _card(bool isDark,
-      {required Widget child, EdgeInsets? padding}) {
-    return Container(
-      width: double.infinity,
-      padding: padding ?? const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E2530) : Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2))
-        ],
-      ),
-      child: child,
-    );
-  }
-
-  String _categoryEmoji(String cat) {
-    switch (cat) {
-      case 'Real Estate':      return '🏠';
-      case 'Vehicle':          return '🚗';
-      case 'Fixed Deposit':    return '🏦';
-      case 'Stocks & MF':      return '📈';
-      case 'Gold & Jewellery': return '🥇';
-      case 'Cash & Bank':      return '💵';
-      case 'PPF / EPF':        return '📑';
-      case 'Business':         return '💼';
-      case 'Home Loan':        return '🏠';
-      case 'Car Loan':         return '🚗';
-      case 'Personal Loan':    return '👤';
-      case 'Education Loan':   return '🎓';
-      case 'Credit Card Debt': return '💳';
-      case 'Business Loan':    return '💼';
-      default:                 return '📦';
-    }
-  }
-}
-
-// ── Add/Edit Item Bottom Sheet ───────────────────────────────────────────────
-class _ItemSheet extends StatefulWidget {
-  final NetWorthService svc;
-  final NetWorthItem? item;
-  final String initialType;
-
-  const _ItemSheet({
-    required this.svc,
-    this.item,
-    required this.initialType,
-  });
-
-  @override
-  State<_ItemSheet> createState() => _ItemSheetState();
-}
-
-class _ItemSheetState extends State<_ItemSheet> {
-  final _formKey    = GlobalKey<FormState>();
-  final _nameCtrl   = TextEditingController();
-  final _valueCtrl  = TextEditingController();
-  final _noteCtrl   = TextEditingController();
-
-  late String _type;
-  String? _category;
-  bool _saving = false;
-
-  bool get _isEdit => widget.item != null;
-
-  @override
-  void initState() {
-    super.initState();
-    _type = widget.initialType;
-    if (_isEdit) {
-      _nameCtrl.text  = widget.item!.name;
-      _valueCtrl.text = widget.item!.value.toStringAsFixed(0);
-      _noteCtrl.text  = widget.item!.note ?? '';
-      _category       = widget.item!.category;
-    }
-  }
-
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    _valueCtrl.dispose();
-    _noteCtrl.dispose();
-    super.dispose();
-  }
-
-  List<String> get _categories =>
-      _type == 'asset' ? kAssetCategories : kLiabilityCategories;
-
-  Color get _color =>
-      _type == 'asset' ? Colors.green : Colors.red;
-
-  Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
-    if (_category == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Please select a category'),
-        behavior: SnackBarBehavior.floating,
-      ));
-      return;
-    }
-    setState(() => _saving = true);
-    try {
-      final uid  = widget.svc.hashCode.toString(); // placeholder — service gets real uid
-      final now  = DateTime.now();
-      final item = NetWorthItem(
-        id:        _isEdit ? widget.item!.id : null,
-        userId:    _isEdit ? widget.item!.userId : '',
-        name:      _nameCtrl.text.trim(),
-        category:  _category!,
-        type:      _type,
-        value:     double.parse(_valueCtrl.text),
-        note:      _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
-        createdAt: _isEdit ? widget.item!.createdAt : now,
-        updatedAt: now,
-      );
-
-      if (_isEdit) {
-        await widget.svc.updateItem(item);
-      } else {
-        await widget.svc.addItem(item);
-      }
-
-      if (mounted) Navigator.pop(context);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: Colors.red,
-        ));
-      }
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E2530) : Colors.white,
-        borderRadius:
-            const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      padding: EdgeInsets.fromLTRB(
-          20, 16, 20, MediaQuery.of(context).viewInsets.bottom + 24),
-      child: SingleChildScrollView(
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Handle bar
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              // Handle
+              Container(width: 40, height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
-                      color: Colors.grey[400],
-                      borderRadius: BorderRadius.circular(2)),
-                ),
-              ),
-              const SizedBox(height: 16),
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(2))),
 
-              Text(
-                _isEdit ? 'Edit Item' : 'Add Item',
-                style: const TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
+              Text(existing == null ? 'Add Item' : 'Edit Item',
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 20),
 
               // Type toggle
-              Row(
-                children: [
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => setState(() {
-                        _type = 'asset';
-                        _category = null;
-                      }),
+              Row(children: [
+                Expanded(child: _typeBtn('Asset', type == 'asset',
+                    Colors.green, () => setSheet(() {
+                      type = 'asset';
+                      category = _assetCategories[0].$1;
+                    }))),
+                const SizedBox(width: 10),
+                Expanded(child: _typeBtn('Liability', type == 'liability',
+                    Colors.red, () => setSheet(() {
+                      type = 'liability';
+                      category = _liabilityCategories[0].$1;
+                    }))),
+              ]),
+              const SizedBox(height: 16),
+
+              // Category chips
+              SizedBox(
+                height: 38,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: cats.map((cat) {
+                    final sel = category == cat.$1;
+                    return GestureDetector(
+                      onTap: () => setSheet(() => category = cat.$1),
                       child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        duration: const Duration(milliseconds: 180),
+                        margin: const EdgeInsets.only(right: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
                         decoration: BoxDecoration(
-                          color: _type == 'asset'
-                              ? Colors.green
-                              : Colors.green.withOpacity(0.06),
-                          borderRadius: BorderRadius.circular(10),
+                          color: sel
+                              ? cat.$3.withOpacity(0.15)
+                              : Colors.grey.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(20),
                           border: Border.all(
-                              color: Colors.green.withOpacity(0.4)),
+                            color: sel ? cat.$3 : Colors.transparent,
+                            width: 1.5,
+                          ),
                         ),
-                        child: Center(
-                          child: Text('💰 Asset',
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(cat.$2, size: 14,
+                              color: sel ? cat.$3 : Colors.grey),
+                          const SizedBox(width: 5),
+                          Text(cat.$1,
                               style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: _type == 'asset'
-                                      ? Colors.white
-                                      : Colors.green)),
-                        ),
+                                  fontSize: 12,
+                                  color: sel ? cat.$3 : Colors.grey,
+                                  fontWeight: sel
+                                      ? FontWeight.bold
+                                      : FontWeight.normal)),
+                        ]),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => setState(() {
-                        _type = 'liability';
-                        _category = null;
-                      }),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        decoration: BoxDecoration(
-                          color: _type == 'liability'
-                              ? Colors.red
-                              : Colors.red.withOpacity(0.06),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                              color: Colors.red.withOpacity(0.4)),
-                        ),
-                        child: Center(
-                          child: Text('💳 Liability',
-                              style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: _type == 'liability'
-                                      ? Colors.white
-                                      : Colors.red)),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+                    );
+                  }).toList(),
+                ),
               ),
               const SizedBox(height: 16),
 
-              // Name
-              TextFormField(
-                controller: _nameCtrl,
+              // Name field
+              TextField(
+                controller: nameCtrl,
                 decoration: InputDecoration(
-                  labelText: 'Name *',
-                  hintText: _type == 'asset'
-                      ? 'e.g. My Flat, SBI FD, Gold'
-                      : 'e.g. Home Loan, HDFC Card',
-                  prefixIcon: const Icon(Icons.label_outline),
+                  labelText: 'Name *  (e.g. SBI Savings, DLF Flat)',
                   border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10)),
+                      borderRadius: BorderRadius.circular(12)),
+                  filled: true,
+                  fillColor: isDark
+                      ? Colors.white.withOpacity(0.05)
+                      : Colors.grey.shade50,
                 ),
-                validator: (v) =>
-                    v == null || v.trim().isEmpty ? 'Name required' : null,
+                textCapitalization: TextCapitalization.words,
               ),
               const SizedBox(height: 12),
 
-              // Value
-              TextFormField(
-                controller: _valueCtrl,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              // Value field
+              TextField(
+                controller: valueCtrl,
+                keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true),
                 inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))
                 ],
                 decoration: InputDecoration(
                   labelText: 'Current Value *',
                   prefixText: '₹ ',
-                  prefixIcon: const Icon(Icons.currency_rupee),
                   border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10)),
+                      borderRadius: BorderRadius.circular(12)),
+                  filled: true,
+                  fillColor: isDark
+                      ? Colors.white.withOpacity(0.05)
+                      : Colors.grey.shade50,
                 ),
-                validator: (v) {
-                  if (v == null || v.isEmpty) return 'Value required';
-                  if (double.tryParse(v) == null) return 'Enter valid number';
-                  return null;
-                },
               ),
               const SizedBox(height: 12),
 
-              // Category
-              Text('Category *',
-                  style: TextStyle(
-                      fontSize: 12, color: Colors.grey[500])),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _categories.map((cat) {
-                  final sel = cat == _category;
-                  return GestureDetector(
-                    onTap: () => setState(() => _category = cat),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 150),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: sel
-                            ? _color
-                            : _color.withOpacity(0.06),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                            color: _color.withOpacity(0.3)),
-                      ),
-                      child: Text(cat,
-                          style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: sel ? Colors.white : _color)),
-                    ),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 12),
-
-              // Note
-              TextFormField(
-                controller: _noteCtrl,
+              // Note field
+              TextField(
+                controller: noteCtrl,
                 decoration: InputDecoration(
                   labelText: 'Note (optional)',
-                  hintText: 'e.g. 10 grams, 2BHK Chennai',
-                  prefixIcon:
-                      const Icon(Icons.note_alt_outlined),
                   border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10)),
+                      borderRadius: BorderRadius.circular(12)),
+                  filled: true,
+                  fillColor: isDark
+                      ? Colors.white.withOpacity(0.05)
+                      : Colors.grey.shade50,
                 ),
-                maxLines: 2,
               ),
               const SizedBox(height: 20),
 
               // Save button
               SizedBox(
-                width: double.infinity,
+                width: double.infinity, height: 50,
                 child: ElevatedButton(
-                  onPressed: _saving ? null : _save,
+                  onPressed: () async {
+                    if (nameCtrl.text.trim().isEmpty ||
+                        valueCtrl.text.trim().isEmpty) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                          content: Text('Name and value are required')));
+                      return;
+                    }
+                    final uid =
+                        FirebaseAuth.instance.currentUser?.uid ?? '';
+                    final item = NetWorthItem(
+                      id:       existing?.id,
+                      userId:   uid,
+                      type:     type,
+                      category: category,
+                      name:     nameCtrl.text.trim(),
+                      value:    double.tryParse(valueCtrl.text) ?? 0,
+                      note:     noteCtrl.text.trim().isEmpty
+                                    ? null
+                                    : noteCtrl.text.trim(),
+                    );
+                    if (existing == null) {
+                      await _svc.addItem(item);
+                    } else {
+                      await _svc.updateItem(item);
+                    }
+                    if (ctx.mounted) Navigator.pop(ctx);
+                  },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _color,
+                    backgroundColor: const Color(0xFF667eea),
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                        borderRadius: BorderRadius.circular(14)),
                   ),
-                  child: _saving
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                              color: Colors.white, strokeWidth: 2))
-                      : Text(_isEdit ? 'Update Item' : 'Add Item',
-                          style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold)),
+                  child: Text(
+                    existing == null ? 'Add Item' : 'Save Changes',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 15),
+                  ),
                 ),
               ),
-            ],
+            ]),
           ),
-        ),
-      ),
+        );
+      }),
     );
   }
+
+  Widget _typeBtn(String label, bool sel, Color color, VoidCallback onTap) =>
+      GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: sel ? color.withOpacity(0.12) : Colors.grey.withOpacity(0.07),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+                color: sel ? color : Colors.transparent, width: 2),
+          ),
+          child: Center(child: Text(label,
+              style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: sel ? color : Colors.grey))),
+        ),
+      );
+
+  Future<void> _confirmDelete(BuildContext ctx, NetWorthItem item) async {
+    final ok = await showDialog<bool>(
+      context: ctx,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
+        title: const Text('Delete Item'),
+        content: Text('Delete "${item.name}" (${_f(item.value)})?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (ok == true) {
+      await _svc.deleteItem(item.id!);
+      if (ctx.mounted) {
+        ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+          content: Text('Deleted: ${item.name}'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    }
+  }
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// TAB 1 — OVERVIEW
+// ════════════════════════════════════════════════════════════════════════════
+class _OverviewTab extends StatelessWidget {
+  final List<NetWorthItem> items, assets, liabilities;
+  final double totalAssets, totalLiab, netWorth;
+  final bool isDark;
+  final Color cardBg;
+  final int touchedAsset;
+  final ValueChanged<int> onTouchAsset;
+  final VoidCallback onAdd;
+
+  const _OverviewTab({
+    required this.items,       required this.assets,
+    required this.liabilities, required this.totalAssets,
+    required this.totalLiab,   required this.netWorth,
+    required this.isDark,      required this.cardBg,
+    required this.touchedAsset, required this.onTouchAsset,
+    required this.onAdd,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) return _empty(context);
+
+    final netColor = netWorth >= 0 ? Colors.green : Colors.red;
+    final ratio    = totalAssets > 0
+        ? (totalLiab / totalAssets).clamp(0.0, 1.0)
+        : 0.0;
+
+    // Group assets by category for pie chart
+    final catMap = <String, double>{};
+    for (final a in assets) {
+      catMap[a.category] = (catMap[a.category] ?? 0) + a.value;
+    }
+    final catList = catMap.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    const pieColors = [
+      Color(0xFF667eea), Color(0xFF43e97b), Color(0xFF4facfe),
+      Color(0xFFf9ca24), Color(0xFFf093fb), Color(0xFF56ab2f),
+    ];
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+
+        // ── Net Worth hero card ────────────────────────────────────────────
+        Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: netWorth >= 0
+                  ? [const Color(0xFF667eea), const Color(0xFF764ba2)]
+                  : [Colors.red.shade700, Colors.red.shade400],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [BoxShadow(
+              color: (netWorth >= 0
+                  ? const Color(0xFF667eea)
+                  : Colors.red).withOpacity(0.35),
+              blurRadius: 20, offset: const Offset(0, 8),
+            )],
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+            Row(children: [
+              const Text('💰', style: TextStyle(fontSize: 22)),
+              const SizedBox(width: 8),
+              Text('Net Worth',
+                  style: TextStyle(
+                      color: Colors.white.withOpacity(0.85),
+                      fontSize: 14)),
+            ]),
+            const SizedBox(height: 8),
+            Text(_fs(netWorth),
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+
+            // Assets vs Liabilities bar
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: ratio,
+                minHeight: 6,
+                backgroundColor: Colors.white.withOpacity(0.3),
+                valueColor: AlwaysStoppedAnimation(
+                    Colors.red.withOpacity(0.85)),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(children: [
+              _heroStat('Assets', totalAssets, Colors.white),
+              const Spacer(),
+              _heroStat('Liabilities', totalLiab,
+                  Colors.red.shade200, align: TextAlign.right),
+            ]),
+          ]),
+        ),
+        const SizedBox(height: 20),
+
+        // ── Asset pie chart ────────────────────────────────────────────────
+        if (assets.isNotEmpty) ...[
+          _sectionTitle('Asset Breakdown', isDark),
+          const SizedBox(height: 12),
+          Container(
+            height: 220,
+            padding: const EdgeInsets.all(16),
+            decoration: _cardDeco(cardBg),
+            child: Row(children: [
+              Expanded(flex: 5, child: PieChart(PieChartData(
+                pieTouchData: PieTouchData(
+                  touchCallback: (evt, resp) {
+                    if (resp?.touchedSection != null) {
+                      onTouchAsset(
+                          resp!.touchedSection!.touchedSectionIndex);
+                    } else {
+                      onTouchAsset(-1);
+                    }
+                  },
+                ),
+                sections: catList.asMap().entries.map((e) {
+                  final pct = totalAssets > 0
+                      ? e.value.value / totalAssets * 100
+                      : 0.0;
+                  final touched = e.key == touchedAsset;
+                  return PieChartSectionData(
+                    value:  e.value.value,
+                    color:  pieColors[e.key % pieColors.length],
+                    radius: touched ? 68 : 56,
+                    title:  touched
+                        ? '${pct.toStringAsFixed(0)}%'
+                        : '',
+                    titleStyle: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12),
+                  );
+                }).toList(),
+                sectionsSpace: 2,
+                centerSpaceRadius: 36,
+              ))),
+              const SizedBox(width: 12),
+              Expanded(flex: 4, child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: catList.asMap().entries.map((e) {
+                  final pct = totalAssets > 0
+                      ? e.value.value / totalAssets * 100 : 0.0;
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    child: Row(children: [
+                      Container(
+                        width: 10, height: 10,
+                        decoration: BoxDecoration(
+                          color: pieColors[e.key % pieColors.length],
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(child: Text(e.value.key,
+                          style: TextStyle(fontSize: 10,
+                              color: isDark
+                                  ? Colors.white70
+                                  : Colors.black87),
+                          overflow: TextOverflow.ellipsis)),
+                      Text('${pct.toStringAsFixed(0)}%',
+                          style: TextStyle(
+                              fontSize: 9, color: Colors.grey[500])),
+                    ]),
+                  );
+                }).toList(),
+              )),
+            ]),
+          ),
+          const SizedBox(height: 20),
+        ],
+
+        // ── Summary cards ──────────────────────────────────────────────────
+        Row(children: [
+          Expanded(child: _summaryCard(
+              '💚 Assets', totalAssets,
+              assets.length, Colors.green, cardBg, isDark)),
+          const SizedBox(width: 12),
+          Expanded(child: _summaryCard(
+              '❤️ Liabilities', totalLiab,
+              liabilities.length, Colors.red, cardBg, isDark)),
+        ]),
+        const SizedBox(height: 20),
+
+        // ── Category summary ───────────────────────────────────────────────
+        _sectionTitle('By Category', isDark),
+        const SizedBox(height: 12),
+        ..._buildCategorySummary(assets, totalAssets,
+            _assetCategories, cardBg, isDark, 'Assets'),
+        const SizedBox(height: 12),
+        ..._buildCategorySummary(liabilities, totalLiab,
+            _liabilityCategories, cardBg, isDark, 'Liabilities'),
+
+        const SizedBox(height: 80),
+      ],
+    );
+  }
+
+  List<Widget> _buildCategorySummary(
+    List<NetWorthItem> list,
+    double total,
+    List<(String, IconData, Color)> cats,
+    Color cardBg,
+    bool isDark,
+    String label,
+  ) {
+    if (list.isEmpty) return [];
+    final catMap = <String, double>{};
+    for (final i in list) catMap[i.category] = (catMap[i.category] ?? 0) + i.value;
+    final entries = catMap.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    return [
+      Container(
+        padding: const EdgeInsets.all(16),
+        decoration: _cardDeco(cardBg),
+        child: Column(children: entries.map((e) {
+          final cat  = cats.firstWhere(
+              (c) => c.$1 == e.key,
+              orElse: () => (e.key, Icons.circle, Colors.grey));
+          final pct  = total > 0 ? e.value / total : 0.0;
+          final isLiab = label == 'Liabilities';
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Column(children: [
+              Row(children: [
+                Container(
+                  width: 34, height: 34,
+                  decoration: BoxDecoration(
+                    color: cat.$3.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(cat.$2, color: cat.$3, size: 16),
+                ),
+                const SizedBox(width: 10),
+                Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(e.key, style: const TextStyle(
+                        fontWeight: FontWeight.w600, fontSize: 13)),
+                    Text('${(pct * 100).toStringAsFixed(0)}% of $label',
+                        style: TextStyle(
+                            fontSize: 10, color: Colors.grey[500])),
+                  ],
+                )),
+                Text(
+                  isLiab ? '−${_f(e.value)}' : _f(e.value),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold, fontSize: 13,
+                    color: isLiab ? Colors.red : Colors.green,
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 6),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: pct, minHeight: 4,
+                  backgroundColor: Colors.grey.withOpacity(0.12),
+                  valueColor: AlwaysStoppedAnimation(cat.$3),
+                ),
+              ),
+            ]),
+          );
+        }).toList()),
+      ),
+    ];
+  }
+
+  Widget _empty(BuildContext context) => Center(child: Column(
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: [
+      const Text('💰', style: TextStyle(fontSize: 64)),
+      const SizedBox(height: 16),
+      const Text('Track Your Net Worth',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+      const SizedBox(height: 8),
+      Text('Add assets and liabilities\nto see your financial picture',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.grey[500])),
+      const SizedBox(height: 24),
+      ElevatedButton.icon(
+        onPressed: onAdd,
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('Add First Item'),
+        style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF667eea),
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12)),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 24, vertical: 12)),
+      ),
+    ],
+  ));
+
+  Widget _heroStat(String label, double val, Color color,
+      {TextAlign align = TextAlign.left}) =>
+      Column(crossAxisAlignment: align == TextAlign.right
+          ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          children: [
+        Text(_f(val), style: TextStyle(
+            color: color, fontWeight: FontWeight.bold, fontSize: 16)),
+        Text(label, style: TextStyle(
+            color: Colors.white.withOpacity(0.65), fontSize: 11)),
+      ]);
+
+  Widget _summaryCard(String label, double val, int count,
+      Color color, Color bg, bool isDark) =>
+      Container(
+        padding: const EdgeInsets.all(16),
+        decoration: _cardDeco(bg),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+          Text(label, style: const TextStyle(
+              fontWeight: FontWeight.bold, fontSize: 13)),
+          const SizedBox(height: 8),
+          Text(_f(val), style: TextStyle(
+              fontWeight: FontWeight.bold, fontSize: 18, color: color)),
+          const SizedBox(height: 4),
+          Text('$count item${count == 1 ? '' : 's'}',
+              style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+        ]),
+      );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// TAB 2 — DETAILS (full item list with edit/delete)
+// ════════════════════════════════════════════════════════════════════════════
+class _DetailsTab extends StatelessWidget {
+  final List<NetWorthItem> items;
+  final bool isDark;
+  final Color cardBg;
+  final ValueChanged<NetWorthItem> onEdit;
+  final ValueChanged<NetWorthItem> onDelete;
+
+  const _DetailsTab({
+    required this.items,   required this.isDark,
+    required this.cardBg,  required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) {
+      return Center(child: Text('No items yet',
+          style: TextStyle(color: Colors.grey[500])));
+    }
+
+    final assets      = items.where((i) => i.type == 'asset').toList();
+    final liabilities = items.where((i) => i.type == 'liability').toList();
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        if (assets.isNotEmpty) ...[
+          _groupHeader('💚 Assets', assets, Colors.green, isDark),
+          ..._groupedItems(assets, _assetCategories),
+          const SizedBox(height: 20),
+        ],
+        if (liabilities.isNotEmpty) ...[
+          _groupHeader('❤️ Liabilities', liabilities, Colors.red, isDark),
+          ..._groupedItems(liabilities, _liabilityCategories),
+        ],
+        const SizedBox(height: 80),
+      ],
+    );
+  }
+
+  Widget _groupHeader(String title, List<NetWorthItem> list,
+      Color color, bool isDark) {
+    final total = list.fold(0.0, (s, i) => s + i.value);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(children: [
+        Text(title, style: const TextStyle(
+            fontWeight: FontWeight.bold, fontSize: 15)),
+        const Spacer(),
+        Text(_f(total), style: TextStyle(
+            fontWeight: FontWeight.bold, fontSize: 15, color: color)),
+      ]),
+    );
+  }
+
+  List<Widget> _groupedItems(
+    List<NetWorthItem> items,
+    List<(String, IconData, Color)> cats,
+  ) {
+    // Group by category
+    final map = <String, List<NetWorthItem>>{};
+    for (final i in items) {
+      map.putIfAbsent(i.category, () => []).add(i);
+    }
+    final result = <Widget>[];
+    for (final entry in map.entries) {
+      final cat = cats.firstWhere(
+          (c) => c.$1 == entry.key,
+          orElse: () => (entry.key, Icons.circle, Colors.grey));
+      result.add(Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Row(children: [
+          Icon(cat.$2, size: 14, color: cat.$3),
+          const SizedBox(width: 6),
+          Text(cat.$1, style: TextStyle(
+              fontSize: 12, fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white54 : Colors.grey[600])),
+        ]),
+      ));
+      for (final item in entry.value) {
+        result.add(Dismissible(
+          key: Key(item.id ?? item.name),
+          direction: DismissDirection.endToStart,
+          background: Container(
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 20),
+            decoration: BoxDecoration(
+              color: Colors.red.shade400,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(Icons.delete_outline,
+                color: Colors.white, size: 22),
+          ),
+          confirmDismiss: (_) async {
+            HapticFeedback.mediumImpact();
+            onDelete(item);
+            return false; // let onDelete handle
+          },
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 8, offset: const Offset(0, 3))],
+            ),
+            child: Row(children: [
+              Container(
+                width: 36, height: 36,
+                decoration: BoxDecoration(
+                  color: cat.$3.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(cat.$2, color: cat.$3, size: 16),
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(item.name, style: const TextStyle(
+                      fontWeight: FontWeight.w600, fontSize: 13)),
+                  if (item.note != null && item.note!.isNotEmpty)
+                    Text(item.note!, style: TextStyle(
+                        fontSize: 11, color: Colors.grey[500]),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                ],
+              )),
+              Text(
+                item.type == 'liability'
+                    ? '−${_f(item.value)}'
+                    : _f(item.value),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  color: item.type == 'liability'
+                      ? Colors.red : Colors.green,
+                ),
+              ),
+              const SizedBox(width: 4),
+              GestureDetector(
+                onTap: () => onEdit(item),
+                child: Icon(Icons.edit_outlined,
+                    size: 18,
+                    color: isDark
+                        ? Colors.white38 : Colors.grey[400]),
+              ),
+            ]),
+          ),
+        ));
+      }
+      result.add(const SizedBox(height: 8));
+    }
+    return result;
+  }
+}
+
+// ── Shared helpers ─────────────────────────────────────────────────────────────
+BoxDecoration _cardDeco(Color bg) => BoxDecoration(
+  color: bg,
+  borderRadius: BorderRadius.circular(16),
+  boxShadow: [BoxShadow(
+      color: Colors.black.withOpacity(0.06),
+      blurRadius: 12, offset: const Offset(0, 4))],
+);
+
+Widget _sectionTitle(String t, bool isDark) => Text(t,
+    style: TextStyle(
+        fontSize: 15, fontWeight: FontWeight.bold,
+        color: isDark ? Colors.white : Colors.black87));

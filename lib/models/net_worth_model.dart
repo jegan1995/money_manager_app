@@ -1,142 +1,63 @@
+// lib/models/net_worth_model.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-// A single asset or liability item
 class NetWorthItem {
-  final String? id;
-  final String userId;
-  final String name;
-  final String category; // e.g. 'Real Estate', 'Vehicle', 'FD', 'Loan'
-  final String type;     // 'asset' or 'liability'
-  final double value;
-  final String? note;
-  final DateTime createdAt;
+  final String?  id;
+  final String   userId;
+  final String   type;       // 'asset' | 'liability'
+  final String   category;
+  final String   name;
+  final double   value;
+  final String?  note;
   final DateTime updatedAt;
 
-  const NetWorthItem({
+  NetWorthItem({
     this.id,
     required this.userId,
-    required this.name,
-    required this.category,
     required this.type,
+    required this.category,
+    required this.name,
     required this.value,
     this.note,
-    required this.createdAt,
-    required this.updatedAt,
-  });
-
-  bool get isAsset     => type == 'asset';
-  bool get isLiability => type == 'liability';
+    DateTime? updatedAt,
+  }) : updatedAt = updatedAt ?? DateTime.now();
 
   Map<String, dynamic> toMap() => {
-        'userId':    userId,
-        'name':      name,
-        'category':  category,
-        'type':      type,
-        'value':     value,
-        'note':      note,
-        'createdAt': Timestamp.fromDate(createdAt),
-        'updatedAt': Timestamp.fromDate(updatedAt),
-      };
+    'userId':    userId,
+    'type':      type,
+    'category':  category,
+    'name':      name,
+    'value':     value,
+    'note':      note,
+    'updatedAt': Timestamp.fromDate(updatedAt),
+  };
 
-  factory NetWorthItem.fromMap(Map<String, dynamic> map, String id) =>
-      NetWorthItem(
-        id:        id,
-        userId:    map['userId']   ?? '',
-        name:      map['name']     ?? '',
-        category:  map['category'] ?? 'Other',
-        type:      map['type']     ?? 'asset',
-        value:     (map['value']   ?? 0).toDouble(),
-        note:      map['note'],
-        createdAt: map['createdAt'] != null
-            ? (map['createdAt'] as Timestamp).toDate()
-            : DateTime.now(),
-        updatedAt: map['updatedAt'] != null
-            ? (map['updatedAt'] as Timestamp).toDate()
-            : DateTime.now(),
-      );
-
-  factory NetWorthItem.fromFirestore(DocumentSnapshot doc) =>
-      NetWorthItem.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+  factory NetWorthItem.fromFirestore(DocumentSnapshot doc) {
+    final d = doc.data() as Map<String, dynamic>;
+    return NetWorthItem(
+      id:        doc.id,
+      userId:    d['userId']   ?? '',
+      type:      d['type']     ?? 'asset',
+      category:  d['category'] ?? '',
+      name:      d['name']     ?? '',
+      value:     (d['value']   ?? 0).toDouble(),
+      note:      d['note'],
+      updatedAt: d['updatedAt'] != null
+          ? (d['updatedAt'] as Timestamp).toDate()
+          : DateTime.now(),
+    );
+  }
 
   NetWorthItem copyWith({
-    String? id, String? name, String? category,
-    String? type, double? value, String? note,
-  }) =>
-      NetWorthItem(
-        id:        id        ?? this.id,
-        userId:    userId,
-        name:      name      ?? this.name,
-        category:  category  ?? this.category,
-        type:      type      ?? this.type,
-        value:     value     ?? this.value,
-        note:      note      ?? this.note,
-        createdAt: createdAt,
-        updatedAt: DateTime.now(),
-      );
+    String? id, String? userId, String? type,
+    String? category, String? name, double? value, String? note,
+  }) => NetWorthItem(
+    id:       id       ?? this.id,
+    userId:   userId   ?? this.userId,
+    type:     type     ?? this.type,
+    category: category ?? this.category,
+    name:     name     ?? this.name,
+    value:    value    ?? this.value,
+    note:     note     ?? this.note,
+  );
 }
-
-// Monthly snapshot stored in Firestore for history chart
-class NetWorthSnapshot {
-  final String? id;
-  final String userId;
-  final double totalAssets;
-  final double totalLiabilities;
-  final double netWorth;
-  final DateTime date;
-
-  const NetWorthSnapshot({
-    this.id,
-    required this.userId,
-    required this.totalAssets,
-    required this.totalLiabilities,
-    required this.netWorth,
-    required this.date,
-  });
-
-  Map<String, dynamic> toMap() => {
-        'userId':            userId,
-        'totalAssets':       totalAssets,
-        'totalLiabilities':  totalLiabilities,
-        'netWorth':          netWorth,
-        'date':              Timestamp.fromDate(date),
-      };
-
-  factory NetWorthSnapshot.fromMap(Map<String, dynamic> map, String id) =>
-      NetWorthSnapshot(
-        id:                id,
-        userId:            map['userId']           ?? '',
-        totalAssets:       (map['totalAssets']      ?? 0).toDouble(),
-        totalLiabilities:  (map['totalLiabilities'] ?? 0).toDouble(),
-        netWorth:          (map['netWorth']          ?? 0).toDouble(),
-        date:              map['date'] != null
-            ? (map['date'] as Timestamp).toDate()
-            : DateTime.now(),
-      );
-
-  factory NetWorthSnapshot.fromFirestore(DocumentSnapshot doc) =>
-      NetWorthSnapshot.fromMap(doc.data() as Map<String, dynamic>, doc.id);
-}
-
-// Predefined asset categories
-const kAssetCategories = [
-  'Cash & Bank',
-  'Real Estate',
-  'Vehicle',
-  'Fixed Deposit',
-  'Stocks & MF',
-  'Gold & Jewellery',
-  'PPF / EPF',
-  'Business',
-  'Other Asset',
-];
-
-// Predefined liability categories
-const kLiabilityCategories = [
-  'Home Loan',
-  'Car Loan',
-  'Personal Loan',
-  'Education Loan',
-  'Credit Card Debt',
-  'Business Loan',
-  'Other Liability',
-];

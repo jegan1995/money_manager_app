@@ -1,0 +1,153 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper functions ──────────────────────────────────────────────
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return request.auth.uid == uid;
+    }
+
+    function isAdminUser() {
+      return isAuth() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // ── App Config ────────────────────────────────────────────────────
+    match /app_config/{doc} {
+      allow read:  if true;
+      allow write: if isAdminUser();
+    }
+
+    // ── Notification Queue ────────────────────────────────────────────
+    match /notifications_queue/{doc} {
+      allow read, write: if isAdminUser();
+    }
+
+    // ── Users ─────────────────────────────────────────────────────────
+    match /users/{userId} {
+      allow read:  if isAuth();
+      allow write: if isAuth() && (isOwner(userId) || isAdminUser());
+    }
+
+    // ── Transactions ──────────────────────────────────────────────────
+    match /transactions/{txnId} {
+      allow read:           if isAuth();
+      allow create:         if isAuth() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuth() && resource.data.userId == request.auth.uid;
+    }
+
+    // ── Accounts ──────────────────────────────────────────────────────
+    match /accounts/{accountId} {
+      allow read:           if isAuth();
+      allow create:         if isAuth() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuth() && resource.data.userId == request.auth.uid;
+    }
+
+    // ── Budgets (old budget screen) ───────────────────────────────────
+    match /budgets/{budgetId} {
+      allow read, write: if isAuth();
+    }
+
+    // ── Budget Plans (new Budget Planner feature) ─────────────────────
+    match /budget_plans/{id} {
+      allow read:           if isAuth();
+      allow create:         if isAuth() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuth() && resource.data.userId == request.auth.uid;
+    }
+
+    // ── Goals ─────────────────────────────────────────────────────────
+    match /goals/{goalId} {
+      allow read, write: if isAuth();
+    }
+
+    // ── Loans (Loan & EMI Manager) ────────────────────────────────────
+    match /loans/{loanId} {
+      allow read:           if isAuth();
+      allow create:         if isAuth() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuth() && resource.data.userId == request.auth.uid;
+    }
+
+    // ── Net Worth Items ───────────────────────────────────────────────
+    // NOTE: collection is "net_worth_items" (not "netWorthEntries")
+    match /net_worth_items/{id} {
+      allow read:           if isAuth();
+      allow create:         if isAuth() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuth() && resource.data.userId == request.auth.uid;
+    }
+
+    // ── Keep old netWorthEntries for backward compat ──────────────────
+    match /netWorthEntries/{id} {
+      allow read, write: if isAuth();
+    }
+
+    // ── Transfers ─────────────────────────────────────────────────────
+    match /transfers/{transferId} {
+      allow read, write: if isAuth();
+    }
+
+    // ── Recurring transactions ────────────────────────────────────────
+    match /recurring_transactions/{id} {
+      allow read, write: if isAuth();
+    }
+
+    // ── Recurring transfers ───────────────────────────────────────────
+    match /recurring_transfers/{id} {
+      allow read, write: if isAuth();
+    }
+
+    // ── Budget alerts ─────────────────────────────────────────────────
+    match /budget_alerts/{id} {
+      allow read, write: if isAuth();
+    }
+
+    // ── Split expenses ────────────────────────────────────────────────
+    match /split_expenses/{id} {
+      allow read, write: if isAuth();
+    }
+
+    // ── Families ──────────────────────────────────────────────────────
+    match /families/{familyId} {
+      allow read, write: if isAuth();
+    }
+
+    // ── Family invites ────────────────────────────────────────────────
+    match /familyInvites/{inviteId} {
+      allow read, write: if isAuth();
+    }
+
+    // ── Admins ────────────────────────────────────────────────────────
+    match /admins/{adminId} {
+      allow read:  if isAuth();
+      allow write: if false;
+    }
+
+    // ── Broadcasts ────────────────────────────────────────────────────
+    match /broadcasts/{id} {
+      allow read, write: if isAuth();
+    }
+
+    // ── Custom categories ─────────────────────────────────────────────
+    match /customCategories/{id} {
+      allow read, write: if isAuth();
+    }
+
+    // ── Subscriptions ─────────────────────────────────────────────────
+    match /subscriptions/{id} {
+      allow read, write: if isAuth();
+    }
+
+    // ── Bill reminders ────────────────────────────────────────────────
+    match /bill_reminders/{id} {
+      allow read, write: if isAuth();
+    }
+
+    // ── Investments ───────────────────────────────────────────────────
+    match /investments/{id} {
+      allow read, write: if isAuth();
+    }
+  }
+}

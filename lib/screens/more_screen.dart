@@ -21,6 +21,7 @@ import '../services/recurring_transfer_service.dart';
 import 'search_transactions_screen.dart';
 import 'theme_settings_screen.dart';
 import 'net_worth_screen.dart';
+import 'loan_screen.dart';
 import 'currency_settings_screen.dart';
 import 'import_transactions_screen.dart';
 
@@ -222,6 +223,17 @@ class MoreScreen extends StatelessWidget {
               MaterialPageRoute(
                   builder: (context) => const CurrencySettingsScreen()),
             ),
+          ),
+
+          _buildMenuItem(
+            context,
+            icon: Icons.account_balance_rounded,
+            title: 'Loan & EMI Manager',
+            subtitle: 'Track loans & prepayments',
+            color: const Color(0xFF667eea),
+            onTap: () => Navigator.push(context,
+                MaterialPageRoute(
+                    builder: (context) => const LoanScreen())),
           ),
 
           _buildMenuItem(

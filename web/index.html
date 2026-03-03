@@ -1,331 +1,193 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
   <base href="$FLUTTER_BASE_HREF">
-
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-
-  <!-- ── Viewport ─────────────────────────────────────────────── -->
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-
-  <!-- ── PWA Meta ──────────────────────────────────────────────── -->
-  <meta name="description" content="Track income, expenses and manage your personal finances">
-  <meta name="theme-color" content="#1565C0">
-  <meta name="mobile-web-app-capable" content="yes">
-
-  <!-- ── iOS Safari PWA (Home Screen) ──────────────────────────── -->
+  <meta name="description" content="Money Manager — Personal Finance App">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="Money Manager">
-
-  <!-- iOS icons (Safari uses these for home screen) -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
-  <link rel="apple-touch-icon" sizes="152x152" href="icons/Icon-192.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="icons/Icon-192.png">
-  <link rel="apple-touch-icon" sizes="167x167" href="icons/Icon-192.png">
-
-  <!-- iOS Splash Screens -->
-  <!-- iPhone 14 Pro Max -->
-  <link rel="apple-touch-startup-image"
-    media="screen and (device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)"
-    href="splash/apple-splash-1290-2796.png">
-  <!-- iPhone 14 Pro -->
-  <link rel="apple-touch-startup-image"
-    media="screen and (device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)"
-    href="splash/apple-splash-1179-2556.png">
-  <!-- iPhone 14 / 13 / 12 -->
-  <link rel="apple-touch-startup-image"
-    media="screen and (device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)"
-    href="splash/apple-splash-1170-2532.png">
-  <!-- iPhone SE / 8 / 7 / 6 -->
-  <link rel="apple-touch-startup-image"
-    media="screen and (device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2)"
-    href="splash/apple-splash-750-1334.png">
-
-  <!-- ── Standard PWA ───────────────────────────────────────────── -->
-  <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/png" href="favicon.png"/>
+  <title>Money Manager</title>
 
-  <title>PaisaTrack</title>
-
-  <!-- ── Inline styles for loading screen ──────────────────────── -->
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
-      background-color: #1565C0;
+      background: #0D1117;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      overscroll-behavior: none;
+      overflow: hidden;
     }
 
-    /* Full-screen loading splash */
-    #loading-screen {
+    /* ── Splash screen ─────────────────────────────────── */
+    #splash {
       position: fixed;
       inset: 0;
-      background: linear-gradient(135deg, #1565C0 0%, #1976D2 50%, #1565C0 100%);
+      background: linear-gradient(135deg, #0D1117 0%, #1a1f2e 100%);
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       z-index: 9999;
-      transition: opacity 0.4s ease;
+      transition: opacity 0.6s ease, visibility 0.6s ease;
     }
 
-    #loading-screen.hidden {
+    #splash.hidden {
       opacity: 0;
+      visibility: hidden;
       pointer-events: none;
     }
 
-    .splash-icon {
-      width: 96px;
-      height: 96px;
-      background: rgba(255,255,255,0.15);
-      border-radius: 22px;
+    /* Logo circle */
+    .logo-ring {
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea, #764ba2);
       display: flex;
       align-items: center;
       justify-content: center;
-      margin-bottom: 24px;
-      font-size: 52px;
+      box-shadow: 0 0 40px rgba(102, 126, 234, 0.5);
+      animation: pulse 2s ease-in-out infinite;
+      margin-bottom: 28px;
     }
 
-    .splash-title {
-      color: #ffffff;
+    .logo-ring span {
+      font-size: 44px;
+      line-height: 1;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); box-shadow: 0 0 40px rgba(102,126,234,0.4); }
+      50%       { transform: scale(1.05); box-shadow: 0 0 60px rgba(102,126,234,0.7); }
+    }
+
+    /* App name */
+    .app-name {
+      color: #fff;
       font-size: 26px;
       font-weight: 700;
-      letter-spacing: -0.5px;
+      letter-spacing: 0.5px;
       margin-bottom: 6px;
     }
 
-    .splash-sub {
-      color: rgba(255,255,255,0.7);
-      font-size: 14px;
-      margin-bottom: 48px;
-    }
-
-    .spinner {
-      width: 36px;
-      height: 36px;
-      border: 3px solid rgba(255,255,255,0.25);
-      border-top-color: #ffffff;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-
-    /* iOS install banner */
-    #ios-install-banner {
-      display: none;
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      background: #ffffff;
-      padding: 16px 20px 32px;
-      border-radius: 20px 20px 0 0;
-      box-shadow: 0 -4px 24px rgba(0,0,0,0.15);
-      z-index: 8888;
-      animation: slideUp 0.3s ease;
-    }
-
-    @keyframes slideUp {
-      from { transform: translateY(100%); }
-      to   { transform: translateY(0); }
-    }
-
-    #ios-install-banner .banner-header {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 12px;
-    }
-
-    #ios-install-banner .banner-icon {
-      width: 48px;
-      height: 48px;
-      border-radius: 12px;
-      background: #1565C0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 26px;
-      flex-shrink: 0;
-    }
-
-    #ios-install-banner .banner-text h3 {
-      font-size: 16px;
-      font-weight: 700;
-      color: #1a1a1a;
-    }
-
-    #ios-install-banner .banner-text p {
+    .app-sub {
+      color: rgba(255,255,255,0.45);
       font-size: 13px;
-      color: #666;
-      margin-top: 2px;
+      margin-bottom: 52px;
     }
 
-    #ios-install-banner .banner-steps {
-      background: #f5f6fa;
-      border-radius: 12px;
-      padding: 14px 16px;
-      margin-bottom: 14px;
-    }
-
-    #ios-install-banner .step {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 13px;
-      color: #333;
-      padding: 5px 0;
-    }
-
-    #ios-install-banner .step-num {
-      width: 22px;
-      height: 22px;
-      background: #1565C0;
-      color: white;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 11px;
-      font-weight: 700;
-      flex-shrink: 0;
-    }
-
-    #ios-install-banner .banner-close {
-      width: 100%;
-      padding: 12px;
-      background: #1565C0;
-      color: white;
-      border: none;
-      border-radius: 12px;
-      font-size: 15px;
-      font-weight: 600;
-      cursor: pointer;
-    }
-
-    #ios-install-banner .dismiss {
-      width: 100%;
-      padding: 10px;
-      background: none;
-      color: #888;
-      border: none;
-      font-size: 13px;
-      cursor: pointer;
-      margin-top: 6px;
-    }
-
-    /* Prevent overscroll bounce on iOS */
-    html, body {
-      height: 100%;
+    /* Progress bar */
+    .progress-track {
+      width: 200px;
+      height: 3px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 2px;
       overflow: hidden;
-      position: fixed;
-      width: 100%;
+      margin-bottom: 16px;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #667eea, #764ba2);
+      border-radius: 2px;
+      animation: load 3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    }
+
+    @keyframes load {
+      0%   { width: 0%; }
+      30%  { width: 40%; }
+      60%  { width: 70%; }
+      85%  { width: 88%; }
+      100% { width: 95%; }
+    }
+
+    .loading-text {
+      color: rgba(255,255,255,0.35);
+      font-size: 12px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      animation: blink 1.5s ease-in-out infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 0.35; }
+      50%       { opacity: 0.7; }
+    }
+
+    /* Dots animation */
+    .dots {
+      display: flex;
+      gap: 8px;
+      margin-top: 40px;
+    }
+
+    .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: rgba(102, 126, 234, 0.6);
+      animation: bounce 1.4s ease-in-out infinite;
+    }
+    .dot:nth-child(1) { animation-delay: 0s; }
+    .dot:nth-child(2) { animation-delay: 0.2s; }
+    .dot:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes bounce {
+      0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+      40%            { transform: scale(1);   opacity: 1; }
+    }
+
+    /* Flutter canvas — hidden until ready */
+    flt-glass-pane {
+      opacity: 0;
+      transition: opacity 0.5s ease;
+    }
+    flt-glass-pane.ready {
+      opacity: 1;
     }
   </style>
 </head>
 
 <body>
-  <!-- Loading splash screen -->
-  <div id="loading-screen">
-    <div class="splash-icon">💰</div>
-    <div class="splash-title">Money Manager</div>
-    <div class="splash-sub">Your personal finance tracker</div>
-    <div class="spinner"></div>
-  </div>
-
-  <!-- iOS Install Banner -->
-  <div id="ios-install-banner">
-    <div class="banner-header">
-      <div class="banner-icon">💰</div>
-      <div class="banner-text">
-        <h3>Install Money Manager</h3>
-        <p>Add to Home Screen for the best experience</p>
-      </div>
+  <!-- Splash screen shown while Flutter loads -->
+  <div id="splash">
+    <div class="logo-ring">
+      <span>💰</span>
     </div>
-    <div class="banner-steps">
-      <div class="step">
-        <div class="step-num">1</div>
-        <span>Tap the <strong>Share</strong> button at the bottom of Safari &#xf39b;</span>
-      </div>
-      <div class="step">
-        <div class="step-num">2</div>
-        <span>Scroll down and tap <strong>"Add to Home Screen"</strong></span>
-      </div>
-      <div class="step">
-        <div class="step-num">3</div>
-        <span>Tap <strong>"Add"</strong> — done! Opens like a native app</span>
-      </div>
+    <div class="app-name">Money Manager</div>
+    <div class="app-sub">Personal Finance · Smart Insights</div>
+    <div class="progress-track">
+      <div class="progress-fill"></div>
     </div>
-    <button class="banner-close" onclick="dismissBanner()">Got it!</button>
-    <button class="dismiss" onclick="dismissBanner()">Maybe later</button>
+    <div class="loading-text">Loading</div>
+    <div class="dots">
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
   </div>
-
-  <!-- Flutter app -->
-  <script src="flutter_bootstrap.js" async></script>
 
   <script>
-    // ── Hide loading screen when Flutter is ready ───────────────────────────
-    window.addEventListener('flutter-first-frame', function() {
-      const loader = document.getElementById('loading-screen');
-      if (loader) {
-        loader.classList.add('hidden');
-        setTimeout(() => loader.remove(), 500);
-      }
-    });
+    window.addEventListener('flutter-first-frame', function () {
+      // Flutter is ready — fade out splash
+      const splash = document.getElementById('splash');
+      splash.classList.add('hidden');
 
-    // ── iOS install banner logic ────────────────────────────────────────────
-    function isIos() {
-      return /iphone|ipad|ipod/.test(navigator.userAgent.toLowerCase());
-    }
+      // Show Flutter canvas
+      const canvas = document.querySelector('flt-glass-pane');
+      if (canvas) canvas.classList.add('ready');
 
-    function isInStandaloneMode() {
-      return ('standalone' in window.navigator) && window.navigator.standalone;
-    }
-
-    function dismissBanner() {
-      document.getElementById('ios-install-banner').style.display = 'none';
-      localStorage.setItem('mmIosBannerDismissed', Date.now().toString());
-    }
-
-    // Show banner on iOS Safari if not installed and not dismissed recently
-    window.addEventListener('load', function() {
-      if (isIos() && !isInStandaloneMode()) {
-        const dismissed = localStorage.getItem('mmIosBannerDismissed');
-        const threeDays = 3 * 24 * 60 * 60 * 1000;
-        if (!dismissed || (Date.now() - parseInt(dismissed)) > threeDays) {
-          setTimeout(function() {
-            document.getElementById('ios-install-banner').style.display = 'block';
-          }, 3000); // Show after 3 seconds
-        }
-      }
-    });
-
-    // ── Android / Chrome install prompt ────────────────────────────────────
-    let deferredPrompt;
-    window.addEventListener('beforeinstallprompt', function(e) {
-      e.preventDefault();
-      deferredPrompt = e;
-      // Flutter can call window.triggerInstall() to show prompt
-      window.triggerInstall = function() {
-        if (deferredPrompt) {
-          deferredPrompt.prompt();
-          deferredPrompt.userChoice.then(function(result) {
-            deferredPrompt = null;
-          });
-        }
-      };
-    });
-
-    window.addEventListener('appinstalled', function() {
-      deferredPrompt = null;
-      console.log('Money Manager installed as PWA');
+      // Remove splash from DOM after fade
+      setTimeout(() => splash.remove(), 700);
     });
   </script>
+
+  <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

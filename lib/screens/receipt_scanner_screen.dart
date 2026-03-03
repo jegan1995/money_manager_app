@@ -2,6 +2,7 @@
 // Receipt Scanner — AI-powered receipt reading using Claude Vision API
 // Pick photo → Claude extracts amount/merchant/category/date → pre-fills form
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'dart:typed_data';
 import 'dart:convert';
@@ -139,6 +140,40 @@ class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
 
   // ── Call Claude Vision API ─────────────────────────────────────────────────
   Future<void> _scan(Uint8List bytes) async {
+    // CORS fix: Anthropic API cannot be called directly from browsers.
+    // On web, show a manual-fill message. Full AI works on Android APK.
+    if (kIsWeb) {
+      setState(() {
+        _scanning = false;
+        _error = null;
+        // Create a dummy receipt so the form shows for manual entry
+        _receipt = ReceiptData(
+          amount: null,
+          merchant: null,
+          category: null,
+          date: DateTime.now(),
+          note: null,
+          items: [],
+        );
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(children: [
+            Icon(Icons.info_outline, color: Colors.white, size: 16),
+            SizedBox(width: 8),
+            Expanded(child: Text(
+              'AI scan works on Android app. Fill details manually below.',
+              style: TextStyle(fontSize: 12),
+            )),
+          ]),
+          backgroundColor: Color(0xFF667eea),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 4),
+        ),
+      );
+      return;
+    }
+
     setState(() { _scanning = true; _error = null; });
 
     try {
@@ -322,6 +357,39 @@ Rules:
             step: 1, title: 'Scan Receipt',
             isDark: isDark, cardBg: cardBg,
             child: Column(children: [
+              // ── Web notice banner ──────────────────────────────────────
+              if (kIsWeb) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  margin: const EdgeInsets.only(bottom: 14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF667eea).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                        color: const Color(0xFF667eea).withOpacity(0.3)),
+                  ),
+                  child: Row(children: [
+                    const Text('📱', style: TextStyle(fontSize: 18)),
+                    const SizedBox(width: 10),
+                    const Expanded(child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('AI Scan — Android Only',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                                color: Color(0xFF667eea))),
+                        SizedBox(height: 2),
+                        Text(
+                          'Upload a photo to fill details manually,\nor use the Android APK for full AI scanning.',
+                          style: TextStyle(fontSize: 11, color: Colors.grey),
+                        ),
+                      ],
+                    )),
+                  ]),
+                ),
+              ],
+
               // Image preview
               if (_imageBytes != null)
                 Stack(children: [

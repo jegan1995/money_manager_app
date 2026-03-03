@@ -224,7 +224,7 @@ Rules:
           'anthropic-version': '2023-06-01',
         },
         body: jsonEncode({
-          'model':      'claude-opus-4-5',
+          'model':      'claude-sonnet-4-6',
           'max_tokens': 512,
           'messages': [
             {

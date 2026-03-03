@@ -3,6 +3,7 @@
 // Pick photo → Claude extracts amount/merchant/category/date → pre-fills form
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import '../config/app_config.dart';
 import 'package:flutter/services.dart';
 import 'dart:typed_data';
 import 'dart:convert';
@@ -95,10 +96,8 @@ class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
   ];
 
   // ── Anthropic API key ────────────────────────────────────────────────────────
-  // Build command: flutter build web --dart-define=ANTHROPIC_API_KEY=sk-ant-xxx
-  // NEVER hardcode the key directly in this file
-  static const _apiKey =
-      String.fromEnvironment('ANTHROPIC_API_KEY', defaultValue: '');
+  // Stored in lib/config/app_config.dart (gitignored — never in git)
+  static const _apiKey = AppConfig.anthropicApiKey;
 
   @override
   void initState() {
@@ -508,24 +507,32 @@ Rules:
               cardBg: cardBg,
               badge: 'AI',
               child: Column(children: [
-                // Success banner
+                // Success banner — different message for web vs Android
                 Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 12, vertical: 10),
                   decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.08),
+                    color: kIsWeb
+                        ? const Color(0xFF667eea).withOpacity(0.08)
+                        : Colors.green.withOpacity(0.08),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(children: [
-                    const Icon(Icons.auto_awesome_rounded,
-                        color: Colors.green, size: 16),
+                    Icon(
+                      kIsWeb ? Icons.edit_note_rounded : Icons.auto_awesome_rounded,
+                      color: kIsWeb ? const Color(0xFF667eea) : Colors.green,
+                      size: 16,
+                    ),
                     const SizedBox(width: 8),
-                    Text(
-                      'Receipt scanned! Review and edit below.',
+                    Expanded(child: Text(
+                      kIsWeb
+                          ? 'Photo uploaded. AI scan works on Android APK — fill details manually below.'
+                          : 'Receipt scanned! Review and edit below.',
                       style: TextStyle(
-                          color: Colors.green[700],
+                          color: kIsWeb ? const Color(0xFF667eea) : Colors.green[700],
                           fontSize: 12,
-                          fontWeight: FontWeight.w600)),
+                          fontWeight: FontWeight.w600),
+                    )),
                   ]),
                 ),
 

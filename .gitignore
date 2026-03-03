@@ -50,3 +50,4 @@ android/app/src/main/java/io/flutter/plugins/
 android/.gradle/
 .dart_tool/
 build/
+run.sh

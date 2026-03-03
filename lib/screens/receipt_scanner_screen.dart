@@ -120,9 +120,9 @@ class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
     try {
       final file = await _picker.pickImage(
         source: source,
-        maxWidth:  1024,
-        maxHeight: 1024,
-        imageQuality: 80,
+        maxWidth:  800,
+        maxHeight: 800,
+        imageQuality: 50,   // Aggressive compression — receipt text still readable
       );
       if (file == null) return;
       final bytes = await file.readAsBytes();
@@ -176,6 +176,17 @@ class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
     setState(() { _scanning = true; _error = null; });
 
     try {
+      // Size guard — API rejects very large payloads
+      // 800x800 @ quality 50 should be ~80-150KB; base64 is ~1.3x that
+      if (bytes.length > 1500000) {
+        // Over 1.5MB raw — too big, show friendly error
+        setState(() {
+          _scanning = false;
+          _error = 'Image too large. Try again with a closer, cropped photo.';
+        });
+        return;
+      }
+
       final base64Image = base64Encode(bytes);
 
       // Detect JPEG vs PNG from header bytes
@@ -235,6 +246,9 @@ Rules:
             }
           ],
         }),
+      ).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () => throw Exception('Request timed out. Check internet connection.'),
       );
 
       if (response.statusCode != 200) {
@@ -270,7 +284,17 @@ Rules:
     } catch (e) {
       setState(() {
         _scanning = false;
-        _error    = 'Could not read receipt: ${e.toString().length > 80 ? e.toString().substring(0, 80) : e}';
+        String errMsg = e.toString();
+        if (errMsg.contains('Connection closed') || errMsg.contains('SocketException')) {
+          errMsg = 'Connection dropped. Try a smaller/clearer photo.';
+        } else if (errMsg.contains('401') || errMsg.contains('authentication')) {
+          errMsg = 'API key error. Please contact support.';
+        } else if (errMsg.contains('timed out')) {
+          errMsg = 'Timed out. Try a smaller photo or check internet.';
+        } else if (errMsg.length > 80) {
+          errMsg = errMsg.substring(0, 80);
+        }
+        _error = 'Could not read receipt: $errMsg';
       });
     }
   }

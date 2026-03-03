@@ -95,8 +95,8 @@ class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
 
   // ── Anthropic API key — inject via environment or hardcode for dev ──────────
   // In production use flutter_dotenv or --dart-define
-  static const _apiKey =
-      String.fromEnvironment('ANTHROPIC_API_KEY', defaultValue: '');
+  static const _apiKey = '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';
+      // String.fromEnvironment('ANTHROPIC_API_KEY', defaultValue: '');
 
   @override
   void initState() {

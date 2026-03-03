@@ -1,571 +1,848 @@
-import 'dart:typed_data';
+// lib/screens/receipt_scanner_screen.dart
+// Receipt Scanner — AI-powered receipt reading using Claude Vision API
+// Pick photo → Claude extracts amount/merchant/category/date → pre-fills form
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'dart:typed_data';
+import 'dart:convert';
 import 'package:image_picker/image_picker.dart';
-import '../services/receipt_scanner_service.dart';
+import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
+import '../models/transaction_model.dart';
+import '../models/account_model.dart';
+import '../services/transaction_service.dart';
+import '../services/account_service.dart';
 
-class ReceiptScannerScreen extends StatefulWidget {
-  const ReceiptScannerScreen({super.key});
+// ── Extracted receipt data model ──────────────────────────────────────────────
+class ReceiptData {
+  final double?  amount;
+  final String?  merchant;
+  final String?  category;
+  final DateTime? date;
+  final String?  note;
+  final List<ReceiptItem> items;
 
-  @override
-  State<ReceiptScannerScreen> createState() => _ReceiptScannerScreenState();
+  const ReceiptData({
+    this.amount,   this.merchant, this.category,
+    this.date,     this.note,     this.items = const [],
+  });
+
+  factory ReceiptData.fromJson(Map<String, dynamic> j) {
+    DateTime? parsedDate;
+    try {
+      if (j['date'] != null && (j['date'] as String).isNotEmpty) {
+        parsedDate = DateTime.parse(j['date'] as String);
+      }
+    } catch (_) {}
+
+    return ReceiptData(
+      amount:   (j['amount'] as num?)?.toDouble(),
+      merchant: j['merchant'] as String?,
+      category: j['category'] as String?,
+      date:     parsedDate,
+      note:     j['note'] as String?,
+      items:    (j['items'] as List<dynamic>? ?? [])
+          .map((i) => ReceiptItem.fromJson(i as Map<String, dynamic>))
+          .toList(),
+    );
+  }
 }
 
-class _ReceiptScannerScreenState extends State<ReceiptScannerScreen>
-    with TickerProviderStateMixin {
-  final _scanner = ReceiptScannerService();
-  final _picker = ImagePicker();
+class ReceiptItem {
+  final String name;
+  final double amount;
+  const ReceiptItem({required this.name, required this.amount});
+  factory ReceiptItem.fromJson(Map<String, dynamic> j) => ReceiptItem(
+        name:   j['name'] as String? ?? '',
+        amount: (j['amount'] as num?)?.toDouble() ?? 0,
+      );
+}
 
-  Uint8List? _imageBytes;
-  bool _scanning = false;
-  ScannedReceiptData? _result;
-  String? _pickError;
+// ════════════════════════════════════════════════════════════════════════════
+class ReceiptScannerScreen extends StatefulWidget {
+  const ReceiptScannerScreen({super.key});
+  @override
+  State<ReceiptScannerScreen> createState() =>
+      _ReceiptScannerScreenState();
+}
 
-  late AnimationController _pulseCtrl;
-  late Animation<double> _pulseAnim;
-  late AnimationController _scanLineCtrl;
-  late Animation<double> _scanLineAnim;
+class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
+  final _picker    = ImagePicker();
+  final _txnSvc    = TransactionService();
+  final _accSvc    = AccountService();
+
+  Uint8List?   _imageBytes;
+  ReceiptData? _receipt;
+  String?      _error;
+  bool         _scanning  = false;
+  bool         _saving    = false;
+
+  // Form controllers — pre-filled from scan
+  final _amountCtrl   = TextEditingController();
+  final _merchantCtrl = TextEditingController();
+  final _noteCtrl     = TextEditingController();
+  String  _category    = 'Shopping';
+  String  _type        = 'expense';
+  DateTime _date       = DateTime.now();
+  String?  _fromAccount;
+  List<AccountModel> _accounts = [];
+
+  static const _categories = [
+    'Food & Dining', 'Shopping', 'Transport', 'Health',
+    'Entertainment', 'Bills', 'Groceries', 'Travel',
+    'Education', 'Other',
+  ];
+
+  // ── Anthropic API key — inject via environment or hardcode for dev ──────────
+  // In production use flutter_dotenv or --dart-define
+  static const _apiKey =
+      String.fromEnvironment('ANTHROPIC_API_KEY', defaultValue: '');
 
   @override
   void initState() {
     super.initState();
-    _pulseCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1000))
-      ..repeat(reverse: true);
-    _pulseAnim = Tween<double>(begin: 0.85, end: 1.0).animate(
-        CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
-
-    _scanLineCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1500))
-      ..repeat();
-    _scanLineAnim = Tween<double>(begin: 0, end: 1)
-        .animate(CurvedAnimation(parent: _scanLineCtrl, curve: Curves.linear));
+    _accSvc.getAccounts().listen((list) {
+      if (mounted) setState(() => _accounts = list);
+    });
   }
 
   @override
   void dispose() {
-    _pulseCtrl.dispose();
-    _scanLineCtrl.dispose();
+    _amountCtrl.dispose();
+    _merchantCtrl.dispose();
+    _noteCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _pickCamera() async {
-    setState(() => _pickError = null);
+  // ── Pick image ─────────────────────────────────────────────────────────────
+  Future<void> _pick(ImageSource source) async {
     try {
-      final f = await _picker.pickImage(
-        source: ImageSource.camera,
-        maxWidth: 1920,
-        imageQuality: 88,
+      final file = await _picker.pickImage(
+        source: source,
+        maxWidth:  1024,
+        maxHeight: 1024,
+        imageQuality: 80,
       );
-      if (f != null) {
-        final bytes = await f.readAsBytes();
-        setState(() {
-          _imageBytes = bytes;
-          _result = null;
-        });
-        _doScan(bytes);
-      }
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
+      setState(() {
+        _imageBytes = bytes;
+        _receipt    = null;
+        _error      = null;
+      });
+      await _scan(bytes);
     } catch (e) {
-      setState(() => _pickError = 'Camera error: $e');
+      setState(() => _error = 'Could not open image: $e');
     }
   }
 
-  Future<void> _pickGallery() async {
-    setState(() => _pickError = null);
+  // ── Call Claude Vision API ─────────────────────────────────────────────────
+  Future<void> _scan(Uint8List bytes) async {
+    setState(() { _scanning = true; _error = null; });
+
     try {
-      final f = await _picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1920,
-        imageQuality: 88,
+      final base64Image = base64Encode(bytes);
+
+      // Detect JPEG vs PNG from header bytes
+      final mime = (bytes[0] == 0xFF && bytes[1] == 0xD8)
+          ? 'image/jpeg' : 'image/png';
+
+      final prompt = '''
+You are a receipt parser. Extract the following from this receipt image and return ONLY a valid JSON object (no markdown, no explanation):
+
+{
+  "amount": <total amount as number, e.g. 450.00>,
+  "merchant": "<store/restaurant name>",
+  "category": "<one of: Food & Dining, Shopping, Transport, Health, Entertainment, Bills, Groceries, Travel, Education, Other>",
+  "date": "<YYYY-MM-DD format, or empty string if not found>",
+  "note": "<short description of purchase, max 60 chars>",
+  "items": [
+    {"name": "<item name>", "amount": <item price>},
+    ...
+  ]
+}
+
+Rules:
+- amount must be the TOTAL (grand total / final amount paid)
+- If no total found, sum the items
+- category must be exactly one of the listed options
+- items: list up to 5 main line items (skip tax/discount lines)
+- Return ONLY the JSON, no other text
+''';
+
+      final response = await http.post(
+        Uri.parse('https://api.anthropic.com/v1/messages'),
+        headers: {
+          'Content-Type':      'application/json',
+          'x-api-key':         _apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: jsonEncode({
+          'model':      'claude-opus-4-5',
+          'max_tokens': 512,
+          'messages': [
+            {
+              'role': 'user',
+              'content': [
+                {
+                  'type': 'image',
+                  'source': {
+                    'type':       'base64',
+                    'media_type': mime,
+                    'data':       base64Image,
+                  },
+                },
+                {
+                  'type': 'text',
+                  'text': prompt,
+                },
+              ],
+            }
+          ],
+        }),
       );
-      if (f != null) {
-        final bytes = await f.readAsBytes();
-        setState(() {
-          _imageBytes = bytes;
-          _result = null;
-        });
-        _doScan(bytes);
+
+      if (response.statusCode != 200) {
+        throw Exception(
+            'API error ${response.statusCode}: ${response.body}');
       }
+
+      final body  = jsonDecode(response.body) as Map<String, dynamic>;
+      final text  = (body['content'] as List).first['text'] as String;
+
+      // Strip any accidental markdown fences
+      final clean = text
+          .replaceAll(RegExp(r'```json\s*'), '')
+          .replaceAll(RegExp(r'```\s*'), '')
+          .trim();
+
+      final json    = jsonDecode(clean) as Map<String, dynamic>;
+      final receipt = ReceiptData.fromJson(json);
+
+      // Pre-fill form
+      _amountCtrl.text   = receipt.amount != null
+          ? receipt.amount!.toStringAsFixed(0) : '';
+      _merchantCtrl.text = receipt.merchant ?? '';
+      _noteCtrl.text     = receipt.note     ?? receipt.merchant ?? '';
+      if (receipt.category != null &&
+          _categories.contains(receipt.category)) {
+        _category = receipt.category!;
+      }
+      if (receipt.date != null) _date = receipt.date!;
+
+      setState(() { _receipt = receipt; _scanning = false; });
+      HapticFeedback.lightImpact();
     } catch (e) {
-      setState(() => _pickError = 'Gallery error: $e');
+      setState(() {
+        _scanning = false;
+        _error    = 'Could not read receipt: ${e.toString().length > 80 ? e.toString().substring(0, 80) : e}';
+      });
     }
   }
 
-  Future<void> _doScan(Uint8List bytes) async {
-    setState(() => _scanning = true);
-    final result = await _scanner.scanReceipt(bytes);
-    if (mounted) setState(() { _scanning = false; _result = result; });
+  // ── Save transaction ───────────────────────────────────────────────────────
+  Future<void> _save() async {
+    if (_amountCtrl.text.trim().isEmpty) {
+      _snack('Enter the amount', isError: true);
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      final txn = TransactionModel(
+        id:          '',
+        userId:      '',
+        type:        _type,
+        amount:      double.tryParse(_amountCtrl.text) ?? 0,
+        category:    _category,
+        date:        _date,
+        note:        _noteCtrl.text.trim().isNotEmpty
+            ? _noteCtrl.text.trim() : null,
+        description: _merchantCtrl.text.trim().isNotEmpty
+            ? _merchantCtrl.text.trim() : null,
+        paymentMethod: 'Other',
+        fromAccount: _type == 'expense' ? _fromAccount : null,
+        toAccount:   _type == 'income'  ? _fromAccount : null,
+        isRecurring: false,
+        createdAt:   DateTime.now(),
+      );
+      await _txnSvc.addTransaction(txn);
+      HapticFeedback.mediumImpact();
+      if (mounted) {
+        _snack('Transaction saved ✅');
+        await Future.delayed(const Duration(milliseconds: 600));
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      setState(() => _saving = false);
+      _snack('Failed to save: $e', isError: true);
+    }
   }
 
-  void _confirm() {
-    Navigator.pop(context, _result);
+  void _snack(String msg, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: isError ? Colors.red : Colors.green,
+      behavior: SnackBarBehavior.floating,
+    ));
   }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  @override
+  Widget build(BuildContext context) {
+    final isDark  = Theme.of(context).brightness == Brightness.dark;
+    final bg      = isDark ? const Color(0xFF0D1117) : const Color(0xFFF0F2F8);
+    final cardBg  = isDark ? const Color(0xFF1E2530) : Colors.white;
+
+    return Scaffold(
+      backgroundColor: bg,
+      appBar: AppBar(
+        title: const Text('Receipt Scanner',
+            style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: isDark ? const Color(0xFF1E2530) : Colors.white,
+        foregroundColor: isDark ? Colors.white : Colors.black87,
+        elevation: 0,
+        actions: [
+          if (_receipt != null && !_saving)
+            TextButton.icon(
+              onPressed: _save,
+              icon: const Icon(Icons.save_rounded, size: 16),
+              label: const Text('Save',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFF667eea)),
+            ),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          // ── Step 1: Image picker ────────────────────────────────────────
+          _StepCard(
+            step: 1, title: 'Scan Receipt',
+            isDark: isDark, cardBg: cardBg,
+            child: Column(children: [
+              // Image preview
+              if (_imageBytes != null)
+                Stack(children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.memory(
+                      _imageBytes!,
+                      width: double.infinity,
+                      height: 220,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  if (_scanning)
+                    Positioned.fill(child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.55),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                        CircularProgressIndicator(
+                            color: Colors.white),
+                        SizedBox(height: 14),
+                        Text('Reading receipt with AI...',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold)),
+                      ]),
+                    )),
+                ])
+              else
+                GestureDetector(
+                  onTap: () => _pick(ImageSource.gallery),
+                  child: Container(
+                    height: 180,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF667eea).withOpacity(0.06),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: const Color(0xFF667eea).withOpacity(0.3),
+                        width: 2,
+                        strokeAlign: BorderSide.strokeAlignCenter,
+                      ),
+                    ),
+                    child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                      const Icon(Icons.receipt_long_rounded,
+                          size: 52,
+                          color: Color(0xFF667eea)),
+                      const SizedBox(height: 12),
+                      const Text('Tap to choose a receipt photo',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: Color(0xFF667eea))),
+                      const SizedBox(height: 4),
+                      Text('Camera or gallery',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey[500])),
+                    ]),
+                  ),
+                ),
+
+              const SizedBox(height: 14),
+
+              // Action buttons
+              Row(children: [
+                Expanded(child: _pickerBtn(
+                  Icons.camera_alt_rounded, 'Camera',
+                  const Color(0xFF667eea),
+                  () => _pick(ImageSource.camera),
+                  isDark,
+                )),
+                const SizedBox(width: 12),
+                Expanded(child: _pickerBtn(
+                  Icons.photo_library_rounded, 'Gallery',
+                  Colors.orange,
+                  () => _pick(ImageSource.gallery),
+                  isDark,
+                )),
+              ]),
+
+              // Error message
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(children: [
+                    const Icon(Icons.error_outline,
+                        color: Colors.red, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(_error!,
+                        style: const TextStyle(
+                            color: Colors.red,
+                            fontSize: 12))),
+                  ]),
+                ),
+              ],
+            ]),
+          ),
+
+          // ── Step 2: Extracted data ──────────────────────────────────────
+          if (_receipt != null) ...[
+            const SizedBox(height: 16),
+            _StepCard(
+              step: 2,
+              title: 'AI Extracted Data',
+              isDark: isDark,
+              cardBg: cardBg,
+              badge: 'AI',
+              child: Column(children: [
+                // Success banner
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(children: [
+                    const Icon(Icons.auto_awesome_rounded,
+                        color: Colors.green, size: 16),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Receipt scanned! Review and edit below.',
+                      style: TextStyle(
+                          color: Colors.green[700],
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600)),
+                  ]),
+                ),
+
+                // Items list
+                if (_receipt!.items.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withOpacity(0.04)
+                          : Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Column(children: [
+                      ..._receipt!.items.map((item) => Padding(
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 3),
+                        child: Row(children: [
+                          const Text('•  ',
+                              style: TextStyle(
+                                  color: Colors.grey)),
+                          Expanded(child: Text(item.name,
+                              style: const TextStyle(
+                                  fontSize: 12))),
+                          Text('₹${item.amount.toStringAsFixed(0)}',
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600)),
+                        ]),
+                      )),
+                      Divider(color: Colors.grey.withOpacity(0.2),
+                          height: 12),
+                      Row(children: [
+                        const Spacer(),
+                        const Text('Total  ',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13)),
+                        Text(
+                          '₹${_receipt!.amount?.toStringAsFixed(0) ?? "?"}',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: Color(0xFF667eea))),
+                      ]),
+                    ]),
+                  ),
+                ],
+              ]),
+            ),
+
+            // ── Step 3: Edit & confirm ──────────────────────────────────
+            const SizedBox(height: 16),
+            _StepCard(
+              step: 3,
+              title: 'Review & Save',
+              isDark: isDark,
+              cardBg: cardBg,
+              child: Column(children: [
+                // Type toggle
+                Container(
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.white.withOpacity(0.06)
+                        : Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(children: [
+                    _typeTab('expense', '↑ Expense',
+                        const Color(0xFFfa709a)),
+                    _typeTab('income',  '↓ Income',
+                        const Color(0xFF43e97b)),
+                  ]),
+                ),
+                const SizedBox(height: 14),
+
+                // Amount
+                _formField(
+                  _amountCtrl, '₹ Total Amount *',
+                  isDark, num: true,
+                  prefix: '₹',
+                ),
+                const SizedBox(height: 10),
+
+                // Merchant
+                _formField(
+                  _merchantCtrl, 'Merchant / Store Name',
+                  isDark,
+                  cap: TextCapitalization.words,
+                ),
+                const SizedBox(height: 10),
+
+                // Note
+                _formField(
+                  _noteCtrl, 'Note (auto-filled)',
+                  isDark,
+                  cap: TextCapitalization.sentences,
+                ),
+                const SizedBox(height: 12),
+
+                // Category dropdown
+                DropdownButtonFormField<String>(
+                  value: _category,
+                  decoration: InputDecoration(
+                    labelText: 'Category',
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    filled: true,
+                    fillColor: isDark
+                        ? Colors.white.withOpacity(0.05)
+                        : Colors.grey.shade50,
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 14),
+                  ),
+                  items: _categories.map((c) =>
+                      DropdownMenuItem(value: c, child: Text(c,
+                          style: const TextStyle(fontSize: 13))))
+                      .toList(),
+                  onChanged: (v) =>
+                      setState(() => _category = v ?? _category),
+                ),
+                const SizedBox(height: 10),
+
+                // Date
+                GestureDetector(
+                  onTap: () async {
+                    final d = await showDatePicker(
+                      context: context,
+                      initialDate: _date,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime(2030),
+                    );
+                    if (d != null) setState(() => _date = d);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withOpacity(0.05)
+                          : Colors.grey.shade50,
+                      border: Border.all(
+                          color: isDark
+                              ? Colors.white24
+                              : Colors.grey.shade400),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(children: [
+                      Icon(Icons.calendar_today_rounded,
+                          size: 14,
+                          color: Colors.grey[500]),
+                      const SizedBox(width: 10),
+                      Text(DateFormat('d MMM y').format(_date),
+                          style: const TextStyle(fontSize: 13)),
+                      const Spacer(),
+                      Icon(Icons.edit_rounded,
+                          size: 14, color: Colors.grey[400]),
+                    ]),
+                  ),
+                ),
+
+                // Account
+                if (_accounts.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    value: _fromAccount,
+                    decoration: InputDecoration(
+                      labelText: _type == 'expense'
+                          ? 'Debit Account (optional)'
+                          : 'Credit Account (optional)',
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      filled: true,
+                      fillColor: isDark
+                          ? Colors.white.withOpacity(0.05)
+                          : Colors.grey.shade50,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 14),
+                    ),
+                    items: [
+                      const DropdownMenuItem(
+                          value: null,
+                          child: Text('None',
+                              style: TextStyle(fontSize: 13))),
+                      ..._accounts.map((a) =>
+                          DropdownMenuItem(
+                              value: a.id,
+                              child: Text(a.name,
+                                  style: const TextStyle(
+                                      fontSize: 13)))),
+                    ],
+                    onChanged: (v) =>
+                        setState(() => _fromAccount = v),
+                  ),
+                ],
+
+                const SizedBox(height: 20),
+
+                // Save button
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton.icon(
+                    onPressed: _saving ? null : _save,
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 18, height: 18,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white))
+                        : const Icon(Icons.save_rounded),
+                    label: Text(
+                      _saving ? 'Saving...' : 'Save Transaction',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF667eea),
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor:
+                          const Color(0xFF667eea).withOpacity(0.6),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                    ),
+                  ),
+                ),
+              ]),
+            ),
+          ],
+
+          const SizedBox(height: 40),
+        ],
+      ),
+    );
+  }
+
+  Widget _typeTab(String type, String label, Color color) {
+    final sel = _type == type;
+    return Expanded(child: GestureDetector(
+      onTap: () => setState(() => _type = type),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        margin: const EdgeInsets.all(4),
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: sel ? color : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Center(child: Text(label,
+            style: TextStyle(
+                color: sel ? Colors.white : Colors.grey,
+                fontWeight: sel
+                    ? FontWeight.bold : FontWeight.normal,
+                fontSize: 13))),
+      ),
+    ));
+  }
+
+  Widget _pickerBtn(IconData icon, String label, Color color,
+      VoidCallback onTap, bool isDark) =>
+      GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+                color: color.withOpacity(0.3), width: 1.5),
+          ),
+          child: Row(mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+            Icon(icon, color: color, size: 18),
+            const SizedBox(width: 8),
+            Text(label,
+                style: TextStyle(
+                    color: color,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13)),
+          ]),
+        ),
+      );
+
+  Widget _formField(
+    TextEditingController ctrl,
+    String label,
+    bool isDark, {
+    bool num = false,
+    String? prefix,
+    TextCapitalization cap = TextCapitalization.none,
+  }) =>
+      TextField(
+        controller: ctrl,
+        keyboardType: num
+            ? const TextInputType.numberWithOptions(decimal: true)
+            : TextInputType.text,
+        inputFormatters: num
+            ? [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))]
+            : null,
+        textCapitalization: cap,
+        decoration: InputDecoration(
+          labelText: label,
+          prefixText: prefix,
+          border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12)),
+          filled: true,
+          fillColor: isDark
+              ? Colors.white.withOpacity(0.05)
+              : Colors.grey.shade50,
+          contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12, vertical: 14),
+          labelStyle:
+              const TextStyle(fontSize: 12),
+        ),
+        style: const TextStyle(fontSize: 13),
+      );
+}
+
+// ── Step card wrapper ─────────────────────────────────────────────────────────
+class _StepCard extends StatelessWidget {
+  final int    step;
+  final String title;
+  final Widget child;
+  final bool   isDark;
+  final Color  cardBg;
+  final String? badge;
+
+  const _StepCard({
+    required this.step,   required this.title,
+    required this.child,  required this.isDark,
+    required this.cardBg, this.badge,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF0D1117) : const Color(0xFFF5F6FA),
-      appBar: AppBar(
-        title: const Text('Scan Receipt'),
-        actions: [
-          if (_imageBytes != null && !_scanning)
-            TextButton.icon(
-              onPressed: _pickCamera,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Rescan'),
-            ),
-        ],
-      ),
-      body: _imageBytes == null
-          ? _buildPickerUI(isDark)
-          : _buildScanUI(isDark),
-    );
-  }
-
-  // ── No image yet — pick source ────────────────────────────────────────────
-  Widget _buildPickerUI(bool isDark) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Animated icon
-            AnimatedBuilder(
-              animation: _pulseAnim,
-              builder: (_, __) => Transform.scale(
-                scale: _pulseAnim.value,
-                child: Container(
-                  width: 110,
-                  height: 110,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1565C0).withOpacity(0.1),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                        color: const Color(0xFF1565C0).withOpacity(0.3),
-                        width: 2),
-                  ),
-                  child: const Center(
-                    child: Text('🧾', style: TextStyle(fontSize: 48)),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            const Text('Scan a Receipt',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Text(
-              'Take a photo or pick from gallery.\nGemini AI will auto-fill your transaction.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 14, color: Colors.grey[600], height: 1.5),
-            ),
-            const SizedBox(height: 36),
-
-            if (_pickError != null) ...[
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(_pickError!,
-                    style: const TextStyle(color: Colors.red, fontSize: 13)),
-              ),
-              const SizedBox(height: 16),
-            ],
-
-            // Camera button
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _pickCamera,
-                icon: const Icon(Icons.camera_alt),
-                label: const Text('Take Photo'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1565C0),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
-                  textStyle: const TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Gallery button
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: _pickGallery,
-                icon: const Icon(Icons.photo_library_outlined),
-                label: const Text('Choose from Gallery'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
-                  textStyle: const TextStyle(fontSize: 15),
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 32),
-            Row(
-              children: [
-                const Icon(Icons.auto_awesome, size: 14, color: Colors.blue),
-                const SizedBox(width: 6),
-                Text(
-                  'Powered by Gemini AI Vision',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ── Image picked — show scan / result ────────────────────────────────────
-  Widget _buildScanUI(bool isDark) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          // Image preview with scan animation overlay
-          ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: Stack(
-              children: [
-                Image.memory(
-                  _imageBytes!,
-                  width: double.infinity,
-                  height: 240,
-                  fit: BoxFit.cover,
-                ),
-                if (_scanning)
-                  Positioned.fill(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.35),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: AnimatedBuilder(
-                        animation: _scanLineAnim,
-                        builder: (_, __) => CustomPaint(
-                          painter: _ScanLinePainter(_scanLineAnim.value),
-                        ),
-                      ),
-                    ),
-                  ),
-                if (_scanning)
-                  Positioned.fill(
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const SizedBox(
-                            width: 32,
-                            height: 32,
-                            child: CircularProgressIndicator(
-                                color: Colors.white, strokeWidth: 3),
-                          ),
-                          const SizedBox(height: 10),
-                          const Text('Reading receipt...',
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 4),
-                          const Text('Gemini AI is analysing',
-                              style: TextStyle(
-                                  color: Colors.white70, fontSize: 12)),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 20),
-
-          // Results
-          if (_result != null) ...[
-            if (!_result!.success)
-              _errorCard(_result!.error ?? 'Scan failed', isDark)
-            else
-              _resultCard(isDark),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _errorCard(String msg, bool isDark) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.red.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.red.withOpacity(0.3)),
+        color: cardBg,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [BoxShadow(
+          color: Colors.black.withOpacity(0.05),
+          blurRadius: 10, offset: const Offset(0, 4),
+        )],
       ),
       child: Column(
-        children: [
-          const Text('❌', style: TextStyle(fontSize: 32)),
-          const SizedBox(height: 10),
-          const Text('Could not extract receipt data',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-          const SizedBox(height: 6),
-          Text(msg,
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: Colors.grey[600])),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _pickCamera,
-                  icon: const Icon(Icons.camera_alt),
-                  label: const Text('Try Again'),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _pickGallery,
-                  icon: const Icon(Icons.photo_library_outlined),
-                  label: const Text('Gallery'),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _resultCard(bool isDark) {
-    final r = _result!;
-    final hasData = r.amount != null || r.merchant != null || r.category != null;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Success header
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: Colors.green.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.green.withOpacity(0.3)),
-          ),
-          child: Row(
-            children: [
-              const Text('✅', style: TextStyle(fontSize: 18)),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Receipt scanned successfully!',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.green,
-                            fontSize: 13)),
-                    Text(
-                      hasData
-                          ? 'Review the extracted data below and confirm.'
-                          : 'Limited data found. Fill in manually.',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.auto_awesome, color: Colors.blue, size: 16),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 16),
-
-        // Extracted data
-        Container(
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1E2530) : Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                  color: Colors.black.withOpacity(0.06),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2))
-            ],
-          ),
-          child: Column(
-            children: [
-              if (r.amount != null)
-                _dataRow('💰', 'Amount', '₹${r.amount!.toStringAsFixed(2)}',
-                    Colors.green, isDark),
-              if (r.merchant != null) ...[
-                const Divider(height: 1),
-                _dataRow('🏪', 'Merchant', r.merchant!, Colors.blue, isDark),
-              ],
-              if (r.category != null) ...[
-                const Divider(height: 1),
-                _dataRow('🗂️', 'Category', r.category!, Colors.purple, isDark),
-              ],
-              if (r.date != null) ...[
-                const Divider(height: 1),
-                _dataRow('📅', 'Date', _formatDate(r.date!), Colors.orange, isDark),
-              ],
-              if (r.paymentMethod != null) ...[
-                const Divider(height: 1),
-                _dataRow('💳', 'Payment', r.paymentMethod!, Colors.teal, isDark),
-              ],
-              if (r.note != null) ...[
-                const Divider(height: 1),
-                _dataRow('📝', 'Note', r.note!, Colors.grey, isDark),
-              ],
-            ],
-          ),
-        ),
-
-        if (!hasData) ...[
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.orange.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.orange.withOpacity(0.3)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.info_outline, color: Colors.orange, size: 18),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Tip: For best results, take a clear photo in good lighting, focusing on the total amount section.',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[700]),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-
-        const SizedBox(height: 20),
-
-        // Action buttons
-        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: () {
-                  setState(() {
-                    _imageBytes = null;
-                    _result = null;
-                  });
-                },
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                ),
-                child: const Text('Scan Again'),
-              ),
+        Row(children: [
+          Container(
+            width: 26, height: 26,
+            decoration: const BoxDecoration(
+              color: Color(0xFF667eea),
+              shape: BoxShape.circle,
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              flex: 2,
-              child: ElevatedButton.icon(
-                onPressed: _confirm,
-                icon: const Icon(Icons.check),
-                label: const Text('Use This Data'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1565C0),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  textStyle: const TextStyle(
-                      fontSize: 14, fontWeight: FontWeight.bold),
-                ),
+            child: Center(child: Text('$step',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12))),
+          ),
+          const SizedBox(width: 10),
+          Text(title, style: const TextStyle(
+              fontWeight: FontWeight.bold, fontSize: 15)),
+          if (badge != null) ...[
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF667eea), Color(0xFF764ba2)]),
+                borderRadius: BorderRadius.circular(8),
               ),
+              child: Text(badge!,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold)),
             ),
           ],
-        ),
-
+        ]),
         const SizedBox(height: 16),
-      ],
+        child,
+      ]),
     );
   }
-
-  Widget _dataRow(String emoji, String label, String value, Color color, bool isDark) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          Text(emoji, style: const TextStyle(fontSize: 18)),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label,
-                    style: TextStyle(fontSize: 11, color: Colors.grey[500])),
-                Text(value,
-                    style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                        color: isDark ? Colors.white : Colors.black87)),
-              ],
-            ),
-          ),
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _formatDate(String isoDate) {
-    try {
-      final d = DateTime.parse(isoDate);
-      const months = ['Jan','Feb','Mar','Apr','May','Jun',
-                      'Jul','Aug','Sep','Oct','Nov','Dec'];
-      return '${d.day} ${months[d.month - 1]} ${d.year}';
-    } catch (_) {
-      return isoDate;
-    }
-  }
-}
-
-// Scanning line painter
-class _ScanLinePainter extends CustomPainter {
-  final double progress;
-  _ScanLinePainter(this.progress);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final y = progress * size.height;
-    final paint = Paint()
-      ..color = Colors.greenAccent.withOpacity(0.8)
-      ..strokeWidth = 2
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
-    canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-
-    // Glow
-    paint.color = Colors.greenAccent.withOpacity(0.2);
-    paint.strokeWidth = 12;
-    canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-  }
-
-  @override
-  bool shouldRepaint(_ScanLinePainter old) => old.progress != progress;
 }

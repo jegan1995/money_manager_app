@@ -25,6 +25,7 @@ import 'loan_screen.dart';
 import 'split_expense_screen.dart';
 import 'receipt_scanner_screen.dart';
 import 'currency_settings_screen.dart';
+import 'data_management_screen.dart';
 import 'import_transactions_screen.dart';
 
 class MoreScreen extends StatelessWidget {
@@ -269,6 +270,21 @@ class MoreScreen extends StatelessWidget {
             onTap: () => Navigator.push(context,
                 MaterialPageRoute(
                     builder: (context) => const SplitExpenseScreen())),
+          ),
+
+          const Divider(),
+
+          _buildMenuItem(
+            context,
+            icon: Icons.admin_panel_settings_rounded,
+            title: 'Data Management',
+            subtitle: 'Clear data, carry forward budget, delete account',
+            color: const Color(0xFF667eea),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (context) => const DataManagementScreen()),
+            ),
           ),
 
           _buildMenuItem(

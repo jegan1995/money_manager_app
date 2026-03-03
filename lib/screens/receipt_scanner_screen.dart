@@ -1,848 +1,1087 @@
-// lib/screens/receipt_scanner_screen.dart
-// Receipt Scanner — AI-powered receipt reading using Claude Vision API
-// Pick photo → Claude extracts amount/merchant/category/date → pre-fills form
+// lib/screens/add_transaction_screen.dart
+import '../utils/categories.dart';
+import '../models/custom_category_model.dart';
+import '../services/custom_category_service.dart';
+import 'custom_categories_screen.dart';
+import 'receipt_scanner_screen.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'dart:typed_data';
-import 'dart:convert';
-import 'package:image_picker/image_picker.dart';
-import 'package:http/http.dart' as http;
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../models/transaction_model.dart';
 import '../models/account_model.dart';
 import '../services/transaction_service.dart';
 import '../services/account_service.dart';
+import 'accounts_screen.dart';
+import '../widgets/custom_snackbar.dart';
+import '../widgets/loading_overlay.dart';
+import 'dart:typed_data';
+import '../services/storage_service.dart';
+import '../widgets/receipt_picker.dart';
 
-// ── Extracted receipt data model ──────────────────────────────────────────────
-class ReceiptData {
-  final double?  amount;
-  final String?  merchant;
-  final String?  category;
-  final DateTime? date;
-  final String?  note;
-  final List<ReceiptItem> items;
+class AddTransactionScreen extends StatefulWidget {
+  final TransactionModel? transaction;
+  final bool isCopy;
 
-  const ReceiptData({
-    this.amount,   this.merchant, this.category,
-    this.date,     this.note,     this.items = const [],
+  const AddTransactionScreen({
+    super.key,
+    this.transaction,
+    this.isCopy = false,
   });
 
-  factory ReceiptData.fromJson(Map<String, dynamic> j) {
-    DateTime? parsedDate;
-    try {
-      if (j['date'] != null && (j['date'] as String).isNotEmpty) {
-        parsedDate = DateTime.parse(j['date'] as String);
-      }
-    } catch (_) {}
-
-    return ReceiptData(
-      amount:   (j['amount'] as num?)?.toDouble(),
-      merchant: j['merchant'] as String?,
-      category: j['category'] as String?,
-      date:     parsedDate,
-      note:     j['note'] as String?,
-      items:    (j['items'] as List<dynamic>? ?? [])
-          .map((i) => ReceiptItem.fromJson(i as Map<String, dynamic>))
-          .toList(),
-    );
-  }
-}
-
-class ReceiptItem {
-  final String name;
-  final double amount;
-  const ReceiptItem({required this.name, required this.amount});
-  factory ReceiptItem.fromJson(Map<String, dynamic> j) => ReceiptItem(
-        name:   j['name'] as String? ?? '',
-        amount: (j['amount'] as num?)?.toDouble() ?? 0,
-      );
-}
-
-// ════════════════════════════════════════════════════════════════════════════
-class ReceiptScannerScreen extends StatefulWidget {
-  const ReceiptScannerScreen({super.key});
   @override
-  State<ReceiptScannerScreen> createState() =>
-      _ReceiptScannerScreenState();
+  State<AddTransactionScreen> createState() => _AddTransactionScreenState();
 }
 
-class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
-  final _picker    = ImagePicker();
-  final _txnSvc    = TransactionService();
-  final _accSvc    = AccountService();
+class _AddTransactionScreenState extends State<AddTransactionScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final TransactionService _transactionService = TransactionService();
+  final AccountService _accountService = AccountService();
+  final CustomCategoryService _customCatSvc = CustomCategoryService();
 
-  Uint8List?   _imageBytes;
-  ReceiptData? _receipt;
-  String?      _error;
-  bool         _scanning  = false;
-  bool         _saving    = false;
+  // Receipt fields
+  final StorageService _storageService = StorageService();
+  Uint8List? _receiptImage;
+  String? _receiptUrl;
 
-  // Form controllers — pre-filled from scan
-  final _amountCtrl   = TextEditingController();
-  final _merchantCtrl = TextEditingController();
-  final _noteCtrl     = TextEditingController();
-  String  _category    = 'Shopping';
-  String  _type        = 'expense';
-  DateTime _date       = DateTime.now();
-  String?  _fromAccount;
+  String _type = 'expense';
+  final TextEditingController _amountController = TextEditingController();
+  final TextEditingController _noteController = TextEditingController();
+  final TextEditingController _descriptionController = TextEditingController();
+
+  String? _selectedCategory;
+  String? _selectedSubcategory;
+  String? _paymentMethod;
+  String? _fromAccount;
+  String? _toAccount;
+
+  DateTime _selectedDate = DateTime.now();
+  bool _isLoading = false;
+  bool _isRecurring = false;
+  String _recurringFrequency = 'monthly';
+
   List<AccountModel> _accounts = [];
 
-  static const _categories = [
-    'Food & Dining', 'Shopping', 'Transport', 'Health',
-    'Entertainment', 'Bills', 'Groceries', 'Travel',
-    'Education', 'Other',
+  final List<String> _paymentMethods = [
+    'Cash',
+    'Credit Card',
+    'Debit Card',
+    'UPI',
+    'Net Banking',
+    'Wallet',
   ];
-
-  // ── Anthropic API key — inject via environment or hardcode for dev ──────────
-  // In production use flutter_dotenv or --dart-define
-  static const _apiKey = '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';
-      // String.fromEnvironment('ANTHROPIC_API_KEY', defaultValue: '');
 
   @override
   void initState() {
     super.initState();
-    _accSvc.getAccounts().listen((list) {
-      if (mounted) setState(() => _accounts = list);
+    _loadAccounts();
+    if (widget.transaction != null) {
+      _type = widget.transaction!.type;
+      _amountController.text = widget.transaction!.amount.toString();
+      _selectedCategory = widget.transaction!.category;
+      _selectedSubcategory = widget.transaction!.subcategory;
+      _paymentMethod = widget.transaction!.paymentMethod;
+      _fromAccount = widget.transaction!.fromAccount;
+      _toAccount = widget.transaction!.toAccount;
+      _selectedDate = widget.transaction!.date;
+      _noteController.text = widget.transaction!.note ?? '';
+      _descriptionController.text = widget.transaction!.description ?? '';
+      _receiptUrl = widget.transaction!.imageUrl;
+    }
+  }
+
+  void _loadAccounts() {
+    _accountService.getAccounts().listen((accountsList) {
+      setState(() {
+        _accounts = accountsList;
+      });
     });
   }
 
   @override
   void dispose() {
-    _amountCtrl.dispose();
-    _merchantCtrl.dispose();
-    _noteCtrl.dispose();
+    _amountController.dispose();
+    _noteController.dispose();
+    _descriptionController.dispose();
     super.dispose();
   }
 
-  // ── Pick image ─────────────────────────────────────────────────────────────
-  Future<void> _pick(ImageSource source) async {
-    try {
-      final file = await _picker.pickImage(
-        source: source,
-        maxWidth:  1024,
-        maxHeight: 1024,
-        imageQuality: 80,
-      );
-      if (file == null) return;
-      final bytes = await file.readAsBytes();
+  // ── Open Receipt Scanner and pre-fill form with result ────────────────────
+  Future<void> _openReceiptScanner() async {
+    final result = await Navigator.push<Map<String, dynamic>>(
+      context,
+      MaterialPageRoute(builder: (_) => const ReceiptScannerScreen()),
+    );
+    if (result != null && mounted) {
       setState(() {
-        _imageBytes = bytes;
-        _receipt    = null;
-        _error      = null;
+        if (result['amount'] != null) {
+          _amountController.text =
+              (result['amount'] as double).toStringAsFixed(0);
+        }
+        if (result['category'] != null) {
+          _selectedCategory = result['category'] as String;
+          _selectedSubcategory = null;
+        }
+        if (result['note'] != null) {
+          _noteController.text = result['note'] as String;
+        }
+        if (result['description'] != null) {
+          _descriptionController.text = result['description'] as String;
+        }
+        if (result['date'] != null) {
+          _selectedDate = result['date'] as DateTime;
+        }
+        // Receipts are almost always expenses
+        _type = 'expense';
       });
-      await _scan(bytes);
-    } catch (e) {
-      setState(() => _error = 'Could not open image: $e');
-    }
-  }
-
-  // ── Call Claude Vision API ─────────────────────────────────────────────────
-  Future<void> _scan(Uint8List bytes) async {
-    setState(() { _scanning = true; _error = null; });
-
-    try {
-      final base64Image = base64Encode(bytes);
-
-      // Detect JPEG vs PNG from header bytes
-      final mime = (bytes[0] == 0xFF && bytes[1] == 0xD8)
-          ? 'image/jpeg' : 'image/png';
-
-      final prompt = '''
-You are a receipt parser. Extract the following from this receipt image and return ONLY a valid JSON object (no markdown, no explanation):
-
-{
-  "amount": <total amount as number, e.g. 450.00>,
-  "merchant": "<store/restaurant name>",
-  "category": "<one of: Food & Dining, Shopping, Transport, Health, Entertainment, Bills, Groceries, Travel, Education, Other>",
-  "date": "<YYYY-MM-DD format, or empty string if not found>",
-  "note": "<short description of purchase, max 60 chars>",
-  "items": [
-    {"name": "<item name>", "amount": <item price>},
-    ...
-  ]
-}
-
-Rules:
-- amount must be the TOTAL (grand total / final amount paid)
-- If no total found, sum the items
-- category must be exactly one of the listed options
-- items: list up to 5 main line items (skip tax/discount lines)
-- Return ONLY the JSON, no other text
-''';
-
-      final response = await http.post(
-        Uri.parse('https://api.anthropic.com/v1/messages'),
-        headers: {
-          'Content-Type':      'application/json',
-          'x-api-key':         _apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: jsonEncode({
-          'model':      'claude-opus-4-5',
-          'max_tokens': 512,
-          'messages': [
-            {
-              'role': 'user',
-              'content': [
-                {
-                  'type': 'image',
-                  'source': {
-                    'type':       'base64',
-                    'media_type': mime,
-                    'data':       base64Image,
-                  },
-                },
-                {
-                  'type': 'text',
-                  'text': prompt,
-                },
-              ],
-            }
-          ],
-        }),
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Receipt scanned! Review the details below.'),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
       );
-
-      if (response.statusCode != 200) {
-        throw Exception(
-            'API error ${response.statusCode}: ${response.body}');
-      }
-
-      final body  = jsonDecode(response.body) as Map<String, dynamic>;
-      final text  = (body['content'] as List).first['text'] as String;
-
-      // Strip any accidental markdown fences
-      final clean = text
-          .replaceAll(RegExp(r'```json\s*'), '')
-          .replaceAll(RegExp(r'```\s*'), '')
-          .trim();
-
-      final json    = jsonDecode(clean) as Map<String, dynamic>;
-      final receipt = ReceiptData.fromJson(json);
-
-      // Pre-fill form
-      _amountCtrl.text   = receipt.amount != null
-          ? receipt.amount!.toStringAsFixed(0) : '';
-      _merchantCtrl.text = receipt.merchant ?? '';
-      _noteCtrl.text     = receipt.note     ?? receipt.merchant ?? '';
-      if (receipt.category != null &&
-          _categories.contains(receipt.category)) {
-        _category = receipt.category!;
-      }
-      if (receipt.date != null) _date = receipt.date!;
-
-      setState(() { _receipt = receipt; _scanning = false; });
-      HapticFeedback.lightImpact();
-    } catch (e) {
-      setState(() {
-        _scanning = false;
-        _error    = 'Could not read receipt: ${e.toString().length > 80 ? e.toString().substring(0, 80) : e}';
-      });
     }
   }
 
-  // ── Save transaction ───────────────────────────────────────────────────────
-  Future<void> _save() async {
-    if (_amountCtrl.text.trim().isEmpty) {
-      _snack('Enter the amount', isError: true);
-      return;
-    }
-    setState(() => _saving = true);
-    try {
-      final txn = TransactionModel(
-        id:          '',
-        userId:      '',
-        type:        _type,
-        amount:      double.tryParse(_amountCtrl.text) ?? 0,
-        category:    _category,
-        date:        _date,
-        note:        _noteCtrl.text.trim().isNotEmpty
-            ? _noteCtrl.text.trim() : null,
-        description: _merchantCtrl.text.trim().isNotEmpty
-            ? _merchantCtrl.text.trim() : null,
-        paymentMethod: 'Other',
-        fromAccount: _type == 'expense' ? _fromAccount : null,
-        toAccount:   _type == 'income'  ? _fromAccount : null,
-        isRecurring: false,
-        createdAt:   DateTime.now(),
-      );
-      await _txnSvc.addTransaction(txn);
-      HapticFeedback.mediumImpact();
-      if (mounted) {
-        _snack('Transaction saved ✅');
-        await Future.delayed(const Duration(milliseconds: 600));
-        Navigator.pop(context);
-      }
-    } catch (e) {
-      setState(() => _saving = false);
-      _snack('Failed to save: $e', isError: true);
-    }
-  }
-
-  void _snack(String msg, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: isError ? Colors.red : Colors.green,
-      behavior: SnackBarBehavior.floating,
-    ));
-  }
-
-  // ────────────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    final isDark  = Theme.of(context).brightness == Brightness.dark;
-    final bg      = isDark ? const Color(0xFF0D1117) : const Color(0xFFF0F2F8);
-    final cardBg  = isDark ? const Color(0xFF1E2530) : Colors.white;
+    final isEdit = widget.transaction != null && !widget.isCopy;
 
     return Scaffold(
-      backgroundColor: bg,
       appBar: AppBar(
-        title: const Text('Receipt Scanner',
-            style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: isDark ? const Color(0xFF1E2530) : Colors.white,
-        foregroundColor: isDark ? Colors.white : Colors.black87,
-        elevation: 0,
-        actions: [
-          if (_receipt != null && !_saving)
-            TextButton.icon(
-              onPressed: _save,
-              icon: const Icon(Icons.save_rounded, size: 16),
-              label: const Text('Save',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
-              style: TextButton.styleFrom(
-                  foregroundColor: const Color(0xFF667eea)),
-            ),
-        ],
+        title: Text(widget.isCopy
+            ? 'Copy Transaction'
+            : (isEdit ? 'Edit Transaction' : 'Add Transaction')),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // ── Step 1: Image picker ────────────────────────────────────────
-          _StepCard(
-            step: 1, title: 'Scan Receipt',
-            isDark: isDark, cardBg: cardBg,
-            child: Column(children: [
-              // Image preview
-              if (_imageBytes != null)
-                Stack(children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.memory(
-                      _imageBytes!,
-                      width: double.infinity,
-                      height: 220,
-                      fit: BoxFit.cover,
+      body: Form(
+        key: _formKey,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+
+            // ── 🤖 Scan Receipt AI Button (only for new transactions) ───────
+            if (!isEdit) ...[
+              GestureDetector(
+                onTap: _openReceiptScanner,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF667eea), Color(0xFF764ba2)],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
                     ),
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF667eea).withOpacity(0.35),
+                        blurRadius: 12,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
                   ),
-                  if (_scanning)
-                    Positioned.fill(child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.55),
-                        borderRadius: BorderRadius.circular(12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: const [
+                      Text('🤖', style: TextStyle(fontSize: 20)),
+                      SizedBox(width: 10),
+                      Text(
+                        'Scan Receipt with AI',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
                       ),
-                      child: const Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                        CircularProgressIndicator(
-                            color: Colors.white),
-                        SizedBox(height: 14),
-                        Text('Reading receipt with AI...',
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold)),
-                      ]),
-                    )),
-                ])
-              else
-                GestureDetector(
-                  onTap: () => _pick(ImageSource.gallery),
-                  child: Container(
-                    height: 180,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF667eea).withOpacity(0.06),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: const Color(0xFF667eea).withOpacity(0.3),
-                        width: 2,
-                        strokeAlign: BorderSide.strokeAlignCenter,
-                      ),
-                    ),
-                    child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                      const Icon(Icons.receipt_long_rounded,
-                          size: 52,
-                          color: Color(0xFF667eea)),
-                      const SizedBox(height: 12),
-                      const Text('Tap to choose a receipt photo',
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                              color: Color(0xFF667eea))),
-                      const SizedBox(height: 4),
-                      Text('Camera or gallery',
-                          style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey[500])),
-                    ]),
+                      SizedBox(width: 8),
+                      Icon(Icons.camera_alt_rounded,
+                          color: Colors.white70, size: 18),
+                    ],
                   ),
                 ),
-
-              const SizedBox(height: 14),
-
-              // Action buttons
+              ),
+              const SizedBox(height: 8),
+              Center(
+                child: Text(
+                  'Camera or gallery · Auto-fills amount, category & date',
+                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                ),
+              ),
+              const SizedBox(height: 20),
               Row(children: [
-                Expanded(child: _pickerBtn(
-                  Icons.camera_alt_rounded, 'Camera',
-                  const Color(0xFF667eea),
-                  () => _pick(ImageSource.camera),
-                  isDark,
-                )),
-                const SizedBox(width: 12),
-                Expanded(child: _pickerBtn(
-                  Icons.photo_library_rounded, 'Gallery',
-                  Colors.orange,
-                  () => _pick(ImageSource.gallery),
-                  isDark,
-                )),
+                Expanded(child: Divider(color: Colors.grey[300])),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Text('or fill manually',
+                      style: TextStyle(
+                          fontSize: 11, color: Colors.grey[400])),
+                ),
+                Expanded(child: Divider(color: Colors.grey[300])),
               ]),
+              const SizedBox(height: 16),
+            ],
 
-              // Error message
-              if (_error != null) ...[
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(children: [
-                    const Icon(Icons.error_outline,
-                        color: Colors.red, size: 16),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(_error!,
-                        style: const TextStyle(
-                            color: Colors.red,
-                            fontSize: 12))),
-                  ]),
+            // Type Selector
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(
+                  value: 'income',
+                  label: Text('Income'),
+                  icon: Icon(Icons.add_circle_outline),
+                ),
+                ButtonSegment(
+                  value: 'expense',
+                  label: Text('Expense'),
+                  icon: Icon(Icons.remove_circle_outline),
+                ),
+                ButtonSegment(
+                  value: 'transfer',
+                  label: Text('Transfer'),
+                  icon: Icon(Icons.swap_horiz),
                 ),
               ],
-            ]),
-          ),
-
-          // ── Step 2: Extracted data ──────────────────────────────────────
-          if (_receipt != null) ...[
-            const SizedBox(height: 16),
-            _StepCard(
-              step: 2,
-              title: 'AI Extracted Data',
-              isDark: isDark,
-              cardBg: cardBg,
-              badge: 'AI',
-              child: Column(children: [
-                // Success banner
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(children: [
-                    const Icon(Icons.auto_awesome_rounded,
-                        color: Colors.green, size: 16),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Receipt scanned! Review and edit below.',
-                      style: TextStyle(
-                          color: Colors.green[700],
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600)),
-                  ]),
-                ),
-
-                // Items list
-                if (_receipt!.items.isNotEmpty) ...[
-                  const SizedBox(height: 14),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? Colors.white.withOpacity(0.04)
-                          : Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Column(children: [
-                      ..._receipt!.items.map((item) => Padding(
-                        padding: const EdgeInsets.symmetric(
-                            vertical: 3),
-                        child: Row(children: [
-                          const Text('•  ',
-                              style: TextStyle(
-                                  color: Colors.grey)),
-                          Expanded(child: Text(item.name,
-                              style: const TextStyle(
-                                  fontSize: 12))),
-                          Text('₹${item.amount.toStringAsFixed(0)}',
-                              style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600)),
-                        ]),
-                      )),
-                      Divider(color: Colors.grey.withOpacity(0.2),
-                          height: 12),
-                      Row(children: [
-                        const Spacer(),
-                        const Text('Total  ',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13)),
-                        Text(
-                          '₹${_receipt!.amount?.toStringAsFixed(0) ?? "?"}',
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                              color: Color(0xFF667eea))),
-                      ]),
-                    ]),
-                  ),
-                ],
-              ]),
+              selected: {_type},
+              onSelectionChanged: (Set<String> newSelection) {
+                setState(() {
+                  _type = newSelection.first;
+                  _selectedCategory = null;
+                  _selectedSubcategory = null;
+                  _fromAccount = null;
+                  _toAccount = null;
+                });
+              },
             ),
+            const SizedBox(height: 20),
 
-            // ── Step 3: Edit & confirm ──────────────────────────────────
+            // Amount
+            TextFormField(
+              controller: _amountController,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Amount *',
+                prefixText: '₹ ',
+                border: OutlineInputBorder(),
+              ),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Please enter amount';
+                }
+                if (double.tryParse(value) == null) {
+                  return 'Please enter valid amount';
+                }
+                return null;
+              },
+            ),
             const SizedBox(height: 16),
-            _StepCard(
-              step: 3,
-              title: 'Review & Save',
-              isDark: isDark,
-              cardBg: cardBg,
-              child: Column(children: [
-                // Type toggle
-                Container(
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? Colors.white.withOpacity(0.06)
-                        : Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(12),
+
+            // Date Picker
+            Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: () async {
+                      final date = await showDatePicker(
+                        context: context,
+                        initialDate: _selectedDate,
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime(2100),
+                      );
+                      if (date != null) {
+                        setState(() {
+                          _selectedDate = date;
+                        });
+                      }
+                    },
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'Date *',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.calendar_today),
+                      ),
+                      child: Text(
+                        DateFormat('MMM d, yyyy').format(_selectedDate),
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    ),
                   ),
-                  child: Row(children: [
-                    _typeTab('expense', '↑ Expense',
-                        const Color(0xFFfa709a)),
-                    _typeTab('income',  '↓ Income',
-                        const Color(0xFF43e97b)),
-                  ]),
                 ),
-                const SizedBox(height: 14),
-
-                // Amount
-                _formField(
-                  _amountCtrl, '₹ Total Amount *',
-                  isDark, num: true,
-                  prefix: '₹',
-                ),
-                const SizedBox(height: 10),
-
-                // Merchant
-                _formField(
-                  _merchantCtrl, 'Merchant / Store Name',
-                  isDark,
-                  cap: TextCapitalization.words,
-                ),
-                const SizedBox(height: 10),
-
-                // Note
-                _formField(
-                  _noteCtrl, 'Note (auto-filled)',
-                  isDark,
-                  cap: TextCapitalization.sentences,
-                ),
-                const SizedBox(height: 12),
-
-                // Category dropdown
-                DropdownButtonFormField<String>(
-                  value: _category,
-                  decoration: InputDecoration(
-                    labelText: 'Category',
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    filled: true,
-                    fillColor: isDark
-                        ? Colors.white.withOpacity(0.05)
-                        : Colors.grey.shade50,
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 14),
-                  ),
-                  items: _categories.map((c) =>
-                      DropdownMenuItem(value: c, child: Text(c,
-                          style: const TextStyle(fontSize: 13))))
-                      .toList(),
-                  onChanged: (v) =>
-                      setState(() => _category = v ?? _category),
-                ),
-                const SizedBox(height: 10),
-
-                // Date
-                GestureDetector(
-                  onTap: () async {
-                    final d = await showDatePicker(
-                      context: context,
-                      initialDate: _date,
-                      firstDate: DateTime(2020),
-                      lastDate: DateTime(2030),
-                    );
-                    if (d != null) setState(() => _date = d);
+                const SizedBox(width: 8),
+                // Repeat toggle
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      _isRecurring = !_isRecurring;
+                    });
                   },
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 14),
+                    padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: isDark
-                          ? Colors.white.withOpacity(0.05)
-                          : Colors.grey.shade50,
-                      border: Border.all(
-                          color: isDark
-                              ? Colors.white24
-                              : Colors.grey.shade400),
-                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey[400]!),
+                      borderRadius: BorderRadius.circular(4),
+                      color: _isRecurring ? Colors.blue[50] : null,
                     ),
-                    child: Row(children: [
-                      Icon(Icons.calendar_today_rounded,
-                          size: 14,
-                          color: Colors.grey[500]),
-                      const SizedBox(width: 10),
-                      Text(DateFormat('d MMM y').format(_date),
-                          style: const TextStyle(fontSize: 13)),
-                      const Spacer(),
-                      Icon(Icons.edit_rounded,
-                          size: 14, color: Colors.grey[400]),
-                    ]),
-                  ),
-                ),
-
-                // Account
-                if (_accounts.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<String>(
-                    value: _fromAccount,
-                    decoration: InputDecoration(
-                      labelText: _type == 'expense'
-                          ? 'Debit Account (optional)'
-                          : 'Credit Account (optional)',
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                      filled: true,
-                      fillColor: isDark
-                          ? Colors.white.withOpacity(0.05)
-                          : Colors.grey.shade50,
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 14),
-                    ),
-                    items: [
-                      const DropdownMenuItem(
-                          value: null,
-                          child: Text('None',
-                              style: TextStyle(fontSize: 13))),
-                      ..._accounts.map((a) =>
-                          DropdownMenuItem(
-                              value: a.id,
-                              child: Text(a.name,
-                                  style: const TextStyle(
-                                      fontSize: 13)))),
-                    ],
-                    onChanged: (v) =>
-                        setState(() => _fromAccount = v),
-                  ),
-                ],
-
-                const SizedBox(height: 20),
-
-                // Save button
-                SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: ElevatedButton.icon(
-                    onPressed: _saving ? null : _save,
-                    icon: _saving
-                        ? const SizedBox(
-                            width: 18, height: 18,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white))
-                        : const Icon(Icons.save_rounded),
-                    label: Text(
-                      _saving ? 'Saving...' : 'Save Transaction',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF667eea),
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor:
-                          const Color(0xFF667eea).withOpacity(0.6),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.repeat,
+                          color: _isRecurring ? Colors.blue : Colors.grey[600],
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Repeat',
+                          style: TextStyle(
+                            color:
+                                _isRecurring ? Colors.blue : Colors.grey[600],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              ]),
+              ],
             ),
-          ],
+            const SizedBox(height: 16),
 
-          const SizedBox(height: 40),
-        ],
+            // Recurring frequency
+            if (_isRecurring) ...[
+              DropdownButtonFormField<String>(
+                value: _recurringFrequency,
+                decoration: const InputDecoration(
+                  labelText: 'Repeat Frequency',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.loop),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'daily', child: Text('Daily')),
+                  DropdownMenuItem(value: 'weekly', child: Text('Weekly')),
+                  DropdownMenuItem(value: 'monthly', child: Text('Monthly')),
+                  DropdownMenuItem(value: 'yearly', child: Text('Yearly')),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _recurringFrequency = value!;
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            // Fields based on type
+            if (_type == 'transfer') ...[
+              _buildTransferFields(),
+            ] else ...[
+              _buildCategoryFields(),
+              const SizedBox(height: 16),
+              _buildAccountField(),
+            ],
+
+            const SizedBox(height: 16),
+
+            // Note
+            TextFormField(
+              controller: _noteController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Note (Optional)',
+                border: OutlineInputBorder(),
+                hintText: 'Add a note...',
+              ),
+            ),
+
+            // Description
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _descriptionController,
+              maxLines: 2,
+              decoration: InputDecoration(
+                labelText: 'Description (optional)',
+                hintText: 'Additional details',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                prefixIcon: const Icon(Icons.description),
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
+            // Save Button
+            ElevatedButton(
+              onPressed: _isLoading ? null : _saveTransaction,
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.all(16),
+              ),
+              child: _isLoading
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text(
+                      isEdit ? 'UPDATE' : 'SAVE',
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+            ),
+            const SizedBox(height: 30),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _typeTab(String type, String label, Color color) {
-    final sel = _type == type;
-    return Expanded(child: GestureDetector(
-      onTap: () => setState(() => _type = type),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        margin: const EdgeInsets.all(4),
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: sel ? color : Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Center(child: Text(label,
-            style: TextStyle(
-                color: sel ? Colors.white : Colors.grey,
-                fontWeight: sel
-                    ? FontWeight.bold : FontWeight.normal,
-                fontSize: 13))),
+  Widget _buildAccountField() {
+    if (_accounts.isEmpty) {
+      return Column(
+        children: [
+          OutlinedButton.icon(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const AccountsScreen(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.add),
+            label: const Text('Create Account First'),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.all(16),
+              minimumSize: const Size.fromHeight(50),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'You need at least one account to add transactions',
+            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+          ),
+        ],
+      );
+    }
+
+    return DropdownButtonFormField<String>(
+      value: _type == 'income' ? _toAccount : _fromAccount,
+      decoration: const InputDecoration(
+        labelText: 'Account *',
+        border: OutlineInputBorder(),
+        prefixIcon: Icon(Icons.account_balance_wallet),
+        hintText: 'Select account',
       ),
-    ));
+      items: _accounts.map((account) {
+        return DropdownMenuItem<String>(
+          value: account.id,
+          child: Row(
+            children: [
+              Icon(_getAccountTypeIcon(account.type), size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${account.name} (₹${account.balance.toStringAsFixed(0)})',
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+      onChanged: (value) {
+        setState(() {
+          if (_type == 'income') {
+            _toAccount = value;
+          } else {
+            _fromAccount = value;
+          }
+        });
+      },
+      validator: (value) {
+        if (value == null || value.isEmpty) {
+          return 'Please select an account';
+        }
+        return null;
+      },
+    );
   }
 
-  Widget _pickerBtn(IconData icon, String label, Color color,
-      VoidCallback onTap, bool isDark) =>
-      GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-                color: color.withOpacity(0.3), width: 1.5),
+  IconData _getAccountTypeIcon(String type) {
+    switch (type.toLowerCase()) {
+      case 'bank':         return Icons.account_balance;
+      case 'cash':         return Icons.money;
+      case 'credit card':
+      case 'card':         return Icons.credit_card;
+      case 'wallet':       return Icons.account_balance_wallet;
+      case 'loan':         return Icons.trending_down;
+      default:             return Icons.account_circle;
+    }
+  }
+
+  Widget _buildCategoryFields() {
+    return Column(
+      children: [
+        InkWell(
+          onTap: () => _showCategoryPicker(),
+          child: InputDecorator(
+            decoration: const InputDecoration(
+              labelText: 'Category *',
+              border: OutlineInputBorder(),
+              suffixIcon: Icon(Icons.arrow_drop_down),
+            ),
+            child: Text(
+              _selectedCategory != null
+                  ? _selectedSubcategory != null
+                      ? '$_selectedCategory - $_selectedSubcategory'
+                      : _selectedCategory!
+                  : 'Select category',
+              style: TextStyle(
+                fontSize: 16,
+                color: _selectedCategory != null ? Colors.black : Colors.grey,
+              ),
+            ),
           ),
-          child: Row(mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-            Icon(icon, color: color, size: 18),
-            const SizedBox(width: 8),
-            Text(label,
-                style: TextStyle(
-                    color: color,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13)),
-          ]),
         ),
+      ],
+    );
+  }
+
+  void _showCategoryPicker() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _CategoryPickerSheet(
+        type: _type,
+        selectedCategory: _selectedCategory,
+        selectedSubcategory: _selectedSubcategory,
+        customCatSvc: _customCatSvc,
+        onSelected: (cat, sub) {
+          setState(() {
+            _selectedCategory = cat;
+            _selectedSubcategory = sub;
+          });
+        },
+      ),
+    );
+  }
+
+  Widget _buildTransferFields() {
+    return Column(
+      children: [
+        DropdownButtonFormField<String>(
+          value: _fromAccount,
+          decoration: const InputDecoration(
+            labelText: 'From Account *',
+            border: OutlineInputBorder(),
+            prefixIcon: Icon(Icons.account_balance_wallet),
+          ),
+          items: _accounts
+              .map((account) => DropdownMenuItem(
+                    value: account.id,
+                    child: Text(
+                        '${account.name} (₹${account.balance.toStringAsFixed(0)})'),
+                  ))
+              .toList(),
+          onChanged: (value) {
+            setState(() {
+              _fromAccount = value;
+            });
+          },
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Please select source account';
+            }
+            if (value == _toAccount) {
+              return 'Cannot transfer to same account';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 16),
+        Center(
+          child: IconButton(
+            onPressed: () {
+              setState(() {
+                final temp = _fromAccount;
+                _fromAccount = _toAccount;
+                _toAccount = temp;
+              });
+            },
+            icon: const Icon(Icons.swap_vert),
+            iconSize: 32,
+            color: Colors.blue,
+          ),
+        ),
+        const SizedBox(height: 16),
+        DropdownButtonFormField<String>(
+          value: _toAccount,
+          decoration: const InputDecoration(
+            labelText: 'To Account *',
+            border: OutlineInputBorder(),
+            prefixIcon: Icon(Icons.account_balance),
+          ),
+          items: _accounts
+              .map((account) => DropdownMenuItem(
+                    value: account.id,
+                    child: Text(
+                        '${account.name} (₹${account.balance.toStringAsFixed(0)})'),
+                  ))
+              .toList(),
+          onChanged: (value) {
+            setState(() {
+              _toAccount = value;
+            });
+          },
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Please select destination account';
+            }
+            if (value == _fromAccount) {
+              return 'Cannot transfer to same account';
+            }
+            return null;
+          },
+        ),
+      ],
+    );
+  }
+
+  Future<void> _saveTransaction() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    if (_type != 'transfer' && _selectedCategory == null) {
+      CustomSnackBar.show(
+        context,
+        message: 'Please select a category',
+        type: SnackBarType.error,
+      );
+      return;
+    }
+
+    LoadingOverlay.show(context, message: 'Saving...');
+
+    try {
+      final tempId = DateTime.now().millisecondsSinceEpoch.toString();
+      String? uploadedImageUrl;
+
+      final transaction = TransactionModel(
+        userId: '',
+        id: '',
+        type: _type,
+        amount: double.parse(_amountController.text),
+        category: _selectedCategory ?? '',
+        subcategory: _selectedSubcategory,
+        paymentMethod: _paymentMethod,
+        date: _selectedDate,
+        note: _noteController.text.isEmpty ? null : _noteController.text,
+        description: _descriptionController.text.trim().isEmpty
+            ? null
+            : _descriptionController.text.trim(),
+        fromAccount: _type == 'transfer'
+            ? _fromAccount
+            : (_type == 'expense' ? _fromAccount : null),
+        toAccount: _type == 'transfer'
+            ? _toAccount
+            : (_type == 'income' ? _toAccount : null),
+        isRecurring: _isRecurring,
+        recurringFrequency: _isRecurring ? _recurringFrequency : null,
+        imageUrl: uploadedImageUrl ?? _receiptUrl,
+        createdAt: DateTime.now(),
       );
 
-  Widget _formField(
-    TextEditingController ctrl,
-    String label,
-    bool isDark, {
-    bool num = false,
-    String? prefix,
-    TextCapitalization cap = TextCapitalization.none,
-  }) =>
-      TextField(
-        controller: ctrl,
-        keyboardType: num
-            ? const TextInputType.numberWithOptions(decimal: true)
-            : TextInputType.text,
-        inputFormatters: num
-            ? [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))]
-            : null,
-        textCapitalization: cap,
-        decoration: InputDecoration(
-          labelText: label,
-          prefixText: prefix,
-          border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12)),
-          filled: true,
-          fillColor: isDark
-              ? Colors.white.withOpacity(0.05)
-              : Colors.grey.shade50,
-          contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12, vertical: 14),
-          labelStyle:
-              const TextStyle(fontSize: 12),
-        ),
-        style: const TextStyle(fontSize: 13),
-      );
+      if (widget.transaction != null && !widget.isCopy) {
+        await _transactionService.updateTransaction(
+          widget.transaction!.id,
+          transaction,
+        );
+      } else {
+        await _transactionService.addTransaction(transaction);
+      }
+
+      if (mounted) {
+        LoadingOverlay.hide(context);
+        CustomSnackBar.show(
+          context,
+          message: widget.isCopy
+              ? 'Transaction copied successfully!'
+              : (widget.transaction != null
+                  ? 'Transaction updated!'
+                  : 'Transaction saved successfully!'),
+          type: SnackBarType.success,
+        );
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        LoadingOverlay.hide(context);
+        CustomSnackBar.show(
+          context,
+          message: 'Failed to save: $e',
+          type: SnackBarType.error,
+        );
+      }
+    }
+  }
+
+  IconData _getCategoryIcon(String category) {
+    switch (category) {
+      case 'Food & Dining':     return Icons.restaurant;
+      case 'Transportation':    return Icons.directions_car;
+      case 'Shopping':          return Icons.shopping_bag;
+      case 'Entertainment':     return Icons.movie;
+      case 'Bills & Utilities': return Icons.receipt;
+      case 'Healthcare':        return Icons.local_hospital;
+      case 'Education':         return Icons.school;
+      case 'Personal Care':     return Icons.spa;
+      case 'Travel':            return Icons.flight;
+      case 'Salary':            return Icons.account_balance_wallet;
+      case 'Business':          return Icons.business;
+      case 'Investments':       return Icons.trending_up;
+      case 'Gifts':             return Icons.card_giftcard;
+      default:                  return Icons.category;
+    }
+  }
 }
 
-// ── Step card wrapper ─────────────────────────────────────────────────────────
-class _StepCard extends StatelessWidget {
-  final int    step;
-  final String title;
-  final Widget child;
-  final bool   isDark;
-  final Color  cardBg;
-  final String? badge;
+// ── Category Picker Bottom Sheet ─────────────────────────────────────────────
+class _CategoryPickerSheet extends StatefulWidget {
+  final String type;
+  final String? selectedCategory;
+  final String? selectedSubcategory;
+  final CustomCategoryService customCatSvc;
+  final void Function(String category, String? subcategory) onSelected;
 
-  const _StepCard({
-    required this.step,   required this.title,
-    required this.child,  required this.isDark,
-    required this.cardBg, this.badge,
+  const _CategoryPickerSheet({
+    required this.type,
+    required this.selectedCategory,
+    required this.selectedSubcategory,
+    required this.customCatSvc,
+    required this.onSelected,
   });
 
   @override
+  State<_CategoryPickerSheet> createState() => _CategoryPickerSheetState();
+}
+
+class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
+  List<CustomCategory> _customCats = [];
+  bool _loadingCustom = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCustom();
+  }
+
+  Future<void> _loadCustom() async {
+    final cats = await widget.customCatSvc.getCategoriesOnce(type: widget.type);
+    if (mounted) setState(() { _customCats = cats; _loadingCustom = false; });
+  }
+
+  Color get _accentColor =>
+      widget.type == 'expense' ? Colors.red : Colors.green;
+
+  @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [BoxShadow(
-          color: Colors.black.withOpacity(0.05),
-          blurRadius: 10, offset: const Offset(0, 4),
-        )],
-      ),
-      child: Column(
+    final builtIn = Categories.getMainCategories(widget.type);
+    final isDark  = Theme.of(context).brightness == Brightness.dark;
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.92,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (ctx, scrollCtrl) {
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E2530) : Colors.white,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.only(top: 10),
+                  width: 40, height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[400],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+                child: Row(
+                  children: [
+                    const Text('Select Category',
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold)),
+                    const Spacer(),
+                    TextButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        Navigator.push(context,
+                            MaterialPageRoute(
+                                builder: (_) =>
+                                    const CustomCategoriesScreen()));
+                      },
+                      icon: const Icon(Icons.edit, size: 14),
+                      label: const Text('Manage',
+                          style: TextStyle(fontSize: 12)),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: ListView(
+                  controller: scrollCtrl,
+                  children: [
+                    if (_loadingCustom)
+                      const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Center(
+                            child: CircularProgressIndicator(strokeWidth: 2)),
+                      )
+                    else if (_customCats.isNotEmpty) ...[
+                      _sectionHeader('⭐ My Categories', _accentColor),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: _customCats.map((cat) {
+                            final isSel = widget.selectedCategory == cat.name;
+                            return GestureDetector(
+                              onTap: () {
+                                widget.onSelected(cat.name, null);
+                                Navigator.pop(context);
+                                if (cat.subcategories.isNotEmpty) {
+                                  _showSubPicker(context, cat.name,
+                                      cat.subcategories, cat.color);
+                                }
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 150),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: isSel
+                                      ? cat.color
+                                      : cat.color.withOpacity(0.08),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                      color: cat.color.withOpacity(0.4)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(cat.emoji,
+                                        style: const TextStyle(fontSize: 18)),
+                                    const SizedBox(width: 6),
+                                    Text(cat.name,
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                            color: isSel
+                                                ? Colors.white
+                                                : cat.color)),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      const Divider(),
+                    ],
+                    _sectionHeader('📋 Default Categories', Colors.grey),
+                    ...builtIn.map((cat) {
+                      final subs  = Categories.getSubcategories(widget.type, cat);
+                      final isSel = widget.selectedCategory == cat;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          InkWell(
+                            onTap: () {
+                              widget.onSelected(cat, null);
+                              Navigator.pop(context);
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 12),
+                              color: isSel
+                                  ? _accentColor.withOpacity(0.08)
+                                  : isDark
+                                      ? const Color(0xFF252D3A)
+                                      : Colors.grey[100],
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 36, height: 36,
+                                    decoration: BoxDecoration(
+                                      color: _accentColor.withOpacity(0.12),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(_builtInIcon(cat),
+                                        color: _accentColor, size: 18),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(child: Text(cat,
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 15))),
+                                  if (isSel)
+                                    Icon(Icons.check_circle,
+                                        color: _accentColor, size: 20),
+                                ],
+                              ),
+                            ),
+                          ),
+                          if (subs.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                              child: Wrap(
+                                spacing: 6, runSpacing: 6,
+                                children: subs.map((sub) {
+                                  final isSubSel =
+                                      widget.selectedCategory == cat &&
+                                          widget.selectedSubcategory == sub;
+                                  return GestureDetector(
+                                    onTap: () {
+                                      widget.onSelected(cat, sub);
+                                      Navigator.pop(context);
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: isSubSel
+                                            ? _accentColor
+                                            : _accentColor.withOpacity(0.07),
+                                        borderRadius:
+                                            BorderRadius.circular(16),
+                                        border: Border.all(
+                                            color: _accentColor.withOpacity(
+                                                0.25)),
+                                      ),
+                                      child: Text(sub,
+                                          style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w500,
+                                              color: isSubSel
+                                                  ? Colors.white
+                                                  : _accentColor)),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+                          const Divider(height: 1),
+                        ],
+                      );
+                    }),
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          Navigator.push(context, MaterialPageRoute(
+                              builder: (_) => const CustomCategoriesScreen()));
+                        },
+                        icon: Icon(Icons.add, color: _accentColor),
+                        label: Text('Create Custom Category',
+                            style: TextStyle(color: _accentColor)),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(48),
+                          side: BorderSide(color: _accentColor.withOpacity(0.5)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _sectionHeader(String label, Color color) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+        child: Text(label,
+            style: TextStyle(
+                fontSize: 12, fontWeight: FontWeight.bold, color: color)),
+      );
+
+  IconData _builtInIcon(String cat) {
+    switch (cat) {
+      case 'Food & Dining':     return Icons.restaurant;
+      case 'Shopping':          return Icons.shopping_bag;
+      case 'Transportation':    return Icons.directions_car;
+      case 'Entertainment':     return Icons.movie;
+      case 'Bills & Utilities': return Icons.receipt_long;
+      case 'Healthcare':        return Icons.medical_services;
+      case 'Education':         return Icons.school;
+      case 'Personal Care':     return Icons.face;
+      case 'Travel':            return Icons.flight;
+      case 'Salary':            return Icons.work;
+      case 'Business':          return Icons.business;
+      case 'Investments':       return Icons.trending_up;
+      case 'Freelance':         return Icons.computer;
+      case 'Rental Income':     return Icons.home;
+      case 'Gifts':             return Icons.card_giftcard;
+      default:                  return Icons.category;
+    }
+  }
+
+  void _showSubPicker(BuildContext context, String catName,
+      List<String> subs, Color color) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-        Row(children: [
-          Container(
-            width: 26, height: 26,
-            decoration: const BoxDecoration(
-              color: Color(0xFF667eea),
-              shape: BoxShape.circle,
-            ),
-            child: Center(child: Text('$step',
+            Text('$catName — pick subcategory',
                 style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12))),
-          ),
-          const SizedBox(width: 10),
-          Text(title, style: const TextStyle(
-              fontWeight: FontWeight.bold, fontSize: 15)),
-          if (badge != null) ...[
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 7, vertical: 2),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF667eea), Color(0xFF764ba2)]),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(badge!,
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold)),
+                    fontSize: 15, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8, runSpacing: 8,
+              children: subs.map((s) => GestureDetector(
+                    onTap: () {
+                      widget.onSelected(catName, s);
+                      Navigator.pop(context);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: color.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: color.withOpacity(0.3)),
+                      ),
+                      child: Text(s,
+                          style: TextStyle(fontSize: 13, color: color)),
+                    ),
+                  )).toList(),
             ),
+            const SizedBox(height: 16),
           ],
-        ]),
-        const SizedBox(height: 16),
-        child,
-      ]),
+        ),
+      ),
     );
   }
 }

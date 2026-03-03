@@ -1,7 +1,9 @@
+// lib/screens/add_transaction_screen.dart
 import '../utils/categories.dart';
 import '../models/custom_category_model.dart';
 import '../services/custom_category_service.dart';
 import 'custom_categories_screen.dart';
+import 'receipt_scanner_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
@@ -103,6 +105,44 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     super.dispose();
   }
 
+  // ── Open Receipt Scanner and pre-fill form with result ────────────────────
+  Future<void> _openReceiptScanner() async {
+    final result = await Navigator.push<Map<String, dynamic>>(
+      context,
+      MaterialPageRoute(builder: (_) => const ReceiptScannerScreen()),
+    );
+    if (result != null && mounted) {
+      setState(() {
+        if (result['amount'] != null) {
+          _amountController.text =
+              (result['amount'] as double).toStringAsFixed(0);
+        }
+        if (result['category'] != null) {
+          _selectedCategory = result['category'] as String;
+          _selectedSubcategory = null;
+        }
+        if (result['note'] != null) {
+          _noteController.text = result['note'] as String;
+        }
+        if (result['description'] != null) {
+          _descriptionController.text = result['description'] as String;
+        }
+        if (result['date'] != null) {
+          _selectedDate = result['date'] as DateTime;
+        }
+        // Receipts are almost always expenses
+        _type = 'expense';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Receipt scanned! Review the details below.'),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.transaction != null && !widget.isCopy;
@@ -118,6 +158,69 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+
+            // ── 🤖 Scan Receipt AI Button (only for new transactions) ───────
+            if (!isEdit) ...[
+              GestureDetector(
+                onTap: _openReceiptScanner,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF667eea), Color(0xFF764ba2)],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF667eea).withOpacity(0.35),
+                        blurRadius: 12,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: const [
+                      Text('🤖', style: TextStyle(fontSize: 20)),
+                      SizedBox(width: 10),
+                      Text(
+                        'Scan Receipt with AI',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                      SizedBox(width: 8),
+                      Icon(Icons.camera_alt_rounded,
+                          color: Colors.white70, size: 18),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Center(
+                child: Text(
+                  'Camera or gallery · Auto-fills amount, category & date',
+                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(children: [
+                Expanded(child: Divider(color: Colors.grey[300])),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Text('or fill manually',
+                      style: TextStyle(
+                          fontSize: 11, color: Colors.grey[400])),
+                ),
+                Expanded(child: Divider(color: Colors.grey[300])),
+              ]),
+              const SizedBox(height: 16),
+            ],
+
             // Type Selector
             SegmentedButton<String>(
               segments: const [
@@ -321,6 +424,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                           fontSize: 16, fontWeight: FontWeight.bold),
                     ),
             ),
+            const SizedBox(height: 30),
           ],
         ),
       ),
@@ -401,19 +505,13 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
   IconData _getAccountTypeIcon(String type) {
     switch (type.toLowerCase()) {
-      case 'bank':
-        return Icons.account_balance;
-      case 'cash':
-        return Icons.money;
+      case 'bank':         return Icons.account_balance;
+      case 'cash':         return Icons.money;
       case 'credit card':
-      case 'card':
-        return Icons.credit_card;
-      case 'wallet':
-        return Icons.account_balance_wallet;
-      case 'loan':
-        return Icons.trending_down;
-      default:
-        return Icons.account_circle;
+      case 'card':         return Icons.credit_card;
+      case 'wallet':       return Icons.account_balance_wallet;
+      case 'loan':         return Icons.trending_down;
+      default:             return Icons.account_circle;
     }
   }
 
@@ -562,14 +660,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
     try {
       final tempId = DateTime.now().millisecondsSinceEpoch.toString();
-
       String? uploadedImageUrl;
-      // if (_receiptImage != null) {
-      //   uploadedImageUrl = await _storageService.uploadReceipt(
-      //     _receiptImage!,
-      //     widget.transaction?.id ?? tempId,
-      //   );
-      // }
 
       final transaction = TransactionModel(
         userId: '',
@@ -632,39 +723,23 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
   IconData _getCategoryIcon(String category) {
     switch (category) {
-      case 'Food & Dining':
-        return Icons.restaurant;
-      case 'Transportation':
-        return Icons.directions_car;
-      case 'Shopping':
-        return Icons.shopping_bag;
-      case 'Entertainment':
-        return Icons.movie;
-      case 'Bills & Utilities':
-        return Icons.receipt;
-      case 'Healthcare':
-        return Icons.local_hospital;
-      case 'Education':
-        return Icons.school;
-      case 'Personal Care':
-        return Icons.spa;
-      case 'Travel':
-        return Icons.flight;
-      case 'Salary':
-        return Icons.account_balance_wallet;
-      case 'Business':
-        return Icons.business;
-      case 'Investments':
-        return Icons.trending_up;
-      case 'Gifts':
-        return Icons.card_giftcard;
-      default:
-        return Icons.category;
+      case 'Food & Dining':     return Icons.restaurant;
+      case 'Transportation':    return Icons.directions_car;
+      case 'Shopping':          return Icons.shopping_bag;
+      case 'Entertainment':     return Icons.movie;
+      case 'Bills & Utilities': return Icons.receipt;
+      case 'Healthcare':        return Icons.local_hospital;
+      case 'Education':         return Icons.school;
+      case 'Personal Care':     return Icons.spa;
+      case 'Travel':            return Icons.flight;
+      case 'Salary':            return Icons.account_balance_wallet;
+      case 'Business':          return Icons.business;
+      case 'Investments':       return Icons.trending_up;
+      case 'Gifts':             return Icons.card_giftcard;
+      default:                  return Icons.category;
     }
   }
 }
-
-
 
 // ── Category Picker Bottom Sheet ─────────────────────────────────────────────
 class _CategoryPickerSheet extends StatefulWidget {
@@ -706,8 +781,8 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final builtIn  = Categories.getMainCategories(widget.type);
-    final isDark   = Theme.of(context).brightness == Brightness.dark;
+    final builtIn = Categories.getMainCategories(widget.type);
+    final isDark  = Theme.of(context).brightness == Brightness.dark;
 
     return DraggableScrollableSheet(
       initialChildSize: 0.92,
@@ -723,7 +798,6 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
           ),
           child: Column(
             children: [
-              // Handle
               Center(
                 child: Container(
                   margin: const EdgeInsets.only(top: 10),
@@ -734,27 +808,25 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
                   ),
                 ),
               ),
-              // Header
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
                 child: Row(
                   children: [
-                    Text('Select Category',
-                        style: const TextStyle(
+                    const Text('Select Category',
+                        style: TextStyle(
                             fontSize: 18, fontWeight: FontWeight.bold)),
                     const Spacer(),
                     TextButton.icon(
                       onPressed: () {
                         Navigator.pop(context);
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) =>
-                                  const CustomCategoriesScreen()),
-                        );
+                        Navigator.push(context,
+                            MaterialPageRoute(
+                                builder: (_) =>
+                                    const CustomCategoriesScreen()));
                       },
                       icon: const Icon(Icons.edit, size: 14),
-                      label: const Text('Manage', style: TextStyle(fontSize: 12)),
+                      label: const Text('Manage',
+                          style: TextStyle(fontSize: 12)),
                     ),
                     IconButton(
                       icon: const Icon(Icons.close),
@@ -764,13 +836,10 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
                 ),
               ),
               const Divider(height: 1),
-
               Expanded(
                 child: ListView(
                   controller: scrollCtrl,
                   children: [
-
-                    // ── Custom categories (if any) ────────────────────────────
                     if (_loadingCustom)
                       const Padding(
                         padding: EdgeInsets.all(16),
@@ -790,7 +859,6 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
                               onTap: () {
                                 widget.onSelected(cat.name, null);
                                 Navigator.pop(context);
-                                // If has subcategories, show sub-picker
                                 if (cat.subcategories.isNotEmpty) {
                                   _showSubPicker(context, cat.name,
                                       cat.subcategories, cat.color);
@@ -830,16 +898,13 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
                       ),
                       const Divider(),
                     ],
-
-                    // ── Built-in categories ───────────────────────────────────
                     _sectionHeader('📋 Default Categories', Colors.grey),
                     ...builtIn.map((cat) {
-                      final subs    = Categories.getSubcategories(widget.type, cat);
-                      final isSel   = widget.selectedCategory == cat;
+                      final subs  = Categories.getSubcategories(widget.type, cat);
+                      final isSel = widget.selectedCategory == cat;
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Category header row
                           InkWell(
                             onTap: () {
                               widget.onSelected(cat, null);
@@ -861,18 +926,14 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
                                       color: _accentColor.withOpacity(0.12),
                                       shape: BoxShape.circle,
                                     ),
-                                    child: Icon(
-                                      _builtInIcon(cat),
-                                      color: _accentColor, size: 18,
-                                    ),
+                                    child: Icon(_builtInIcon(cat),
+                                        color: _accentColor, size: 18),
                                   ),
                                   const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text(cat,
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 15)),
-                                  ),
+                                  Expanded(child: Text(cat,
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 15))),
                                   if (isSel)
                                     Icon(Icons.check_circle,
                                         color: _accentColor, size: 20),
@@ -880,14 +941,11 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
                               ),
                             ),
                           ),
-                          // Subcategory chips
                           if (subs.isNotEmpty)
                             Padding(
-                              padding:
-                                  const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
                               child: Wrap(
-                                spacing: 6,
-                                runSpacing: 6,
+                                spacing: 6, runSpacing: 6,
                                 children: subs.map((sub) {
                                   final isSubSel =
                                       widget.selectedCategory == cat &&
@@ -926,26 +984,20 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
                         ],
                       );
                     }),
-
-                    // ── Add custom category button ─────────────────────────────
                     Padding(
                       padding: const EdgeInsets.all(16),
                       child: OutlinedButton.icon(
                         onPressed: () {
                           Navigator.pop(context);
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => const CustomCategoriesScreen()),
-                          );
+                          Navigator.push(context, MaterialPageRoute(
+                              builder: (_) => const CustomCategoriesScreen()));
                         },
                         icon: Icon(Icons.add, color: _accentColor),
                         label: Text('Create Custom Category',
                             style: TextStyle(color: _accentColor)),
                         style: OutlinedButton.styleFrom(
                           minimumSize: const Size.fromHeight(48),
-                          side: BorderSide(
-                              color: _accentColor.withOpacity(0.5)),
+                          side: BorderSide(color: _accentColor.withOpacity(0.5)),
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12)),
                         ),
@@ -966,29 +1018,27 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
         child: Text(label,
             style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: color)),
+                fontSize: 12, fontWeight: FontWeight.bold, color: color)),
       );
 
   IconData _builtInIcon(String cat) {
     switch (cat) {
-      case 'Food & Dining':   return Icons.restaurant;
-      case 'Shopping':        return Icons.shopping_bag;
-      case 'Transportation':  return Icons.directions_car;
-      case 'Entertainment':   return Icons.movie;
+      case 'Food & Dining':     return Icons.restaurant;
+      case 'Shopping':          return Icons.shopping_bag;
+      case 'Transportation':    return Icons.directions_car;
+      case 'Entertainment':     return Icons.movie;
       case 'Bills & Utilities': return Icons.receipt_long;
-      case 'Healthcare':      return Icons.medical_services;
-      case 'Education':       return Icons.school;
-      case 'Personal Care':   return Icons.face;
-      case 'Travel':          return Icons.flight;
-      case 'Salary':          return Icons.work;
-      case 'Business':        return Icons.business;
-      case 'Investments':     return Icons.trending_up;
-      case 'Freelance':       return Icons.computer;
-      case 'Rental Income':   return Icons.home;
-      case 'Gifts':           return Icons.card_giftcard;
-      default:                return Icons.category;
+      case 'Healthcare':        return Icons.medical_services;
+      case 'Education':         return Icons.school;
+      case 'Personal Care':     return Icons.face;
+      case 'Travel':            return Icons.flight;
+      case 'Salary':            return Icons.work;
+      case 'Business':          return Icons.business;
+      case 'Investments':       return Icons.trending_up;
+      case 'Freelance':         return Icons.computer;
+      case 'Rental Income':     return Icons.home;
+      case 'Gifts':             return Icons.card_giftcard;
+      default:                  return Icons.category;
     }
   }
 
@@ -1009,8 +1059,7 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
                     fontSize: 15, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             Wrap(
-              spacing: 8,
-              runSpacing: 8,
+              spacing: 8, runSpacing: 8,
               children: subs.map((s) => GestureDetector(
                     onTap: () {
                       widget.onSelected(catName, s);
@@ -1022,12 +1071,10 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
                       decoration: BoxDecoration(
                         color: color.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(16),
-                        border:
-                            Border.all(color: color.withOpacity(0.3)),
+                        border: Border.all(color: color.withOpacity(0.3)),
                       ),
                       child: Text(s,
-                          style: TextStyle(
-                              fontSize: 13, color: color)),
+                          style: TextStyle(fontSize: 13, color: color)),
                     ),
                   )).toList(),
             ),

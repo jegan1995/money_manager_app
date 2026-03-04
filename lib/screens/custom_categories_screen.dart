@@ -19,8 +19,11 @@ class _CustomCategoriesScreenState extends State<CustomCategoriesScreen>
   void initState() {
     super.initState();
     _tabs = TabController(length: 2, vsync: this);
-    _svc.seedBuiltInIfEmpty(type: 'expense');
-    _svc.seedBuiltInIfEmpty(type: 'income');
+    // Seed categories on first open
+    Future.microtask(() async {
+      await _svc.seedBuiltInIfEmpty(type: 'expense');
+      await _svc.seedBuiltInIfEmpty(type: 'income');
+    });
   }
 
   @override
@@ -85,6 +88,75 @@ class _CatList extends StatelessWidget {
     return StreamBuilder<List<CustomCategory>>(
       stream: svc.getCategories(type: type),
       builder: (_, snap) {
+        if (snap.hasError) {
+          final errMsg = snap.error?.toString() ?? 'Unknown error';
+          final isPermission = errMsg.contains('permission') ||
+              errMsg.contains('PERMISSION') ||
+              errMsg.contains('Missing or insufficient');
+          return Center(child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  isPermission ? Icons.lock_outline_rounded : Icons.error_outline,
+                  color: Colors.red, size: 48),
+                const SizedBox(height: 16),
+                Text(
+                  isPermission
+                      ? 'Firestore Permission Denied'
+                      : 'Failed to load categories',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+                const SizedBox(height: 8),
+                if (isPermission) ...[
+                  const Text(
+                    'Add this rule to Firebase Console →\nFirestore → Rules:',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: const Text(
+                      'match /custom_categories/{id} {\n'
+                      '  allow read, write: if request.auth != null\n'
+                      '    && request.auth.uid ==\n'
+                      '    resource.data.userId;\n'
+                      '}',
+                      style: TextStyle(
+                          fontFamily: 'monospace', fontSize: 11),
+                    ),
+                  ),
+                ] else
+                  Text(errMsg,
+                      style: const TextStyle(
+                          color: Colors.red, fontSize: 11),
+                      textAlign: TextAlign.center),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    await svc.seedBuiltInIfEmpty(type: type);
+                  },
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  label: const Text('Retry'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF667eea),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ],
+            ),
+          ));
+        }
         if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
           return const Center(child: CircularProgressIndicator(color: Color(0xFF667eea)));
         }

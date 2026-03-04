@@ -2,51 +2,52 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-class CustomSubSub {
-  final String name;
-  const CustomSubSub(this.name);
-
-  Map<String, dynamic> toMap() => {'name': name};
-  factory CustomSubSub.fromMap(Map<String, dynamic> m) =>
-      CustomSubSub(m['name'] ?? '');
-}
-
 class CustomSubcategory {
   final String name;
-  final List<String> subSubs; // 3rd level
+  final List<String> subSubs;
 
   const CustomSubcategory({required this.name, this.subSubs = const []});
 
   Map<String, dynamic> toMap() => {
-    'name': name,
+    'name':    name,
     'subSubs': subSubs,
   };
 
-  factory CustomSubcategory.fromMap(Map<String, dynamic> m) => CustomSubcategory(
-    name: m['name'] ?? '',
-    subSubs: List<String>.from(m['subSubs'] ?? []),
-  );
+  factory CustomSubcategory.fromMap(dynamic raw) {
+    try {
+      final m = Map<String, dynamic>.from(raw as Map);
+      return CustomSubcategory(
+        name:    m['name']?.toString() ?? '',
+        subSubs: (m['subSubs'] as List<dynamic>? ?? [])
+            .map((e) => e?.toString() ?? '')
+            .where((e) => e.isNotEmpty)
+            .toList(),
+      );
+    } catch (_) {
+      return const CustomSubcategory(name: '');
+    }
+  }
 }
 
 class CustomCategory {
   final String? id;
-  final String userId;
-  final String type; // 'expense' | 'income'
-  final String name;
-  final String emoji;
-  final Color color;
+  final String  userId;
+  final String  type;
+  final String  name;
+  final String  emoji;
+  final Color   color;
   final List<CustomSubcategory> subcategories;
-  final bool isBuiltIn; // built-in cats cannot be deleted
+  final bool    isBuiltIn;
 
   const CustomCategory({
     this.id,
     required this.userId,
     required this.type,
     required this.name,
-    this.emoji = '📌',
-    this.color = const Color(0xFF667eea),
+    this.emoji         = '📌',
+    this.color         = const Color(0xFF667eea),
     this.subcategories = const [],
-    this.isBuiltIn = false,
+    this.isBuiltIn     = false,
   });
 
   Map<String, dynamic> toMap() => {
@@ -54,40 +55,79 @@ class CustomCategory {
     'type':          type,
     'name':          name,
     'emoji':         emoji,
-    'color':         color.value,
+    // Store as int string to avoid web 64-bit issue
+    'colorHex':      color.value.toRadixString(16).padLeft(8, '0'),
     'subcategories': subcategories.map((s) => s.toMap()).toList(),
     'isBuiltIn':     isBuiltIn,
   };
 
   factory CustomCategory.fromFirestore(DocumentSnapshot doc) {
-    final d = doc.data() as Map<String, dynamic>;
-    return CustomCategory(
-      id:    doc.id,
-      userId: d['userId'] ?? '',
-      type:  d['type'] ?? 'expense',
-      name:  d['name'] ?? '',
-      emoji: d['emoji'] ?? '📌',
-      color: Color(d['color'] ?? 0xFF667eea),
-      subcategories: (d['subcategories'] as List<dynamic>? ?? [])
-          .map((s) => CustomSubcategory.fromMap(Map<String, dynamic>.from(s)))
-          .toList(),
-      isBuiltIn: d['isBuiltIn'] ?? false,
-    );
+    try {
+      final d = doc.data() as Map<String, dynamic>;
+
+      // ── Color: try colorHex string first, fallback to legacy int ──────────
+      Color parsedColor = const Color(0xFF667eea);
+      try {
+        final hex = d['colorHex']?.toString();
+        if (hex != null && hex.length >= 6) {
+          parsedColor = Color(int.parse(hex.padLeft(8, 'f'), radix: 16));
+        } else if (d['color'] != null) {
+          // Legacy: stored as number — handle both int and double on web
+          final raw = d['color'];
+          final intVal = raw is double ? raw.toInt() : (raw as int);
+          parsedColor = Color(intVal & 0xFFFFFFFF);
+        }
+      } catch (_) {}
+
+      // ── Subcategories: safe parse ─────────────────────────────────────────
+      List<CustomSubcategory> subs = [];
+      try {
+        final rawList = d['subcategories'];
+        if (rawList is List) {
+          subs = rawList
+              .map((e) => CustomSubcategory.fromMap(e))
+              .where((s) => s.name.isNotEmpty)
+              .toList();
+        }
+      } catch (_) {}
+
+      return CustomCategory(
+        id:            doc.id,
+        userId:        d['userId']?.toString()   ?? '',
+        type:          d['type']?.toString()     ?? 'expense',
+        name:          d['name']?.toString()     ?? '',
+        emoji:         d['emoji']?.toString()    ?? '📌',
+        color:         parsedColor,
+        subcategories: subs,
+        isBuiltIn:     d['isBuiltIn'] as bool?   ?? false,
+      );
+    } catch (e) {
+      // Fallback — never crash the stream
+      return CustomCategory(
+        id:     doc.id,
+        userId: '',
+        type:   'expense',
+        name:   '(error)',
+        emoji:  '⚠️',
+        color:  Colors.grey,
+      );
+    }
   }
 
   CustomCategory copyWith({
     String? name,
     String? emoji,
-    Color? color,
+    Color?  color,
     List<CustomSubcategory>? subcategories,
-  }) => CustomCategory(
-    id:            id,
-    userId:        userId,
-    type:          type,
-    name:          name ?? this.name,
-    emoji:         emoji ?? this.emoji,
-    color:         color ?? this.color,
-    subcategories: subcategories ?? this.subcategories,
-    isBuiltIn:     isBuiltIn,
-  );
+  }) =>
+      CustomCategory(
+        id:            id,
+        userId:        userId,
+        type:          type,
+        name:          name          ?? this.name,
+        emoji:         emoji         ?? this.emoji,
+        color:         color         ?? this.color,
+        subcategories: subcategories ?? this.subcategories,
+        isBuiltIn:     isBuiltIn,
+      );
 }

@@ -14,14 +14,21 @@ class CustomCategoryService {
   Stream<List<CustomCategory>> getCategories({required String type}) {
     final uid = _uid;
     if (uid == null) return Stream.value([]);
+    // Single-field filter only (no composite index needed)
     return _db.collection(_col)
         .where('userId', isEqualTo: uid)
-        .where('type', isEqualTo: type)
         .snapshots()
-        .map((s) => s.docs
-            .map((d) => CustomCategory.fromFirestore(d))
-            .toList()
-          ..sort((a, b) => a.name.compareTo(b.name)));
+        .map((s) {
+      final list = s.docs
+          .map((d) => CustomCategory.fromFirestore(d))
+          .where((c) => c.type == type) // filter client-side
+          .toList()
+        ..sort((a, b) {
+          if (a.isBuiltIn != b.isBuiltIn) return a.isBuiltIn ? -1 : 1;
+          return a.name.compareTo(b.name);
+        });
+      return list;
+    });
   }
 
   Future<List<CustomCategory>> getCategoriesOnce({required String type}) async {
@@ -32,13 +39,12 @@ class CustomCategoryService {
       await seedBuiltInIfEmpty(type: type);
       final snap = await _db.collection(_col)
           .where('userId', isEqualTo: uid)
-          .where('type', isEqualTo: type)
           .get();
       return snap.docs
           .map((d) => CustomCategory.fromFirestore(d))
+          .where((c) => c.type == type) // filter client-side
           .toList()
         ..sort((a, b) {
-          // Built-ins first
           if (a.isBuiltIn && !b.isBuiltIn) return -1;
           if (!a.isBuiltIn && b.isBuiltIn) return 1;
           return a.name.compareTo(b.name);
@@ -70,11 +76,12 @@ class CustomCategoryService {
     final uid = _uid;
     if (uid == null) return;
     try {
-      final existing = await _db.collection(_col)
+      final existingSnap = await _db.collection(_col)
           .where('userId', isEqualTo: uid)
-          .where('type', isEqualTo: type)
-          .limit(1).get();
-      if (existing.docs.isNotEmpty) return;
+          .get();
+      final alreadySeeded = existingSnap.docs.any((d) =>
+          (d.data() as Map<String, dynamic>)['type'] == type);
+      if (alreadySeeded) return;
 
       final seeds = type == 'expense' ? _expenseSeeds : _incomeSeeds;
       final batch = _db.batch();

@@ -3,7 +3,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/transaction_service.dart';
 import '../services/export_service.dart';
 import '../services/budget_alert_service.dart';
+import '../services/smart_notification_service.dart';
 import '../models/transaction_model.dart';
+// import 'notifications_screen.dart';
 import 'transfers_screen.dart';
 import 'budget_management_screen.dart';
 import 'recurring_transactions_screen.dart';
@@ -17,6 +19,8 @@ import 'enhanced_reports_screen.dart';
 import 'export_screen.dart';
 import 'transfer_analytics_screen.dart';
 import 'alerts_screen.dart';
+import 'smart_notifications_screen.dart';
+import '../services/smart_notification_service.dart';
 import '../services/recurring_transfer_service.dart';
 import 'search_transactions_screen.dart';
 import 'theme_settings_screen.dart';
@@ -33,7 +37,7 @@ class MoreScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final alertService = BudgetAlertService();
+    final _notifSvc = SmartNotificationService();
 
     return Scaffold(
       appBar: AppBar(
@@ -41,24 +45,24 @@ class MoreScreen extends StatelessWidget {
       ),
       body: ListView(
         children: [
-          // Budget Alerts (with notification badge)
+          // Smart Notifications (with unread badge)
           StreamBuilder<int>(
-            stream: alertService.getUnreadCount(),
+            stream: _notifSvc.getUnreadCount(),
             builder: (context, snapshot) {
               final unreadCount = snapshot.data ?? 0;
-
               return _buildMenuItem(
                 context,
-                icon: Icons.notifications,
-                title: 'Budget Alerts',
+                icon: Icons.notifications_rounded,
+                title: 'Notifications',
                 subtitle: unreadCount > 0
-                    ? '$unreadCount new alert${unreadCount > 1 ? 's' : ''}'
-                    : 'View budget notifications',
-                color: unreadCount > 0 ? Colors.red : Colors.blue,
+                    ? '$unreadCount unread notification${unreadCount > 1 ? 's' : ''}'
+                    : 'Budget alerts, goal reminders & more',
+                color: unreadCount > 0 ? Colors.red : const Color(0xFF667eea),
                 badge: unreadCount > 0 ? unreadCount : null,
                 onTap: () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const AlertsScreen()),
+                  MaterialPageRoute(
+                      builder: (context) => const SmartNotificationsScreen()),
                 ),
               );
             },

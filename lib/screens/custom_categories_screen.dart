@@ -1,10 +1,11 @@
+// lib/screens/custom_categories_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/custom_category_model.dart';
 import '../services/custom_category_service.dart';
 
 class CustomCategoriesScreen extends StatefulWidget {
   const CustomCategoriesScreen({super.key});
-
   @override
   State<CustomCategoriesScreen> createState() => _CustomCategoriesScreenState();
 }
@@ -12,679 +13,484 @@ class CustomCategoriesScreen extends StatefulWidget {
 class _CustomCategoriesScreenState extends State<CustomCategoriesScreen>
     with SingleTickerProviderStateMixin {
   final _svc = CustomCategoryService();
-  late TabController _tab;
+  late TabController _tabs;
 
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 2, vsync: this);
+    _tabs = TabController(length: 2, vsync: this);
+    _svc.seedBuiltInIfEmpty(type: 'expense');
+    _svc.seedBuiltInIfEmpty(type: 'income');
   }
 
   @override
-  void dispose() {
-    _tab.dispose();
-    super.dispose();
-  }
+  void dispose() { _tabs.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF0D1117) : const Color(0xFFF0F2F8),
       appBar: AppBar(
-        title: const Text('Custom Categories'),
-        backgroundColor: const Color(0xFF6A1B9A),
-        foregroundColor: Colors.white,
+        title: const Text('Manage Categories',
+            style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: isDark ? const Color(0xFF1E2530) : Colors.white,
+        foregroundColor: isDark ? Colors.white : Colors.black87,
+        elevation: 0,
         bottom: TabBar(
-          controller: _tab,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white54,
-          tabs: const [
-            Tab(icon: Icon(Icons.remove_circle_outline), text: 'Expense'),
-            Tab(icon: Icon(Icons.add_circle_outline),    text: 'Income'),
-          ],
+          controller: _tabs,
+          labelColor: const Color(0xFF667eea),
+          unselectedLabelColor: Colors.grey,
+          indicatorColor: const Color(0xFF667eea),
+          tabs: const [Tab(text: '💸 Expense'), Tab(text: '💰 Income')],
         ),
-      ),
-      body: TabBarView(
-        controller: _tab,
-        children: [
-          _buildList('expense', isDark),
-          _buildList('income', isDark),
-        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openSheet(
-          context,
-          type: _tab.index == 0 ? 'expense' : 'income',
-        ),
-        backgroundColor: const Color(0xFF6A1B9A),
+        onPressed: () => _openAddSheet(_tabs.index == 0 ? 'expense' : 'income'),
+        backgroundColor: const Color(0xFF667eea),
         foregroundColor: Colors.white,
-        icon: const Icon(Icons.add),
-        label: const Text('New Category'),
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('New Category', style: TextStyle(fontWeight: FontWeight.bold)),
+      ),
+      body: TabBarView(
+        controller: _tabs,
+        children: [
+          _CatList(type: 'expense', svc: _svc, isDark: isDark),
+          _CatList(type: 'income',  svc: _svc, isDark: isDark),
+        ],
       ),
     );
   }
 
-  Widget _buildList(String type, bool isDark) {
+  void _openAddSheet(String type) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (_) => _AddCatSheet(type: type, svc: _svc),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+class _CatList extends StatelessWidget {
+  final String type;
+  final CustomCategoryService svc;
+  final bool isDark;
+  const _CatList({required this.type, required this.svc, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
     return StreamBuilder<List<CustomCategory>>(
-      stream: _svc.getCategories(type: type),
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+      stream: svc.getCategories(type: type),
+      builder: (_, snap) {
+        if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
+          return const Center(child: CircularProgressIndicator(color: Color(0xFF667eea)));
         }
-
         final cats = snap.data ?? [];
-
         if (cats.isEmpty) {
-          return _emptyState(type);
+          return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            const Text('📂', style: TextStyle(fontSize: 60)),
+            const SizedBox(height: 14),
+            const Text('No categories yet',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            Text('Tap + to create a $type category',
+                style: const TextStyle(color: Colors.grey)),
+          ]));
         }
-
         return ListView.builder(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 100),
           itemCount: cats.length,
-          itemBuilder: (ctx, i) => _catCard(cats[i], isDark),
+          itemBuilder: (_, i) => _CatTile(cat: cats[i], svc: svc, isDark: isDark),
         );
       },
     );
   }
+}
 
-  Widget _emptyState(String type) {
-    final isExpense = type == 'expense';
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(40),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(isExpense ? '🏷️' : '💰',
-                style: const TextStyle(fontSize: 64)),
-            const SizedBox(height: 16),
-            Text(
-              'No custom ${isExpense ? 'expense' : 'income'} categories yet',
-              style: const TextStyle(
-                  fontSize: 17, fontWeight: FontWeight.bold),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Create categories that match your lifestyle.\ne.g. Petrol, Dabba, Online Classes',
-              style: TextStyle(color: Colors.grey[500], fontSize: 13),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () => _openSheet(context, type: type),
-              icon: const Icon(Icons.add),
-              label: const Text('Create First Category'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6A1B9A),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+// ─────────────────────────────────────────────────────────────────────────────
+class _CatTile extends StatefulWidget {
+  final CustomCategory cat;
+  final CustomCategoryService svc;
+  final bool isDark;
+  const _CatTile({required this.cat, required this.svc, required this.isDark});
+  @override State<_CatTile> createState() => _CatTileState();
+}
 
-  Widget _catCard(CustomCategory cat, bool isDark) {
+class _CatTileState extends State<_CatTile> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final cat  = widget.cat;
+    final card = widget.isDark ? const Color(0xFF1E2530) : Colors.white;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E2530) : Colors.white,
+        color: card,
         borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2))
-        ],
+        boxShadow: [BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8, offset: const Offset(0, 3))],
       ),
-      child: Column(
-        children: [
-          ListTile(
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-            leading: Container(
-              width: 46,
-              height: 46,
-              decoration: BoxDecoration(
-                color: cat.color.withOpacity(0.15),
-                shape: BoxShape.circle,
-                border: Border.all(
-                    color: cat.color.withOpacity(0.4), width: 1.5),
+      child: Column(children: [
+        InkWell(
+          onTap: () => setState(() => _expanded = !_expanded),
+          borderRadius: _expanded
+              ? const BorderRadius.vertical(top: Radius.circular(14))
+              : BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+            child: Row(children: [
+              Container(
+                width: 38, height: 38,
+                decoration: BoxDecoration(
+                  color: cat.color.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Center(child: Text(cat.emoji,
+                    style: const TextStyle(fontSize: 20))),
               ),
-              child: Center(
-                child: Text(cat.emoji,
-                    style: const TextStyle(fontSize: 22)),
-              ),
-            ),
-            title: Text(cat.name,
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold, fontSize: 14)),
-            subtitle: cat.subcategories.isEmpty
-                ? Text('No subcategories',
-                    style: TextStyle(
-                        fontSize: 11, color: Colors.grey[400]))
-                : Text(
-                    cat.subcategories.take(3).join(', ') +
-                        (cat.subcategories.length > 3 ? '...' : ''),
-                    style: TextStyle(
-                        fontSize: 11, color: Colors.grey[500])),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+              const SizedBox(width: 12),
+              Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(cat.name, style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 14)),
+                  Text('${cat.subcategories.length} subcategories',
+                      style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                ],
+              )),
+              if (!cat.isBuiltIn) ...[
+                IconButton(
+                  icon: Icon(Icons.edit_rounded, size: 17, color: Colors.grey[400]),
+                  onPressed: () => _edit(context, cat),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline_rounded, size: 17, color: Colors.red),
+                  onPressed: () => _delete(context, cat),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                ),
+              ] else
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
+                  margin: const EdgeInsets.only(right: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                   decoration: BoxDecoration(
-                    color: cat.color.withOpacity(0.1),
+                    color: Colors.grey.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Text(
-                    cat.type,
-                    style: TextStyle(
-                        fontSize: 10,
-                        color: cat.color,
-                        fontWeight: FontWeight.bold),
-                  ),
+                  child: const Text('built-in',
+                      style: TextStyle(fontSize: 9, color: Colors.grey)),
                 ),
-                IconButton(
-                  icon: Icon(Icons.edit_outlined,
-                      color: Colors.grey[500], size: 18),
-                  onPressed: () => _openSheet(context, cat: cat),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline,
-                      color: Colors.red, size: 18),
-                  onPressed: () => _confirmDelete(cat),
-                ),
-              ],
-            ),
+              Icon(_expanded
+                  ? Icons.keyboard_arrow_up_rounded
+                  : Icons.keyboard_arrow_down_rounded,
+                  color: Colors.grey[400], size: 20),
+            ]),
           ),
-          // Subcategory chips
-          if (cat.subcategories.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-              child: Wrap(
-                spacing: 6,
-                runSpacing: 4,
-                children: cat.subcategories
-                    .map((s) => Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: cat.color.withOpacity(0.08),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                                color: cat.color.withOpacity(0.2)),
-                          ),
-                          child: Text(s,
-                              style: TextStyle(
-                                  fontSize: 11, color: cat.color)),
-                        ))
-                    .toList(),
-              ),
-            ),
+        ),
+        if (_expanded) ...[
+          Divider(height: 1, color: widget.isDark ? Colors.white12 : Colors.grey.shade100),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                Text('Subcategories', style: TextStyle(
+                    fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey[500])),
+                if (!cat.isBuiltIn)
+                  GestureDetector(
+                    onTap: () => _addSubSheet(context, cat),
+                    child: Text('+ Add',
+                        style: TextStyle(fontSize: 11, color: cat.color,
+                            fontWeight: FontWeight.bold)),
+                  ),
+              ]),
+              const SizedBox(height: 8),
+              if (cat.subcategories.isEmpty)
+                Text('No subcategories yet',
+                    style: TextStyle(fontSize: 11, color: Colors.grey[400]))
+              else
+                ...cat.subcategories.map((sub) => _SubRow(
+                    sub: sub, cat: cat, svc: widget.svc, isDark: widget.isDark)),
+            ]),
+          ),
         ],
-      ),
+      ]),
     );
   }
 
-  void _openSheet(BuildContext context,
-      {CustomCategory? cat, String? type}) {
+  void _edit(BuildContext ctx, CustomCategory cat) {
     showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _CategorySheet(
-        svc: _svc,
-        cat: cat,
-        initialType: cat?.type ?? type ?? 'expense',
-      ),
+      context: ctx, isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (_) => _AddCatSheet(type: cat.type, svc: widget.svc, existing: cat),
     );
   }
 
-  Future<void> _confirmDelete(CustomCategory cat) async {
+  Future<void> _delete(BuildContext ctx, CustomCategory cat) async {
     final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Delete "${cat.name}"?'),
-        content: const Text(
-            'Existing transactions with this category won\'t be affected, but it won\'t appear in new transactions.'),
+      context: ctx,
+      builder: (d) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Delete Category'),
+        content: Text('Delete "${cat.name}"?'),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Delete',
-                  style: TextStyle(color: Colors.red))),
+          TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(d, true),
+              child: const Text('Delete', style: TextStyle(color: Colors.red))),
         ],
       ),
     );
-    if (ok == true && cat.id != null) {
-      await _svc.deleteCategory(cat.id!);
+    if (ok == true) {
+      await widget.svc.deleteCategory(cat.id!);
+      HapticFeedback.mediumImpact();
     }
   }
+
+  void _addSubSheet(BuildContext ctx, CustomCategory cat) {
+    final ctrl = TextEditingController();
+    showModalBottomSheet(
+      context: ctx, isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (bctx) => Padding(
+        padding: EdgeInsets.fromLTRB(20, 16, 20,
+            MediaQuery.of(bctx).viewInsets.bottom + 24),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(width: 40, height: 4,
+              decoration: BoxDecoration(color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2))),
+          const SizedBox(height: 14),
+          Text('Add subcategory to ${cat.name}',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          const SizedBox(height: 14),
+          TextField(
+            controller: ctrl, autofocus: true,
+            textCapitalization: TextCapitalization.words,
+            decoration: InputDecoration(
+              labelText: 'Subcategory name',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(width: double.infinity, height: 46,
+            child: ElevatedButton(
+              onPressed: () async {
+                if (ctrl.text.trim().isEmpty) return;
+                Navigator.pop(bctx);
+                final newSubs = [...cat.subcategories,
+                    CustomSubcategory(name: ctrl.text.trim())];
+                await widget.svc.updateCategory(
+                    cat.id!, cat.copyWith(subcategories: newSubs));
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: cat.color, foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Add', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
 }
 
-// ── Add / Edit Sheet ─────────────────────────────────────────────────────────
-class _CategorySheet extends StatefulWidget {
+// ─────────────────────────────────────────────────────────────────────────────
+class _SubRow extends StatelessWidget {
+  final CustomSubcategory sub;
+  final CustomCategory cat;
   final CustomCategoryService svc;
-  final CustomCategory? cat;
-  final String initialType;
-
-  const _CategorySheet({
-    required this.svc,
-    this.cat,
-    required this.initialType,
-  });
+  final bool isDark;
+  const _SubRow({required this.sub, required this.cat, required this.svc, required this.isDark});
 
   @override
-  State<_CategorySheet> createState() => _CategorySheetState();
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Container(width: 4, height: 4, margin: const EdgeInsets.only(top: 6, right: 8),
+            decoration: BoxDecoration(color: cat.color, shape: BoxShape.circle)),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(sub.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+          if (sub.subSubs.isNotEmpty)
+            Wrap(spacing: 4, runSpacing: 3, children: sub.subSubs.map((s) =>
+                Container(
+                  margin: const EdgeInsets.only(top: 3),
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: cat.color.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(s, style: TextStyle(fontSize: 10, color: cat.color)),
+                )).toList()),
+        ])),
+        if (!cat.isBuiltIn)
+          GestureDetector(
+            onTap: () async {
+              final newSubs = cat.subcategories.where((s) => s.name != sub.name).toList();
+              await svc.updateCategory(cat.id!, cat.copyWith(subcategories: newSubs));
+            },
+            child: const Padding(
+              padding: EdgeInsets.only(top: 2),
+              child: Icon(Icons.close_rounded, size: 14, color: Colors.grey),
+            ),
+          ),
+      ]),
+    );
+  }
 }
 
-class _CategorySheetState extends State<_CategorySheet> {
-  final _formKey   = GlobalKey<FormState>();
-  final _nameCtrl  = TextEditingController();
-  final _subCtrl   = TextEditingController();
+// ─────────────────────────────────────────────────────────────────────────────
+class _AddCatSheet extends StatefulWidget {
+  final String type;
+  final CustomCategoryService svc;
+  final CustomCategory? existing;
+  const _AddCatSheet({required this.type, required this.svc, this.existing});
+  @override State<_AddCatSheet> createState() => _AddCatSheetState();
+}
 
-  late String _type;
-  String _selectedEmoji  = '📦';
-  Color  _selectedColor  = const Color(0xFF6A1B9A);
-  List<String> _subcategories = [];
-  bool _saving = false;
+class _AddCatSheetState extends State<_AddCatSheet> {
+  final _ctrl = TextEditingController();
+  String _emoji = '📌';
+  Color  _color = const Color(0xFF667eea);
 
-  bool get _isEdit => widget.cat != null;
+  static const _emojis = ['📌','🍽️','🛍️','🚗','💡','🎬','🏥','📚','💆','✈️',
+      '💼','🏢','💻','📈','🎁','💰','🏠','⚽','🎮','📱','🎵'];
+  static const _colors = [
+    Color(0xFF667eea), Color(0xFFfa709a), Color(0xFFf6d365),
+    Color(0xFF43b89c), Color(0xFFa18cd1), Color(0xFF30cfd0),
+    Color(0xFF764ba2), Color(0xFFfe6b8b), Color(0xFF0ba360),
+    Color(0xFFf77062), Color(0xFF95a5a6), Color(0xFFe53935),
+  ];
 
   @override
   void initState() {
     super.initState();
-    _type = widget.initialType;
-    if (_isEdit) {
-      _nameCtrl.text    = widget.cat!.name;
-      _selectedEmoji    = widget.cat!.emoji;
-      _selectedColor    = widget.cat!.color;
-      _subcategories    = List.from(widget.cat!.subcategories);
+    if (widget.existing != null) {
+      _ctrl.text = widget.existing!.name;
+      _emoji = widget.existing!.emoji;
+      _color = widget.existing!.color;
     }
-  }
-
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    _subCtrl.dispose();
-    super.dispose();
-  }
-
-  void _addSubcategory() {
-    final sub = _subCtrl.text.trim();
-    if (sub.isEmpty) return;
-    if (_subcategories.contains(sub)) {
-      _snack('Already added');
-      return;
-    }
-    setState(() => _subcategories.add(sub));
-    _subCtrl.clear();
-  }
-
-  Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    final name = _nameCtrl.text.trim();
-
-    // Check duplicate name
-    final exists = await widget.svc.nameExists(
-      name, _type,
-      excludeId: widget.cat?.id,
-    );
-    if (exists) {
-      _snack('A category named "$name" already exists');
-      return;
-    }
-
-    setState(() => _saving = true);
-    try {
-      final now = DateTime.now();
-      final cat = CustomCategory(
-        id:             widget.cat?.id,
-        userId:         '',  // service injects real uid
-        name:           name,
-        type:           _type,
-        emoji:          _selectedEmoji,
-        colorValue:     _selectedColor.value,
-        subcategories:  _subcategories,
-        createdAt:      _isEdit ? widget.cat!.createdAt : now,
-      );
-
-      if (_isEdit) {
-        await widget.svc.updateCategory(cat);
-      } else {
-        await widget.svc.addCategory(cat);
-      }
-
-      if (mounted) Navigator.pop(context);
-    } catch (e) {
-      _snack('Error: $e');
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  void _snack(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-    ));
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E2530) : Colors.white,
-        borderRadius:
-            const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      padding: EdgeInsets.fromLTRB(
-          20, 16, 20, MediaQuery.of(context).viewInsets.bottom + 24),
-      child: SingleChildScrollView(
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Handle
-              Center(
-                child: Container(
-                  width: 40, height: 4,
-                  decoration: BoxDecoration(
-                      color: Colors.grey[400],
-                      borderRadius: BorderRadius.circular(2)),
+    final isEdit = widget.existing != null;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 16, 20,
+          MediaQuery.of(context).viewInsets.bottom + 24),
+      child: SingleChildScrollView(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Center(child: Container(width: 40, height: 4,
+              decoration: BoxDecoration(color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2)))),
+          const SizedBox(height: 16),
+          Text(isEdit ? 'Edit Category' : 'New Category',
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          const Text('Choose Icon', style: TextStyle(
+              fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey)),
+          const SizedBox(height: 8),
+          SizedBox(height: 50, child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: _emojis.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 6),
+            itemBuilder: (_, i) => GestureDetector(
+              onTap: () => setState(() => _emoji = _emojis[i]),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                width: 44, height: 44,
+                decoration: BoxDecoration(
+                  color: _emoji == _emojis[i]
+                      ? _color.withOpacity(0.15) : Colors.grey.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: _emoji == _emojis[i] ? _color : Colors.transparent,
+                      width: 2),
                 ),
+                child: Center(child: Text(_emojis[i],
+                    style: const TextStyle(fontSize: 22))),
               ),
-              const SizedBox(height: 16),
-
-              Text(_isEdit ? 'Edit Category' : 'New Category',
-                  style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 16),
-
-              // Type toggle (only when creating)
-              if (!_isEdit) ...[
-                Row(
-                  children: [
-                    Expanded(child: _typeBtn('expense', '📉 Expense', Colors.red)),
-                    const SizedBox(width: 10),
-                    Expanded(child: _typeBtn('income', '📈 Income', Colors.green)),
-                  ],
-                ),
-                const SizedBox(height: 16),
-              ],
-
-              // Preview + Name row
-              Row(
-                children: [
-                  // Emoji preview
-                  GestureDetector(
-                    onTap: _pickEmoji,
-                    child: Container(
-                      width: 56,
-                      height: 56,
-                      decoration: BoxDecoration(
-                        color: _selectedColor.withOpacity(0.15),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                            color: _selectedColor.withOpacity(0.5),
-                            width: 2),
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(_selectedEmoji,
-                              style: const TextStyle(fontSize: 22)),
-                          Text('tap',
-                              style: TextStyle(
-                                  fontSize: 8, color: Colors.grey[400])),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  // Name
-                  Expanded(
-                    child: TextFormField(
-                      controller: _nameCtrl,
-                      textCapitalization: TextCapitalization.words,
-                      decoration: InputDecoration(
-                        labelText: 'Category Name *',
-                        hintText: 'e.g. Petrol, Dabba, SIP',
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10)),
-                      ),
-                      validator: (v) => v == null || v.trim().isEmpty
-                          ? 'Name required'
-                          : v.trim().length < 2
-                              ? 'Too short'
-                              : null,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              // Color picker
-              Text('Color',
-                  style: TextStyle(
-                      fontSize: 12, color: Colors.grey[500])),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: kCategoryColors.map((c) {
-                  final sel = c.value == _selectedColor.value;
-                  return GestureDetector(
-                    onTap: () => setState(() => _selectedColor = c),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 150),
-                      width: sel ? 34 : 28,
-                      height: sel ? 34 : 28,
-                      decoration: BoxDecoration(
-                        color: c,
-                        shape: BoxShape.circle,
-                        border: sel
-                            ? Border.all(color: Colors.white, width: 2.5)
-                            : null,
-                        boxShadow: sel
-                            ? [BoxShadow(
-                                color: c.withOpacity(0.5),
-                                blurRadius: 6)]
-                            : null,
-                      ),
-                      child: sel
-                          ? const Icon(Icons.check,
-                              color: Colors.white, size: 16)
-                          : null,
-                    ),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 16),
-
-              // Subcategories
-              Text('Subcategories (optional)',
-                  style: TextStyle(
-                      fontSize: 12, color: Colors.grey[500])),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _subCtrl,
-                      textCapitalization: TextCapitalization.words,
-                      decoration: InputDecoration(
-                        hintText: 'e.g. Office, Home',
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10)),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 10),
-                        isDense: true,
-                      ),
-                      onFieldSubmitted: (_) => _addSubcategory(),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton(
-                    onPressed: _addSubcategory,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _selectedColor,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 12),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
-                    ),
-                    child: const Text('Add'),
-                  ),
-                ],
-              ),
-              if (_subcategories.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: _subcategories
-                      .map((s) => Chip(
-                            label: Text(s,
-                                style: const TextStyle(fontSize: 12)),
-                            backgroundColor:
-                                _selectedColor.withOpacity(0.1),
-                            side: BorderSide(
-                                color: _selectedColor.withOpacity(0.3)),
-                            deleteIcon: Icon(Icons.close,
-                                size: 14, color: _selectedColor),
-                            onDeleted: () => setState(
-                                () => _subcategories.remove(s)),
-                          ))
-                      .toList(),
-                ),
-              ],
-              const SizedBox(height: 20),
-
-              // Save button
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _saving ? null : _save,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _selectedColor,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: _saving
-                      ? const SizedBox(
-                          width: 20, height: 20,
-                          child: CircularProgressIndicator(
-                              color: Colors.white, strokeWidth: 2))
-                      : Text(
-                          _isEdit
-                              ? 'Update Category'
-                              : 'Create Category',
-                          style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold)),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _typeBtn(String type, String label, Color color) {
-    final sel = _type == type;
-    return GestureDetector(
-      onTap: () => setState(() => _type = type),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: sel ? color : color.withOpacity(0.06),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: color.withOpacity(0.4)),
-        ),
-        child: Center(
-          child: Text(label,
-              style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: sel ? Colors.white : color)),
-        ),
-      ),
-    );
-  }
-
-  void _pickEmoji() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (_) => Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Pick Emoji',
-                style: TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: kCategoryEmojis.map((e) {
-                final sel = e == _selectedEmoji;
-                return GestureDetector(
-                  onTap: () {
-                    setState(() => _selectedEmoji = e);
-                    Navigator.pop(context);
-                  },
-                  child: Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: sel
-                          ? _selectedColor.withOpacity(0.2)
-                          : Colors.grey.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                      border: sel
-                          ? Border.all(color: _selectedColor, width: 2)
-                          : null,
-                    ),
-                    child: Center(
-                      child: Text(e,
-                          style: const TextStyle(fontSize: 22)),
-                    ),
-                  ),
-                );
-              }).toList(),
             ),
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
+          )),
+          const SizedBox(height: 14),
+          const Text('Choose Color', style: TextStyle(
+              fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey)),
+          const SizedBox(height: 8),
+          Wrap(spacing: 8, runSpacing: 8, children: _colors.map((c) =>
+            GestureDetector(
+              onTap: () => setState(() => _color = c),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                width: 30, height: 30,
+                decoration: BoxDecoration(
+                  color: c, shape: BoxShape.circle,
+                  border: Border.all(
+                      color: _color == c ? Colors.white : Colors.transparent,
+                      width: 2),
+                  boxShadow: _color == c
+                      ? [BoxShadow(color: c.withOpacity(0.4), blurRadius: 6)]
+                      : null,
+                ),
+                child: _color == c
+                    ? const Icon(Icons.check_rounded, color: Colors.white, size: 16)
+                    : null,
+              ),
+            )).toList()),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _ctrl,
+            textCapitalization: TextCapitalization.words,
+            decoration: InputDecoration(
+              labelText: 'Category Name *',
+              prefixText: '$_emoji ',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              filled: true,
+              fillColor: isDark
+                  ? Colors.white.withOpacity(0.05) : Colors.grey.shade50,
+            ),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(width: double.infinity, height: 50,
+            child: ElevatedButton(
+              onPressed: () async {
+                if (_ctrl.text.trim().isEmpty) return;
+                Navigator.pop(context);
+                if (isEdit) {
+                  await widget.svc.updateCategory(widget.existing!.id!,
+                      widget.existing!.copyWith(
+                          name: _ctrl.text.trim(), emoji: _emoji, color: _color));
+                } else {
+                  await widget.svc.addCategory(CustomCategory(
+                    userId: '', type: widget.type,
+                    name: _ctrl.text.trim(), emoji: _emoji, color: _color,
+                  ));
+                }
+                HapticFeedback.lightImpact();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _color, foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+              ),
+              child: Text(isEdit ? 'Save Changes' : 'Create Category',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            ),
+          ),
+        ],
+      )),
     );
   }
 }

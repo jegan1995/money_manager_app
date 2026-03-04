@@ -1,98 +1,93 @@
+// lib/models/custom_category_model.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+
+class CustomSubSub {
+  final String name;
+  const CustomSubSub(this.name);
+
+  Map<String, dynamic> toMap() => {'name': name};
+  factory CustomSubSub.fromMap(Map<String, dynamic> m) =>
+      CustomSubSub(m['name'] ?? '');
+}
+
+class CustomSubcategory {
+  final String name;
+  final List<String> subSubs; // 3rd level
+
+  const CustomSubcategory({required this.name, this.subSubs = const []});
+
+  Map<String, dynamic> toMap() => {
+    'name': name,
+    'subSubs': subSubs,
+  };
+
+  factory CustomSubcategory.fromMap(Map<String, dynamic> m) => CustomSubcategory(
+    name: m['name'] ?? '',
+    subSubs: List<String>.from(m['subSubs'] ?? []),
+  );
+}
 
 class CustomCategory {
   final String? id;
   final String userId;
+  final String type; // 'expense' | 'income'
   final String name;
-  final String type;   // 'expense' or 'income'
   final String emoji;
-  final int colorValue;
-  final List<String> subcategories;
-  final DateTime createdAt;
+  final Color color;
+  final List<CustomSubcategory> subcategories;
+  final bool isBuiltIn; // built-in cats cannot be deleted
 
   const CustomCategory({
     this.id,
     required this.userId,
-    required this.name,
     required this.type,
-    required this.emoji,
-    required this.colorValue,
-    required this.subcategories,
-    required this.createdAt,
+    required this.name,
+    this.emoji = '📌',
+    this.color = const Color(0xFF667eea),
+    this.subcategories = const [],
+    this.isBuiltIn = false,
   });
 
-  Color get color => Color(colorValue);
-
   Map<String, dynamic> toMap() => {
-        'userId':        userId,
-        'name':          name,
-        'type':          type,
-        'emoji':         emoji,
-        'colorValue':    colorValue,
-        'subcategories': subcategories,
-        'createdAt':     Timestamp.fromDate(createdAt),
-      };
+    'userId':        userId,
+    'type':          type,
+    'name':          name,
+    'emoji':         emoji,
+    'color':         color.value,
+    'subcategories': subcategories.map((s) => s.toMap()).toList(),
+    'isBuiltIn':     isBuiltIn,
+  };
 
-  factory CustomCategory.fromMap(Map<String, dynamic> map, String id) =>
-      CustomCategory(
-        id:             id,
-        userId:         map['userId']   ?? '',
-        name:           map['name']     ?? '',
-        type:           map['type']     ?? 'expense',
-        emoji:          map['emoji']    ?? '📦',
-        colorValue:     map['colorValue'] ?? Colors.blue.value,
-        subcategories: List<String>.from(map['subcategories'] ?? []),
-        createdAt: map['createdAt'] != null
-            ? (map['createdAt'] as Timestamp).toDate()
-            : DateTime.now(),
-      );
-
-  factory CustomCategory.fromFirestore(DocumentSnapshot doc) =>
-      CustomCategory.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+  factory CustomCategory.fromFirestore(DocumentSnapshot doc) {
+    final d = doc.data() as Map<String, dynamic>;
+    return CustomCategory(
+      id:    doc.id,
+      userId: d['userId'] ?? '',
+      type:  d['type'] ?? 'expense',
+      name:  d['name'] ?? '',
+      emoji: d['emoji'] ?? '📌',
+      color: Color(d['color'] ?? 0xFF667eea),
+      subcategories: (d['subcategories'] as List<dynamic>? ?? [])
+          .map((s) => CustomSubcategory.fromMap(Map<String, dynamic>.from(s)))
+          .toList(),
+      isBuiltIn: d['isBuiltIn'] ?? false,
+    );
+  }
 
   CustomCategory copyWith({
     String? name,
     String? emoji,
-    int? colorValue,
-    List<String>? subcategories,
-  }) =>
-      CustomCategory(
-        id:             id,
-        userId:         userId,
-        name:           name          ?? this.name,
-        type:           type,
-        emoji:          emoji         ?? this.emoji,
-        colorValue:     colorValue    ?? this.colorValue,
-        subcategories:  subcategories ?? this.subcategories,
-        createdAt:      createdAt,
-      );
+    Color? color,
+    List<CustomSubcategory>? subcategories,
+  }) => CustomCategory(
+    id:            id,
+    userId:        userId,
+    type:          type,
+    name:          name ?? this.name,
+    emoji:         emoji ?? this.emoji,
+    color:         color ?? this.color,
+    subcategories: subcategories ?? this.subcategories,
+    isBuiltIn:     isBuiltIn,
+  );
 }
-
-// Available emojis for category picker
-const kCategoryEmojis = [
-  '🍔','🍕','🍜','☕','🛒','👕','👟','💻','📱','🎮',
-  '🎬','🎵','🏋️','⚽','🚗','🛵','✈️','🏠','💡','📞',
-  '🏥','💊','🎓','📚','💼','💰','💳','🎁','🐶','🌿',
-  '🧴','✂️','🔧','🎨','📷','🎯','🛍️','🌮','🍦','🧁',
-  '🚀','⭐','💎','🌟','🔑','🎪','🏖️','🌄','🍷','🎭',
-];
-
-// Available colors
-const kCategoryColors = [
-  Color(0xFFE53935), // Red
-  Color(0xFFE91E63), // Pink
-  Color(0xFF9C27B0), // Purple
-  Color(0xFF3F51B5), // Indigo
-  Color(0xFF1565C0), // Blue
-  Color(0xFF0097A7), // Cyan
-  Color(0xFF00897B), // Teal
-  Color(0xFF43A047), // Green
-  Color(0xFF7CB342), // Light Green
-  Color(0xFFFDD835), // Yellow
-  Color(0xFFFB8C00), // Orange
-  Color(0xFF6D4C41), // Brown
-  Color(0xFF546E7A), // Blue Grey
-  Color(0xFF00ACC1), // Cyan light
-  Color(0xFF8E24AA), // Deep Purple
-];

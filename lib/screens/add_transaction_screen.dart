@@ -60,6 +60,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   String _recurringFrequency = 'monthly';
 
   List<AccountModel> _accounts = [];
+  bool _isBookmarked = false;
 
   final List<String> _paymentMethods = [
     'Cash',
@@ -86,7 +87,72 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       _noteController.text = widget.transaction!.note ?? '';
       _descriptionController.text = widget.transaction!.description ?? '';
       _receiptUrl = widget.transaction!.imageUrl;
+      _loadBookmark();
     }
+  }
+
+  Future<void> _loadBookmark() async {
+    if (widget.transaction == null || widget.transaction!.id.isEmpty) return;
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('transactions')
+          .doc(widget.transaction!.id)
+          .get();
+      if (doc.exists && mounted) {
+        setState(() {
+          _isBookmarked = doc.data()?['isBookmarked'] ?? false;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _toggleBookmark() async {
+    if (widget.transaction == null) return;
+    final newVal = !_isBookmarked;
+    setState(() => _isBookmarked = newVal);
+    try {
+      await FirebaseFirestore.instance
+          .collection('transactions')
+          .doc(widget.transaction!.id)
+          .update({'isBookmarked': newVal});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(newVal ? '🔖 Bookmarked!' : 'Bookmark removed'),
+          backgroundColor: newVal ? const Color(0xFF667eea) : Colors.grey,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 1),
+        ));
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _deleteTransaction() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Delete Transaction'),
+        content: const Text('This cannot be undone. Delete this transaction?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (ok == true && mounted) {
+      await _transactionService.deleteTransaction(widget.transaction!.id);
+      if (mounted) Navigator.pop(context);
+    }
+  }
+
+  void _openAsCopy() {
+    Navigator.pushReplacement(context, MaterialPageRoute(
+      builder: (_) => AddTransactionScreen(
+        transaction: widget.transaction, isCopy: true),
+    ));
   }
 
   void _loadAccounts() {
@@ -147,289 +213,439 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   Widget build(BuildContext context) {
     final isEdit = widget.transaction != null && !widget.isCopy;
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final typeColor = _type == 'income'
+        ? const Color(0xFF43b89c)
+        : _type == 'expense'
+            ? const Color(0xFFe53935)
+            : const Color(0xFF667eea);
+
     return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF0D1117) : const Color(0xFFF0F2F8),
       appBar: AppBar(
-        title: Text(widget.isCopy
-            ? 'Copy Transaction'
-            : (isEdit ? 'Edit Transaction' : 'Add Transaction')),
+        title: Text(
+          widget.isCopy ? '📋 Copy Transaction'
+              : isEdit   ? 'Edit Transaction'
+                         : 'Add Transaction',
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        backgroundColor: isDark ? const Color(0xFF1E2530) : Colors.white,
+        foregroundColor: isDark ? Colors.white : Colors.black87,
+        elevation: 0,
+        actions: [
+          if (!isEdit)
+            TextButton.icon(
+              onPressed: _openReceiptScanner,
+              icon: const Text('🤖', style: TextStyle(fontSize: 14)),
+              label: const Text('Scan',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              style: TextButton.styleFrom(foregroundColor: const Color(0xFF667eea)),
+            ),
+        ],
       ),
+
+      // ── 3 action buttons bottom bar (edit mode only) ─────────────────────
+      bottomNavigationBar: isEdit
+          ? Container(
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E2530) : Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black.withOpacity(0.06),
+                      blurRadius: 10,
+                      offset: const Offset(0, -4)),
+                ],
+              ),
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
+              child: Row(children: [
+                // Delete
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _deleteTransaction,
+                    icon: const Icon(Icons.delete_outline_rounded,
+                        size: 16, color: Colors.red),
+                    label: const Text('Delete',
+                        style: TextStyle(
+                            color: Colors.red,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13)),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 11),
+                      side: BorderSide(color: Colors.red.withOpacity(0.4)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                // Copy
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _openAsCopy,
+                    icon: const Icon(Icons.copy_all_rounded,
+                        size: 16, color: Colors.orange),
+                    label: const Text('Copy',
+                        style: TextStyle(
+                            color: Colors.orange,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13)),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 11),
+                      side: BorderSide(color: Colors.orange.withOpacity(0.4)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                // Bookmark
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _toggleBookmark,
+                    icon: Icon(
+                      _isBookmarked
+                          ? Icons.bookmark_rounded
+                          : Icons.bookmark_border_rounded,
+                      size: 16,
+                      color: const Color(0xFF667eea),
+                    ),
+                    label: Text(
+                      _isBookmarked ? 'Saved' : 'Bookmark',
+                      style: const TextStyle(
+                          color: Color(0xFF667eea),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 11),
+                      side: const BorderSide(
+                          color: Color(0x66667eea)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                      backgroundColor: _isBookmarked
+                          ? const Color(0xFF667eea).withOpacity(0.08)
+                          : null,
+                    ),
+                  ),
+                ),
+              ]),
+            )
+          : null,
+
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 16),
           children: [
 
-            // ── 🤖 Scan Receipt AI Button (only for new transactions) ───────
-            if (!isEdit) ...[
-              GestureDetector(
-                onTap: _openReceiptScanner,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF667eea), Color(0xFF764ba2)],
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                    ),
-                    borderRadius: BorderRadius.circular(14),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF667eea).withOpacity(0.35),
-                        blurRadius: 12,
-                        offset: const Offset(0, 5),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
-                      Text('🤖', style: TextStyle(fontSize: 20)),
-                      SizedBox(width: 10),
-                      Text(
-                        'Scan Receipt with AI',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                        ),
-                      ),
-                      SizedBox(width: 8),
-                      Icon(Icons.camera_alt_rounded,
-                          color: Colors.white70, size: 18),
-                    ],
-                  ),
-                ),
+            // ── Type selector (compact pill style) ────────────────────────
+            Container(
+              height: 38,
+              decoration: BoxDecoration(
+                color: isDark
+                    ? Colors.white.withOpacity(0.06)
+                    : Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(10),
               ),
-              const SizedBox(height: 8),
-              Center(
-                child: Text(
-                  'Camera or gallery · Auto-fills amount, category & date',
-                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(children: [
-                Expanded(child: Divider(color: Colors.grey[300])),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  child: Text('or fill manually',
-                      style: TextStyle(
-                          fontSize: 11, color: Colors.grey[400])),
-                ),
-                Expanded(child: Divider(color: Colors.grey[300])),
-              ]),
-              const SizedBox(height: 16),
-            ],
-
-            // Type Selector
-            SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(
-                  value: 'income',
-                  label: Text('Income'),
-                  icon: Icon(Icons.add_circle_outline),
-                ),
-                ButtonSegment(
-                  value: 'expense',
-                  label: Text('Expense'),
-                  icon: Icon(Icons.remove_circle_outline),
-                ),
-                ButtonSegment(
-                  value: 'transfer',
-                  label: Text('Transfer'),
-                  icon: Icon(Icons.swap_horiz),
-                ),
-              ],
-              selected: {_type},
-              onSelectionChanged: (Set<String> newSelection) {
-                setState(() {
-                  _type = newSelection.first;
-                  _selectedCategory = null;
-                  _selectedSubcategory = null;
-                  _fromAccount = null;
-                  _toAccount = null;
-                });
-              },
-            ),
-            const SizedBox(height: 20),
-
-            // Amount
-            TextFormField(
-              controller: _amountController,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'Amount *',
-                prefixText: '₹ ',
-                border: OutlineInputBorder(),
-              ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please enter amount';
-                }
-                if (double.tryParse(value) == null) {
-                  return 'Please enter valid amount';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
-
-            // Date Picker
-            Row(
-              children: [
-                Expanded(
-                  child: InkWell(
-                    onTap: () async {
-                      final date = await showDatePicker(
-                        context: context,
-                        initialDate: _selectedDate,
-                        firstDate: DateTime(2000),
-                        lastDate: DateTime(2100),
-                      );
-                      if (date != null) {
-                        setState(() {
-                          _selectedDate = date;
-                        });
-                      }
-                    },
-                    child: InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: 'Date *',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.calendar_today),
+              child: Row(children: [
+                for (final t in [
+                  ('income',   'Income',   const Color(0xFF43b89c)),
+                  ('expense',  'Expense',  const Color(0xFFe53935)),
+                  ('transfer', 'Transfer', const Color(0xFF667eea)),
+                ])
+                  Expanded(child: GestureDetector(
+                    onTap: () => setState(() {
+                      _type = t.$1;
+                      _selectedCategory = null;
+                      _selectedSubcategory = null;
+                      _fromAccount = null;
+                      _toAccount = null;
+                    }),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      margin: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: _type == t.$1 ? t.$3 : Colors.transparent,
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Text(
-                        DateFormat('MMM d, yyyy').format(_selectedDate),
-                        style: const TextStyle(fontSize: 16),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Repeat toggle
-                InkWell(
-                  onTap: () {
-                    setState(() {
-                      _isRecurring = !_isRecurring;
-                    });
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey[400]!),
-                      borderRadius: BorderRadius.circular(4),
-                      color: _isRecurring ? Colors.blue[50] : null,
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.repeat,
-                          color: _isRecurring ? Colors.blue : Colors.grey[600],
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Repeat',
+                      child: Center(
+                        child: Text(t.$2,
                           style: TextStyle(
-                            color:
-                                _isRecurring ? Colors.blue : Colors.grey[600],
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: _type == t.$1
+                                ? Colors.white
+                                : Colors.grey[500],
                           ),
                         ),
-                      ],
+                      ),
                     ),
+                  )),
+              ]),
+            ),
+            const SizedBox(height: 12),
+
+            // ── Amount (large, prominent) ─────────────────────────────────
+            Container(
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E2530) : Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: typeColor.withOpacity(0.25)),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              child: Row(children: [
+                Text('₹', style: TextStyle(
+                    fontSize: 22, fontWeight: FontWeight.bold,
+                    color: typeColor)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextFormField(
+                    controller: _amountController,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                        color: typeColor),
+                    decoration: const InputDecoration(
+                      hintText: '0',
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return 'Enter amount';
+                      if (double.tryParse(v) == null) return 'Invalid amount';
+                      return null;
+                    },
                   ),
                 ),
-              ],
+              ]),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),
+
+            // ── Date + Repeat row ─────────────────────────────────────────
+            Row(children: [
+              Expanded(
+                child: GestureDetector(
+                  onTap: () async {
+                    final d = await showDatePicker(
+                      context: context,
+                      initialDate: _selectedDate,
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime(2100),
+                    );
+                    if (d != null) setState(() => _selectedDate = d);
+                  },
+                  child: _compactField(
+                    icon: Icons.calendar_today_rounded,
+                    text: DateFormat('d MMM yyyy').format(_selectedDate),
+                    isDark: isDark,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () => setState(() => _isRecurring = !_isRecurring),
+                child: Container(
+                  height: 44,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: _isRecurring
+                        ? const Color(0xFF667eea).withOpacity(0.1)
+                        : (isDark
+                            ? Colors.white.withOpacity(0.05)
+                            : Colors.grey.shade50),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                        color: _isRecurring
+                            ? const Color(0xFF667eea).withOpacity(0.4)
+                            : (isDark ? Colors.white24 : Colors.grey.shade300)),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.repeat_rounded,
+                        size: 15,
+                        color: _isRecurring
+                            ? const Color(0xFF667eea)
+                            : Colors.grey[500]),
+                    const SizedBox(width: 5),
+                    Text('Repeat',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: _isRecurring
+                                ? const Color(0xFF667eea)
+                                : Colors.grey[500])),
+                  ]),
+                ),
+              ),
+            ]),
 
             // Recurring frequency
             if (_isRecurring) ...[
-              DropdownButtonFormField<String>(
+              const SizedBox(height: 8),
+              _compactDropdown<String>(
                 value: _recurringFrequency,
-                decoration: const InputDecoration(
-                  labelText: 'Repeat Frequency',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.loop),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'daily', child: Text('Daily')),
-                  DropdownMenuItem(value: 'weekly', child: Text('Weekly')),
-                  DropdownMenuItem(value: 'monthly', child: Text('Monthly')),
-                  DropdownMenuItem(value: 'yearly', child: Text('Yearly')),
-                ],
-                onChanged: (value) {
-                  setState(() {
-                    _recurringFrequency = value!;
-                  });
-                },
+                icon: Icons.loop_rounded,
+                hint: 'Repeat frequency',
+                isDark: isDark,
+                items: const ['daily', 'weekly', 'monthly', 'yearly'],
+                labels: const ['Daily', 'Weekly', 'Monthly', 'Yearly'],
+                onChanged: (v) => setState(() => _recurringFrequency = v!),
               ),
-              const SizedBox(height: 16),
             ],
+            const SizedBox(height: 10),
 
-            // Fields based on type
-            if (_type == 'transfer') ...[
-              _buildTransferFields(),
-            ] else ...[
+            // ── Type-specific fields ──────────────────────────────────────
+            if (_type == 'transfer')
+              _buildTransferFields()
+            else ...[
               _buildCategoryFields(),
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
               _buildAccountField(),
             ],
+            const SizedBox(height: 10),
 
-            const SizedBox(height: 16),
-
-            // Note
-            TextFormField(
+            // ── Note ─────────────────────────────────────────────────────
+            _compactTextField(
               controller: _noteController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Note (Optional)',
-                border: OutlineInputBorder(),
-                hintText: 'Add a note...',
-              ),
-            ),
-
-            // Description
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _descriptionController,
+              icon: Icons.notes_rounded,
+              hint: 'Add a note (optional)',
+              isDark: isDark,
               maxLines: 2,
-              decoration: InputDecoration(
-                labelText: 'Description (optional)',
-                hintText: 'Additional details',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+            ),
+            const SizedBox(height: 8),
+
+            // ── Description ───────────────────────────────────────────────
+            _compactTextField(
+              controller: _descriptionController,
+              icon: Icons.description_rounded,
+              hint: 'Description (optional)',
+              isDark: isDark,
+              maxLines: 2,
+            ),
+            const SizedBox(height: 18),
+
+            // ── Save button ───────────────────────────────────────────────
+            SizedBox(
+              height: 48,
+              child: ElevatedButton(
+                onPressed: _isLoading ? null : _saveTransaction,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: typeColor,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
                 ),
-                prefixIcon: const Icon(Icons.description),
+                child: _isLoading
+                    ? const SizedBox(
+                        height: 18, width: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white))
+                    : Text(
+                        isEdit ? 'Update Transaction' : 'Save Transaction',
+                        style: const TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.bold)),
               ),
             ),
-
-            const SizedBox(height: 24),
-
-            // Save Button
-            ElevatedButton(
-              onPressed: _isLoading ? null : _saveTransaction,
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.all(16),
-              ),
-              child: _isLoading
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(
-                      isEdit ? 'UPDATE' : 'SAVE',
-                      style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-            ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 16),
           ],
         ),
       ),
     );
   }
+
+  // ── Compact helper widgets ──────────────────────────────────────────────────
+  Widget _compactField({
+    required IconData icon,
+    required String text,
+    required bool isDark,
+  }) =>
+      Container(
+        height: 44,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+              color: isDark ? Colors.white24 : Colors.grey.shade300),
+        ),
+        child: Row(children: [
+          Icon(icon, size: 14, color: Colors.grey[500]),
+          const SizedBox(width: 8),
+          Text(text,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+        ]),
+      );
+
+  Widget _compactTextField({
+    required TextEditingController controller,
+    required IconData icon,
+    required String hint,
+    required bool isDark,
+    int maxLines = 1,
+  }) =>
+      TextField(
+        controller: controller,
+        maxLines: maxLines,
+        style: const TextStyle(fontSize: 13),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: const TextStyle(fontSize: 12, color: Colors.grey),
+          prefixIcon: Icon(icon, size: 16, color: Colors.grey[400]),
+          border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(
+                  color: isDark ? Colors.white24 : Colors.grey.shade300)),
+          enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(
+                  color: isDark ? Colors.white12 : Colors.grey.shade200)),
+          filled: true,
+          fillColor:
+              isDark ? Colors.white.withOpacity(0.04) : Colors.grey.shade50,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          isDense: true,
+        ),
+      );
+
+  Widget _compactDropdown<T>({
+    required T? value,
+    required IconData icon,
+    required String hint,
+    required bool isDark,
+    required List<T> items,
+    required List<String> labels,
+    required ValueChanged<T?> onChanged,
+  }) =>
+      DropdownButtonFormField<T>(
+        value: value,
+        isDense: true,
+        decoration: InputDecoration(
+          prefixIcon: Icon(icon, size: 16, color: Colors.grey[400]),
+          hintText: hint,
+          hintStyle: const TextStyle(fontSize: 12),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(
+                  color: isDark ? Colors.white12 : Colors.grey.shade200)),
+          filled: true,
+          fillColor:
+              isDark ? Colors.white.withOpacity(0.04) : Colors.grey.shade50,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        ),
+        items: List.generate(
+          items.length,
+          (i) => DropdownMenuItem(
+              value: items[i],
+              child: Text(labels[i],
+                  style: const TextStyle(fontSize: 13))),
+        ),
+        onChanged: onChanged,
+      );
 
   Widget _buildAccountField() {
     if (_accounts.isEmpty) {
@@ -462,11 +678,18 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
     return DropdownButtonFormField<String>(
       value: _type == 'income' ? _toAccount : _fromAccount,
-      decoration: const InputDecoration(
+      isDense: true,
+      decoration: InputDecoration(
         labelText: 'Account *',
-        border: OutlineInputBorder(),
-        prefixIcon: Icon(Icons.account_balance_wallet),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+        enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: Colors.grey.shade200)),
+        prefixIcon: const Icon(Icons.account_balance_wallet_rounded, size: 16),
         hintText: 'Select account',
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        filled: true,
+        fillColor: Colors.grey.shade50,
       ),
       items: _accounts.map((account) {
         return DropdownMenuItem<String>(
@@ -518,25 +741,33 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   Widget _buildCategoryFields() {
     return Column(
       children: [
-        InkWell(
+        GestureDetector(
           onTap: () => _showCategoryPicker(),
-          child: InputDecorator(
-            decoration: const InputDecoration(
-              labelText: 'Category *',
-              border: OutlineInputBorder(),
-              suffixIcon: Icon(Icons.arrow_drop_down),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.grey.shade200),
             ),
-            child: Text(
-              _selectedCategory != null
-                  ? _selectedSubcategory != null
-                      ? '$_selectedCategory - $_selectedSubcategory'
-                      : _selectedCategory!
-                  : 'Select category',
-              style: TextStyle(
-                fontSize: 16,
-                color: _selectedCategory != null ? Colors.black : Colors.grey,
-              ),
-            ),
+            child: Row(children: [
+              Icon(Icons.category_rounded, size: 16, color: Colors.grey[400]),
+              const SizedBox(width: 10),
+              Expanded(child: Text(
+                _selectedCategory != null
+                    ? (_selectedSubcategory != null
+                        ? '$_selectedCategory · $_selectedSubcategory'
+                        : _selectedCategory!)
+                    : 'Select category *',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: _selectedCategory != null ? null : Colors.grey,
+                ),
+              )),
+              Icon(Icons.arrow_forward_ios_rounded,
+                  size: 12, color: Colors.grey[400]),
+            ]),
           ),
         ),
       ],

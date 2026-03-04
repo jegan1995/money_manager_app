@@ -51,30 +51,41 @@ class BudgetPlannerTab extends StatefulWidget {
 class _BudgetPlannerTabState extends State<BudgetPlannerTab> {
   final _svc = BudgetPlannerService();
 
-  // Viewing period
   int  _month = DateTime.now().month;
   int  _year  = DateTime.now().year;
 
-  // Statuses loaded once per refresh
-  bool               _loading  = false;
-  List<BudgetStatus> _statuses = [];
+  bool               _loading       = false;
+  List<BudgetStatus> _statuses      = [];
+  // Track last plans to avoid redundant refreshes (fixes flickering)
+  String             _lastPlansKey  = '';
 
   @override
   void initState() { super.initState(); }
 
-  Future<void> _refresh(List<BudgetPlan> plans) async {
+  // Called only when plans actually change — not every build
+  Future<void> _refreshIfChanged(List<BudgetPlan> plans) async {
+    final key = plans.map((p) => '\${p.id}\${p.amount}').join('|');
+    if (key == _lastPlansKey && _statuses.isNotEmpty) return;
+    _lastPlansKey = key;
+    await _refreshStatuses(plans);
+  }
+
+  Future<void> _refreshStatuses(List<BudgetPlan> plans) async {
     if (_loading) return;
-    setState(() => _loading = true);
-    final statuses = await _svc.getAllStatuses(plans);
-    // Sort: over > near > ok, then alphabetical
-    statuses.sort((a, b) {
-      if (a.isOver  && !b.isOver)  return -1;
-      if (!a.isOver && b.isOver)   return  1;
-      if (a.isNear  && !b.isNear)  return -1;
-      if (!a.isNear && b.isNear)   return  1;
-      return a.plan.category.compareTo(b.plan.category);
-    });
-    if (mounted) setState(() { _statuses = statuses; _loading = false; });
+    if (mounted) setState(() => _loading = true);
+    try {
+      final statuses = await _svc.getAllStatuses(plans);
+      statuses.sort((a, b) {
+        if (a.isOver  && !b.isOver)  return -1;
+        if (!a.isOver && b.isOver)   return  1;
+        if (a.isNear  && !b.isNear)  return -1;
+        if (!a.isNear && b.isNear)   return  1;
+        return a.plan.category.compareTo(b.plan.category);
+      });
+      if (mounted) setState(() { _statuses = statuses; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   @override
@@ -92,10 +103,8 @@ class _BudgetPlannerTabState extends State<BudgetPlannerTab> {
 
         final plans = snap.data ?? [];
 
-        // Trigger refresh whenever plans change
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _refresh(plans);
-        });
+        // Trigger refresh only when plans actually change (no flicker)
+        Future.microtask(() => _refreshIfChanged(plans));
 
         final totalBudget  = _statuses.fold(0.0, (s, st) => s + st.plan.effectiveAmount);
         final totalSpent   = _statuses.fold(0.0, (s, st) => s + st.spent);

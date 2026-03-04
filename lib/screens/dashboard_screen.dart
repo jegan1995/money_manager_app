@@ -422,78 +422,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ── Quick actions ───────────────────────────────────────────────────────────
+  // ── Quick actions (Transfer + useful shortcuts only) ────────────────────────
   Widget _buildQuickActions(bool isDark) {
+    final items = [
+      (emoji: '🔄', label: 'Transfer',   color: const Color(0xFF667eea),
+       action: () => Navigator.push(context,
+           MaterialPageRoute(builder: (_) => const AddTransferScreen()))
+           .then((_) => _load())),
+      (emoji: '🔍', label: 'Search',     color: const Color(0xFF43b89c),
+       action: () => Navigator.push(context,
+           MaterialPageRoute(builder: (_) => const SearchFilterScreen()))),
+      (emoji: '💡', label: 'Insights',   color: const Color(0xFFf77062),
+       action: () => Navigator.push(context,
+           MaterialPageRoute(builder: (_) => const FinancialInsightsScreen()))),
+      (emoji: '📅', label: 'Bills',      color: const Color(0xFFa18cd1),
+       action: () => Navigator.push(context,
+           MaterialPageRoute(builder: (_) => const BillRemindersScreen()))),
+    ];
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _sectionTitle('Quick Actions', isDark),
         const SizedBox(height: 10),
-        Row(
-          children: [
-            _actionBtn(isDark, '💵', 'Income', Colors.green, () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const AddTransactionScreen(),
-                ),
-              ).then((_) => _load());
-            }),
-            const SizedBox(width: 10),
-            _actionBtn(isDark, '🛒', 'Expense', Colors.red, () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const AddTransactionScreen(),
-                ),
-              ).then((_) => _load());
-            }),
-            const SizedBox(width: 10),
-            _actionBtn(isDark, '🔄', 'Transfer', Colors.blue, () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const AddTransferScreen()),
-              ).then((_) => _load());
-            }),
-            const SizedBox(width: 10),
-            _actionBtn(isDark, '📊', 'Insights', Colors.purple, () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => const FinancialInsightsScreen()),
-              );
-            }),
-          ],
-        ),
+        Row(children: items.map((item) => Expanded(child: Padding(
+          padding: EdgeInsets.only(
+            right: items.indexOf(item) < items.length - 1 ? 10 : 0),
+          child: GestureDetector(
+            onTap: item.action,
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              decoration: BoxDecoration(
+                color: item.color.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: item.color.withOpacity(0.2)),
+              ),
+              child: Column(children: [
+                Text(item.emoji, style: const TextStyle(fontSize: 20)),
+                const SizedBox(height: 4),
+                Text(item.label, style: TextStyle(
+                    fontSize: 10, fontWeight: FontWeight.w600,
+                    color: item.color)),
+              ]),
+            ),
+          ),
+        ))).toList()),
       ],
-    );
-  }
-
-  Widget _actionBtn(bool isDark, String emoji, String label, Color color,
-      VoidCallback onTap) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: color.withOpacity(0.2)),
-          ),
-          child: Column(
-            children: [
-              Text(emoji, style: const TextStyle(fontSize: 22)),
-              const SizedBox(height: 4),
-              Text(label,
-                  style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: color)),
-            ],
-          ),
-        ),
-      ),
     );
   }
 
@@ -887,3 +861,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 }
+
+// ================================================================
+// FILE: /workspaces/money_manager_app/lib/screens/dashboard_screen.dart.backup

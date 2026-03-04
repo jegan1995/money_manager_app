@@ -297,29 +297,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
 
               const SizedBox(height: 20),
-              _sectionHeader('Appearance', isDark),
-
-              // ── Dark Mode ─────────────────────────────────────────────
-              _card(isDark, child: SwitchListTile(
-                secondary: Container(
-                  width: 36, height: 36,
-                  decoration: BoxDecoration(
-                    color: Colors.indigo.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    themeProvider.isDarkMode ? Icons.dark_mode : Icons.light_mode,
-                    color: Colors.indigo, size: 18),
-                ),
-                title: const Text('Dark Mode',
-                    style: TextStyle(fontWeight: FontWeight.w600)),
-                subtitle: const Text('Switch between light and dark theme'),
-                value: themeProvider.isDarkMode,
-                activeColor: const Color(0xFF667eea),
-                onChanged: (_) => themeProvider.toggleTheme(),
-              )),
-
-              const SizedBox(height: 20),
               _sectionHeader('Security', isDark),
               _card(isDark, child: const BiometricSettingsTile()),
 

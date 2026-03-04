@@ -861,6 +861,3 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 }
-
-// ================================================================
-// FILE: /workspaces/money_manager_app/lib/screens/dashboard_screen.dart.backup

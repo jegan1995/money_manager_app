@@ -64,7 +64,10 @@ class _BudgetPlannerTabState extends State<BudgetPlannerTab> {
 
   // Called only when plans actually change — not every build
   Future<void> _refreshIfChanged(List<BudgetPlan> plans) async {
-    final key = plans.map((p) => '\${p.id}\${p.amount}').join('|');
+    // Build a fingerprint without string interpolation to avoid escaping issues
+    final ids = plans.map((p) => (p.id ?? '') + p.amount.toString()).toList();
+    ids.sort();
+    final key = ids.join('|');
     if (key == _lastPlansKey && _statuses.isNotEmpty) return;
     _lastPlansKey = key;
     await _refreshStatuses(plans);

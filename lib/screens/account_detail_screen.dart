@@ -855,6 +855,3 @@ class _AccountDetailScreenState extends State<AccountDetailScreen>
         ]),
       );
 }
-
-// ================================================================
-// FILE: /workspaces/money_manager_app/lib/screens/accounts_screen.dart

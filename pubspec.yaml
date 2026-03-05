@@ -1,7 +1,7 @@
 name: money_manager_app        # ← keep this EXACTLY as is
 description: PaisaTrack - Smart personal finance tracker
 publish_to: 'none'
-version: 1.3.0+3 # format: version+buildNumber
+version: 1.4.0+4 # format: version+buildNumber
 environment:
   sdk: ^3.5.4
 dependencies:
@@ -41,7 +41,6 @@ dependencies:
   csv: ^6.0.0
   excel: ^4.0.3
   file_picker: ^8.1.4
-  permission_handler: ^11.3.1
   pdf: ^3.11.1
   printing: ^5.13.1
   share_plus: ^10.1.4

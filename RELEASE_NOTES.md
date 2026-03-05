@@ -1,72 +1,81 @@
-# Release Notes — Money Manager
+# 🚀 PaisaTrack v1.4.0 — Bank Sync, Tags & Personalization
+
+**Release Date:** March 5, 2026  
+**Build:** 1.4.0+4  
+**Platform:** Android (APK) + Web (PWA)
 
 ---
 
-## v1.3.0 — Power Features Update
-**Released: March 2026**
+## 🎉 What's New
 
-### ✨ New Features
-- **🤖 AI Receipt Scanner** — Scan any receipt photo; Claude AI auto-fills amount, merchant, category & date
-- **🛠️ Data Management** — Clear transactions by type/period, carry forward budgets, recalculate balances, delete account
-- **🎯 Enhanced Savings Goals** — Progress bars, milestone markers, auto-deduct from account, monthly contribution planner, 10 goal categories, completion celebration
+### 🏦 Bank Sync — Auto-import from SMS & CSV
+Never type bank transactions manually again.
+- **SMS Auto-Read** (Android): Reads bank messages from HDFC, ICICI, SBI, Kotak, Axis, Yes Bank, GPay, PhonePe, Paytm and auto-creates transactions
+- **CSV Import**: Upload your net-banking statement CSV — the app auto-detects the bank format and maps columns
+- Smart deduplication prevents double entries
+- Preview transactions before importing — select what you want
 
-### 🔧 Improvements
-- **Copy Transaction** — Tap ⋮ on any transaction → Copy; opens pre-filled edit screen with today's date
-- **Transaction tile** — 3-dot menu now shows Edit / Copy / Delete inline; no need to open full screen to delete
-- **Settings cleanup** — Removed duplicate Dark Mode toggle (use Theme Settings from More menu)
-- **Web splash screen** — Beautiful animated loading screen instead of blank white page
-- **Faster app startup** — Auth check now has 3-second timeout; recurring checks run in background
+### 🏷️ Transaction Tags
+- Add `#hashtags` to any transaction — `#business`, `#travel`, `#medical`, `#tax`, and more
+- 10 preset tags + create your own custom tags
+- Filter your transaction list by tag with one tap
+- Tags displayed as tiny chips on each transaction tile
 
-### 🐛 Bug Fixes
-- Fixed account balances becoming incorrect after deleting transactions
-- Fixed recurring transaction service blocking app startup
-- Fixed receipt scanner CORS error on web (AI scan works on Android APK)
+### 📸 Profile Photo
+- Upload your photo from gallery (web + Android) or camera (Android)
+- Stored securely in Firebase — never shared
+- Tap the avatar in Settings to change or remove
 
----
+### 🎨 Account Color Picker
+- Assign a custom color to any account from a palette of 12
+- Account card and save button update live as you pick
+- Resets to type-default if you clear the color
 
-## v1.2.0 — Smart Features Update
-**Released: March 2026**
-
-### ✨ New Features
-- **📅 Financial Calendar** — View transactions by date, month summary
-- **🤝 Split Expense Manager** — Split bills with friends, track who paid
-- **🤖 AI Receipt Scanner** (Beta) — Scan receipts with Claude Vision API
-
-### 🔧 Improvements
-- Smart Dashboard with quick stats
-- Improved transaction filters
+### 💳 Credit Card Billing Cycle
+- Set **Statement Date** (e.g. 20th) and **Payment Due Date** (e.g. 5th) on credit card accounts
+- Account detail view filters transactions by billing cycle, not calendar month
+- Purple info bar shows your statement & due dates at a glance
+- Arrow navigation moves between billing cycles
 
 ---
 
-## v1.1.0 — Analytics & Planning
-**Released: February 2026**
-
-### ✨ New Features
-- **📊 Tax Calculator** — FY 2025-26 old & new regime comparison
-- **💎 Net Worth Tracker** — Assets vs liabilities
-- **📋 Budget Planner** — Monthly budget with alerts
-- **🏦 Loan & EMI Manager** — Track loans, calculate EMI
-
-### 🔧 Improvements
-- Enhanced reports with charts
-- PDF export for reports
+## 🐛 Bug Fixes
+- Budget tab no longer flickers due to infinite refresh loop
+- Account balance shows clean rounded numbers (no more ₹201.57999…)
+- Dashboard quick actions replaced with actually useful shortcuts
+- Custom category color crash on web fixed
+- `HapticFeedback` missing import in transaction screen fixed
 
 ---
 
-## v1.0.0 — Initial Release
-**Released: February 2026**
+## 📦 Installation
 
-### 🎉 Launch Features
-- Income & Expense tracking
-- Multiple accounts (Cash, Bank, Wallet)
-- Categories & subcategories
-- AI Financial Insights
-- Health Score
-- Cashflow analysis
-- Subscription Tracker
-- Bill Reminders
-- Investment Portfolio
-- Biometric lock (fingerprint/PIN)
-- Dark mode
-- CSV & Excel export
-- Firebase sync across devices
+### Android APK
+Download `app-release.apk` from the assets below.
+
+### Web (PWA)
+Visit: **[your-firebase-app-url.web.app]**
+On Android Chrome: tap menu → "Add to Home Screen" to install as app.
+
+---
+
+## 🔑 Permissions Required (Android)
+| Permission | Used For |
+|-----------|---------|
+| `READ_SMS` | Bank Sync SMS auto-import (optional) |
+| `CAMERA` | Receipt scanner, profile photo (optional) |
+| `READ_EXTERNAL_STORAGE` | Photo gallery picker (optional) |
+| `INTERNET` | Firebase sync, AI features |
+| `USE_BIOMETRIC` | Fingerprint/face app lock |
+
+---
+
+## 📋 Full Changelog
+See [CHANGELOG.md](./CHANGELOG.md) for complete version history.
+
+## 🔒 Privacy
+See [PRIVACY_POLICY.md](./PRIVACY_POLICY.md) for full privacy details.
+
+---
+
+*Built with ❤️ using Flutter & Firebase by Jegan*

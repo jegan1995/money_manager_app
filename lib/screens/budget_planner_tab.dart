@@ -1,5 +1,6 @@
 // lib/screens/budget_planner_tab.dart
 // Budget Planner — monthly + custom date range, rollover, alerts
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -54,26 +55,38 @@ class _BudgetPlannerTabState extends State<BudgetPlannerTab> {
   int  _month = DateTime.now().month;
   int  _year  = DateTime.now().year;
 
-  bool               _loading       = false;
-  List<BudgetStatus> _statuses      = [];
-  // Track last plans to avoid redundant refreshes (fixes flickering)
-  String             _lastPlansKey  = '';
+  bool                    _loading    = false;
+  List<BudgetStatus>      _statuses   = [];
+  List<BudgetPlan>        _lastPlans  = [];
+  StreamSubscription<List<BudgetPlan>>? _planSub;
 
   @override
-  void initState() { super.initState(); }
-
-  // Called only when plans actually change — not every build
-  Future<void> _refreshIfChanged(List<BudgetPlan> plans) async {
-    // Build a fingerprint without string interpolation to avoid escaping issues
-    final ids = plans.map((p) => (p.id ?? '') + p.amount.toString()).toList();
-    ids.sort();
-    final key = ids.join('|');
-    if (key == _lastPlansKey && _statuses.isNotEmpty) return;
-    _lastPlansKey = key;
-    await _refreshStatuses(plans);
+  void initState() {
+    super.initState();
+    _subscribePlans();
   }
 
-  Future<void> _refreshStatuses(List<BudgetPlan> plans) async {
+  void _subscribePlans() {
+    _planSub?.cancel();
+    _planSub = _svc.getPlansForMonth(_month, _year).listen((plans) {
+      // Only refresh when plans actually changed
+      final changed = plans.length != _lastPlans.length ||
+          !plans.every((p) => _lastPlans.any(
+              (o) => o.id == p.id && o.amount == p.amount));
+      if (changed || _statuses.isEmpty) {
+        _lastPlans = plans;
+        _loadStatuses(plans);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _planSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadStatuses(List<BudgetPlan> plans) async {
     if (_loading) return;
     if (mounted) setState(() => _loading = true);
     try {
@@ -97,27 +110,19 @@ class _BudgetPlannerTabState extends State<BudgetPlannerTab> {
     final cardBg  = isDark ? const Color(0xFF1E2530) : Colors.white;
     final bg      = isDark ? const Color(0xFF0D1117) : const Color(0xFFF5F6FA);
 
-    return StreamBuilder<List<BudgetPlan>>(
-      stream: _svc.getPlansForMonth(_month, _year),
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting && _statuses.isEmpty) {
-          return const Center(child: CircularProgressIndicator());
-        }
+    if (_loading && _statuses.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
-        final plans = snap.data ?? [];
+    final totalBudget  = _statuses.fold(0.0, (s, st) => s + st.plan.effectiveAmount);
+    final totalSpent   = _statuses.fold(0.0, (s, st) => s + st.spent);
+    final totalRemain  = totalBudget - totalSpent;
+    final overCount    = _statuses.where((s) => s.isOver).length;
+    final nearCount    = _statuses.where((s) => s.isNear).length;
 
-        // Trigger refresh only when plans actually change (no flicker)
-        Future.microtask(() => _refreshIfChanged(plans));
-
-        final totalBudget  = _statuses.fold(0.0, (s, st) => s + st.plan.effectiveAmount);
-        final totalSpent   = _statuses.fold(0.0, (s, st) => s + st.spent);
-        final totalRemain  = totalBudget - totalSpent;
-        final overCount    = _statuses.where((s) => s.isOver).length;
-        final nearCount    = _statuses.where((s) => s.isNear).length;
-
-        return Container(
-          color: bg,
-          child: ListView(
+    return Container(
+      color: bg,
+      child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
 
@@ -128,11 +133,15 @@ class _BudgetPlannerTabState extends State<BudgetPlannerTab> {
                   if (_month == 1) { _month = 12; _year--; }
                   else { _month--; }
                   _statuses = [];
+                  _lastPlans = [];
+                  _subscribePlans();
                 }),
                 onNext: () => setState(() {
                   if (_month == 12) { _month = 1; _year++; }
                   else { _month++; }
                   _statuses = [];
+                  _lastPlans = [];
+                  _subscribePlans();
                 }),
                 isDark: isDark,
               ),
@@ -198,8 +207,6 @@ class _BudgetPlannerTabState extends State<BudgetPlannerTab> {
               const SizedBox(height: 80),
             ],
           ),
-        );
-      },
     );
   }
 

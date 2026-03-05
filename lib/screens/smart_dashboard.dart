@@ -1,4 +1,3 @@
-// lib/screens/smart_dashboard.dart
 // Smart Dashboard — financial command center
 // Pulls from: accounts, transactions, budgets, loans, net worth, goals
 import 'package:flutter/material.dart';
@@ -123,11 +122,6 @@ class _SmartDashboardState extends State<SmartDashboard>
                 ),
               )),
 
-              // ── Quick actions ─────────────────────────────────────────────
-              SliverToBoxAdapter(child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-                child: _QuickActions(isDark: isDark, context: context),
-              )),
 
               // ── Budget snapshot ───────────────────────────────────────────
               SliverToBoxAdapter(child: Padding(
@@ -391,67 +385,7 @@ class _BalanceCard extends StatelessWidget {
       );
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// QUICK ACTIONS
-// ════════════════════════════════════════════════════════════════════════════
-class _QuickActions extends StatelessWidget {
-  final bool isDark;
-  final BuildContext context;
-  const _QuickActions({required this.isDark, required this.context});
 
-  @override
-  Widget build(BuildContext ctx) {
-    final cardBg = isDark ? const Color(0xFF1E2530) : Colors.white;
-    final actions = [
-      (Icons.add_circle_rounded,    'Add\nExpense',   const Color(0xFFfa709a),
-          () => Navigator.push(ctx, SlidePageRoute(
-              page: const AddTransactionScreen()))),
-      (Icons.savings_rounded,       'Add\nIncome',    const Color(0xFF43e97b),
-          () => Navigator.push(ctx, SlidePageRoute(
-              page: const AddTransactionScreen()))),
-      (Icons.list_alt_rounded,      'All\nTransact.', const Color(0xFF667eea),
-          () => Navigator.push(ctx, MaterialPageRoute(
-              builder: (_) => const TransactionsScreen()))),
-      (Icons.insert_chart_rounded,  'Reports',        const Color(0xFF764ba2),
-          () => Navigator.push(ctx, MaterialPageRoute(
-              builder: (_) => const EnhancedReportsScreen()))),
-    ];
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10, offset: const Offset(0, 4))],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: actions.map((a) => GestureDetector(
-          onTap: a.$4,
-          child: Column(children: [
-            Container(
-              width: 48, height: 48,
-              decoration: BoxDecoration(
-                color: a.$3.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Icon(a.$1, color: a.$3, size: 22),
-            ),
-            const SizedBox(height: 6),
-            Text(a.$2,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontSize: 10,
-                    color: isDark ? Colors.white70 : Colors.black54,
-                    fontWeight: FontWeight.w600)),
-          ]),
-        )).toList(),
-      ),
-    );
-  }
-}
 
 // ════════════════════════════════════════════════════════════════════════════
 // BUDGET SNAPSHOT

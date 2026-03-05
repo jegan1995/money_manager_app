@@ -41,7 +41,14 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     if (widget.account != null) {
       _namCtrl.text = widget.account!.name;
       _type         = widget.account!.type;
-      _balCtrl.text = widget.account!.balance.abs().toString();
+      // Format balance cleanly — avoid floating point like 201.5799999
+      final rawBal = widget.account!.balance.abs();
+      if (rawBal == rawBal.truncateToDouble()) {
+        _balCtrl.text = rawBal.toStringAsFixed(0);         // e.g. "500"
+      } else {
+        _balCtrl.text = double.parse(
+            rawBal.toStringAsFixed(2)).toString();          // e.g. "201.58"
+      }
       _noteCtrl.text = widget.account!.note ?? '';
     }
   }
@@ -234,6 +241,10 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                           icon: Icons.currency_rupee,
                           keyboardType: const TextInputType.numberWithOptions(
                               decimal: true),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(
+                                RegExp(r'[0-9.]')),
+                          ],
                           validator: (v) {
                             if (v == null || v.trim().isEmpty)
                               return 'Enter balance';
@@ -333,6 +344,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     required IconData icon,
     TextInputType? keyboardType,
     int maxLines = 1,
+    List<TextInputFormatter>? inputFormatters,
     String? Function(String?)? validator,
     void Function(String)? onChanged,
   }) =>
@@ -340,6 +352,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         controller: controller,
         keyboardType: keyboardType,
         maxLines: maxLines,
+        inputFormatters: inputFormatters,
         onChanged: onChanged,
         validator: validator,
         decoration: InputDecoration(

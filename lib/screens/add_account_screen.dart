@@ -17,39 +17,55 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   final _balCtrl        = TextEditingController();
   final _noteCtrl       = TextEditingController();
   final _accountService = AccountService();
-  String _type    = 'cash';
-  bool _loading   = false;
+  String  _type    = 'cash';
+  String? _color;   // hex e.g. '#667eea'
+  bool    _loading = false;
 
-  // Account type definitions
+  // Preset color palette
+  static const _colors = [
+    '#667eea', '#43b89c', '#f77062', '#f5a623',
+    '#2E7D32', '#1565C0', '#6A1B9A', '#00838F',
+    '#C62828', '#F57F17', '#37474F', '#ad1457',
+  ];
+
   static const _types = [
-    {'value': 'cash',        'label': 'Cash',         'icon': Icons.money,                   'color': 0xFF2E7D32},
-    {'value': 'bank',        'label': 'Bank Account',  'icon': Icons.account_balance,          'color': 0xFF1565C0},
-    {'value': 'card',        'label': 'Debit Card',    'icon': Icons.credit_card,              'color': 0xFF00838F},
-    {'value': 'credit_card', 'label': 'Credit Card',   'icon': Icons.credit_card,              'color': 0xFF6A1B9A},
-    {'value': 'wallet',      'label': 'Digital Wallet','icon': Icons.account_balance_wallet,   'color': 0xFFF57F17},
-    {'value': 'loan',        'label': 'Loan',          'icon': Icons.receipt_long,             'color': 0xFFC62828},
-    {'value': 'other',       'label': 'Other',         'icon': Icons.savings,                  'color': 0xFF546E7A},
+    {'value': 'cash',        'label': 'Cash',          'icon': Icons.money,                 'color': 0xFF2E7D32},
+    {'value': 'bank',        'label': 'Bank Account',  'icon': Icons.account_balance,        'color': 0xFF1565C0},
+    {'value': 'card',        'label': 'Debit Card',    'icon': Icons.credit_card,            'color': 0xFF00838F},
+    {'value': 'credit_card', 'label': 'Credit Card',   'icon': Icons.credit_card,            'color': 0xFF6A1B9A},
+    {'value': 'wallet',      'label': 'Digital Wallet','icon': Icons.account_balance_wallet, 'color': 0xFFF57F17},
+    {'value': 'loan',        'label': 'Loan',          'icon': Icons.receipt_long,           'color': 0xFFC62828},
+    {'value': 'other',       'label': 'Other',         'icon': Icons.savings,                'color': 0xFF546E7A},
   ];
 
   Map<String, dynamic> get _selectedType =>
-      _types.firstWhere((t) => t['value'] == _type,
-          orElse: () => _types[0]);
+      _types.firstWhere((t) => t['value'] == _type, orElse: () => _types[0]);
+
+  // Effective color: custom if set, else type default
+  Color get _effectiveColor {
+    if (_color != null) {
+      try {
+        return Color(int.parse('FF${_color!.substring(1)}', radix: 16));
+      } catch (_) {}
+    }
+    return Color(_selectedType['color'] as int);
+  }
 
   @override
   void initState() {
     super.initState();
     if (widget.account != null) {
-      _namCtrl.text = widget.account!.name;
-      _type         = widget.account!.type;
-      // Format balance cleanly — avoid floating point like 201.5799999
+      _namCtrl.text  = widget.account!.name;
+      _type          = widget.account!.type;
+      _color         = widget.account!.color;
+      _noteCtrl.text = widget.account!.note ?? '';
+      // Format balance display
       final rawBal = widget.account!.balance.abs();
       if (rawBal == rawBal.truncateToDouble()) {
-        _balCtrl.text = rawBal.toStringAsFixed(0);         // e.g. "500"
+        _balCtrl.text = rawBal.toStringAsFixed(0);
       } else {
-        _balCtrl.text = double.parse(
-            rawBal.toStringAsFixed(2)).toString();          // e.g. "201.58"
+        _balCtrl.text = double.parse(rawBal.toStringAsFixed(2)).toString();
       }
-      _noteCtrl.text = widget.account!.note ?? '';
     }
   }
 
@@ -59,13 +75,96 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     super.dispose();
   }
 
+  // ── Color Picker Bottom Sheet ─────────────────────────────────────────────
+  void _showColorPicker() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E2530) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Container(
+              width: 40, height: 4,
+              margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const Text('Choose Account Color',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 20),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 6, crossAxisSpacing: 12, mainAxisSpacing: 12,
+              ),
+              itemCount: _colors.length,
+              itemBuilder: (ctx, i) {
+                final hex = _colors[i];
+                final selected = _color == hex;
+                Color c;
+                try {
+                  c = Color(int.parse('FF${hex.substring(1)}', radix: 16));
+                } catch (_) {
+                  c = Colors.grey;
+                }
+                return GestureDetector(
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    setState(() => _color = hex);
+                    Navigator.pop(ctx);
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    decoration: BoxDecoration(
+                      color: c,
+                      shape: BoxShape.circle,
+                      border: selected
+                          ? Border.all(color: Colors.white, width: 3)
+                          : null,
+                      boxShadow: selected
+                          ? [BoxShadow(color: c.withOpacity(0.5),
+                              blurRadius: 8, spreadRadius: 2)]
+                          : null,
+                    ),
+                    child: selected
+                        ? const Icon(Icons.check, color: Colors.white, size: 18)
+                        : null,
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+            // Reset to default
+            TextButton.icon(
+              onPressed: () {
+                setState(() => _color = null);
+                Navigator.pop(ctx);
+              },
+              icon: const Icon(Icons.refresh_rounded, size: 16),
+              label: const Text('Reset to Default'),
+            ),
+          ]),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final isEdit = widget.account != null;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg     = isDark ? const Color(0xFF0D1117) : const Color(0xFFF0F4FF);
-    final card   = isDark ? const Color(0xFF1E2530) : Colors.white;
-    final accColor = Color(_selectedType['color'] as int);
+    final isEdit   = widget.account != null;
+    final isDark   = Theme.of(context).brightness == Brightness.dark;
+    final bg       = isDark ? const Color(0xFF0D1117) : const Color(0xFFF0F4FF);
+    final card     = isDark ? const Color(0xFF1E2530) : Colors.white;
+    final accColor = _effectiveColor;
 
     return Scaffold(
       backgroundColor: bg,
@@ -93,54 +192,71 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // ── Account type header preview ────────────────────
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            accColor,
-                            accColor.withOpacity(0.7),
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(children: [
-                        Container(
-                          width: 56, height: 56,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(14),
+                    // ── Account preview card ───────────────────────────
+                    GestureDetector(
+                      onTap: _showColorPicker,
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [accColor, accColor.withOpacity(0.7)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
                           ),
-                          child: Icon(
-                            _selectedType['icon'] as IconData,
-                            color: Colors.white, size: 28),
+                          borderRadius: BorderRadius.circular(20),
                         ),
-                        const SizedBox(width: 16),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _namCtrl.text.isEmpty
-                                  ? 'Account Name' : _namCtrl.text,
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold),
+                        child: Row(children: [
+                          Container(
+                            width: 56, height: 56,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(14),
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              _selectedType['label'] as String,
-                              style: TextStyle(
-                                  color: Colors.white.withOpacity(0.8),
-                                  fontSize: 13),
+                            child: Icon(
+                              _selectedType['icon'] as IconData,
+                              color: Colors.white, size: 28),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _namCtrl.text.isEmpty ? 'Account Name' : _namCtrl.text,
+                                style: const TextStyle(
+                                    color: Colors.white, fontSize: 18,
+                                    fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                _selectedType['label'] as String,
+                                style: TextStyle(
+                                    color: Colors.white.withOpacity(0.8),
+                                    fontSize: 13),
+                              ),
+                            ],
+                          )),
+                          // Color edit hint
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(20),
                             ),
-                          ],
-                        ),
-                      ]),
+                            child: const Row(mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.color_lens_rounded,
+                                    color: Colors.white, size: 14),
+                                SizedBox(width: 4),
+                                Text('Color', style: TextStyle(
+                                    color: Colors.white, fontSize: 11,
+                                    fontWeight: FontWeight.w600)),
+                              ],
+                            ),
+                          ),
+                        ]),
+                      ),
                     ),
 
                     const SizedBox(height: 20),
@@ -157,16 +273,20 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                               blurRadius: 8)]),
                       child: Column(
                         children: _types.asMap().entries.map((e) {
-                          final t    = e.value;
+                          final t      = e.value;
                           final isLast = e.key == _types.length - 1;
-                          final sel  = _type == t['value'];
-                          final tc   = Color(t['color'] as int);
+                          final sel    = _type == t['value'];
+                          final tc     = Color(t['color'] as int);
                           return Column(children: [
                             InkWell(
                               borderRadius: BorderRadius.circular(16),
                               onTap: () {
                                 HapticFeedback.selectionClick();
-                                setState(() => _type = t['value'] as String);
+                                setState(() {
+                                  _type = t['value'] as String;
+                                  // Reset custom color when type changes
+                                  // so default color updates properly
+                                });
                               },
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(
@@ -191,8 +311,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                                   )),
                                   if (sel)
                                     Icon(Icons.check_circle,
-                                        color: const Color(0xFF667eea),
-                                        size: 20),
+                                        color: const Color(0xFF667eea), size: 20),
                                 ]),
                               ),
                             ),
@@ -237,7 +356,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                           label: (_type == 'credit_card' || _type == 'loan')
                               ? 'Outstanding Balance (₹)'
                               : 'Current Balance (₹)',
-                          hint: '0.00',
+                          hint: '0',
                           icon: Icons.currency_rupee,
                           keyboardType: const TextInputType.numberWithOptions(
                               decimal: true),
@@ -275,8 +394,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                         decoration: BoxDecoration(
                           color: Colors.orange.withOpacity(0.08),
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                              color: Colors.orange.withOpacity(0.3)),
+                          border: Border.all(color: Colors.orange.withOpacity(0.3)),
                         ),
                         child: Row(children: [
                           const Icon(Icons.info_outline,
@@ -296,12 +414,11 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
 
                     // ── Save button ───────────────────────────────────
                     SizedBox(
-                      width: double.infinity,
-                      height: 52,
+                      width: double.infinity, height: 52,
                       child: ElevatedButton(
                         onPressed: _loading ? null : _save,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF667eea),
+                          backgroundColor: accColor,
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14)),
@@ -313,8 +430,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                                     color: Colors.white, strokeWidth: 2))
                             : Text(isEdit ? 'Update Account' : 'Save Account',
                                 style: const TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.bold)),
+                                    fontSize: 15, fontWeight: FontWeight.bold)),
                       ),
                     ),
                     const SizedBox(height: 32),
@@ -329,13 +445,11 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   }
 
   Widget _sectionLabel(String text, bool isDark) => Text(
-        text.toUpperCase(),
-        style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            color: Colors.grey[500],
-            letterSpacing: 1.1),
-      );
+    text.toUpperCase(),
+    style: TextStyle(
+        fontSize: 11, fontWeight: FontWeight.bold,
+        color: Colors.grey[500], letterSpacing: 1.1),
+  );
 
   Widget _field({
     required TextEditingController controller,
@@ -343,8 +457,8 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     required String hint,
     required IconData icon,
     TextInputType? keyboardType,
-    int maxLines = 1,
     List<TextInputFormatter>? inputFormatters,
+    int maxLines = 1,
     String? Function(String?)? validator,
     void Function(String)? onChanged,
   }) =>
@@ -352,9 +466,9 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         controller: controller,
         keyboardType: keyboardType,
         maxLines: maxLines,
-        inputFormatters: inputFormatters,
         onChanged: onChanged,
         validator: validator,
+        inputFormatters: inputFormatters,
         decoration: InputDecoration(
           labelText: label,
           hintText: hint,
@@ -376,7 +490,6 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       if (uid == null) throw Exception('Not logged in');
 
       double balance = double.parse(_balCtrl.text.trim());
-      // Credit/loan stored as negative
       if (_type == 'credit_card' || _type == 'loan') {
         balance = -balance.abs();
       }
@@ -387,6 +500,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         name:    _namCtrl.text.trim(),
         type:    _type,
         balance: balance,
+        color:   _color,
         note:    _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
       );
 
@@ -415,8 +529,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Delete Account'),
-        content: Text(
-            'Delete "${widget.account!.name}"? This cannot be undone.'),
+        content: Text('Delete "${widget.account!.name}"? This cannot be undone.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false),
               child: const Text('Cancel')),
@@ -432,10 +545,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     if (ok != true) return;
     try {
       await _accountService.deleteAccount(widget.account!.id!);
-      if (mounted) {
-        Navigator.pop(context);
-        _snack('Account deleted', true);
-      }
+      if (mounted) { Navigator.pop(context); _snack('Account deleted', true); }
     } catch (e) {
       if (mounted) _snack('Error: $e', false);
     }

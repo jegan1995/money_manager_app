@@ -1,9 +1,14 @@
 // lib/screens/settings_screen.dart
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:universal_html/html.dart' as html;
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:image_picker/image_picker.dart';
 import '../providers/theme_provider.dart';
 import '../services/auth_service.dart';
 import 'app_lock_screen.dart';
@@ -15,11 +20,16 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final _auth    = AuthService();
-  String _name   = '';
-  String _email  = '';
-  String _version = '';
-  bool   _loading = true;
+  final _auth      = AuthService();
+  final _firestore = FirebaseFirestore.instance;
+  final _picker    = ImagePicker();
+
+  String    _name         = '';
+  String    _email        = '';
+  String    _version      = '';
+  bool      _loading      = true;
+  bool      _photoLoading = false;
+  Uint8List? _photoBytes;   // in-memory photo bytes
 
   @override
   void initState() { super.initState(); _load(); }
@@ -28,13 +38,168 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final name    = await _auth.getUserName();
     final pkgInfo = await PackageInfo.fromPlatform().catchError((_) =>
         PackageInfo(appName: '', packageName: '', version: '1.3.0', buildNumber: ''));
+    // Load profile photo from Firestore
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    Uint8List? photo;
+    if (uid != null) {
+      try {
+        final doc = await _firestore.collection('users').doc(uid).get();
+        final b64 = doc.data()?['photoBase64'] as String?;
+        if (b64 != null && b64.isNotEmpty) {
+          photo = base64Decode(b64);
+        }
+      } catch (_) {}
+    }
     if (mounted) setState(() {
-      _name    = name ?? _auth.currentUser?.displayName ?? 'User';
-      _email   = _auth.currentUser?.email ?? '';
-      _version = pkgInfo.version;
-      _loading  = false;
+      _name        = name ?? _auth.currentUser?.displayName ?? 'User';
+      _email       = _auth.currentUser?.email ?? '';
+      _version     = pkgInfo.version;
+      _photoBytes  = photo;
+      _loading     = false;
     });
   }
+
+  // ── Pick profile photo ────────────────────────────────────────────────────
+  Future<void> _pickPhoto() async {
+    if (kIsWeb) {
+      // Web: use HTML file input
+      final input = html.FileUploadInputElement()
+        ..accept = 'image/*'
+        ..click();
+      await input.onChange.first;
+      if (input.files == null || input.files!.isEmpty) return;
+      final file = input.files![0];
+      final reader = html.FileReader();
+      reader.readAsArrayBuffer(file);
+      await reader.onLoad.first;
+      final bytes = reader.result as Uint8List?;
+      if (bytes != null) await _savePhoto(bytes);
+    } else {
+      // Mobile: use image_picker
+      final picked = await _picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 400, maxHeight: 400,
+        imageQuality: 70,
+      );
+      if (picked == null) return;
+      final bytes = await picked.readAsBytes();
+      await _savePhoto(bytes);
+    }
+  }
+
+  Future<void> _takePhoto() async {
+    if (kIsWeb) { _pickPhoto(); return; }
+    final picked = await _picker.pickImage(
+      source: ImageSource.camera,
+      maxWidth: 400, maxHeight: 400,
+      imageQuality: 70,
+    );
+    if (picked == null) return;
+    final bytes = await picked.readAsBytes();
+    await _savePhoto(bytes);
+  }
+
+  Future<void> _savePhoto(Uint8List bytes) async {
+    // Limit size to 500KB
+    if (bytes.lengthInBytes > 500 * 1024) {
+      _snack('Image too large. Please choose a smaller image.', false);
+      return;
+    }
+    setState(() => _photoLoading = true);
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) throw Exception('Not logged in');
+      final b64 = base64Encode(bytes);
+      await _firestore.collection('users').doc(uid).set(
+        {'photoBase64': b64}, SetOptions(merge: true));
+      if (mounted) {
+        setState(() { _photoBytes = bytes; _photoLoading = false; });
+        _snack('Profile photo updated ✅', true);
+      }
+    } catch (e) {
+      if (mounted) { setState(() => _photoLoading = false); _snack('Error: $e', false); }
+    }
+  }
+
+  Future<void> _removePhoto() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    setState(() => _photoLoading = true);
+    try {
+      await _firestore.collection('users').doc(uid).set(
+        {'photoBase64': ''}, SetOptions(merge: true));
+      if (mounted) {
+        setState(() { _photoBytes = null; _photoLoading = false; });
+        _snack('Photo removed', true);
+      }
+    } catch (e) {
+      if (mounted) { setState(() => _photoLoading = false); _snack('Error: $e', false); }
+    }
+  }
+
+  // ── Photo picker sheet ────────────────────────────────────────────────────
+  void _showPhotoOptions() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E2530) : Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            width: 40, height: 4,
+            margin: const EdgeInsets.only(bottom: 20),
+            decoration: BoxDecoration(
+              color: Colors.grey[300],
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const Text('Profile Photo',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          if (!kIsWeb) ...[
+            _photoOption(Icons.camera_alt_rounded, 'Take Photo', Colors.blue,
+                () { Navigator.pop(ctx); _takePhoto(); }),
+            const SizedBox(height: 8),
+          ],
+          _photoOption(Icons.photo_library_rounded, 'Choose from Gallery',
+              const Color(0xFF667eea),
+              () { Navigator.pop(ctx); _pickPhoto(); }),
+          if (_photoBytes != null) ...[
+            const SizedBox(height: 8),
+            _photoOption(Icons.delete_outline_rounded, 'Remove Photo',
+                Colors.red,
+                () { Navigator.pop(ctx); _removePhoto(); }),
+          ],
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
+  }
+
+  Widget _photoOption(IconData icon, String label, Color color, VoidCallback onTap) =>
+      InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.06),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(width: 12),
+            Text(label, style: TextStyle(
+                fontWeight: FontWeight.w600, color: color)),
+          ]),
+        ),
+      );
 
   // ── Edit Profile ─────────────────────────────────────────────────────────
   void _showEditProfile() {
@@ -46,35 +211,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (ctx) => StatefulBuilder(builder: (ctx, setSheetState) {
         bool saving = false;
         String? error;
+        final isDark = Theme.of(context).brightness == Brightness.dark;
         return Padding(
-          padding: EdgeInsets.only(
-              bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
           child: Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: Theme.of(context).scaffoldBackgroundColor,
+              color: isDark ? const Color(0xFF1E2530) : Colors.white,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
             ),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Container(width: 40, height: 4,
-                  margin: const EdgeInsets.only(bottom: 20),
-                  decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(2))),
+              Container(
+                width: 40, height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2)),
+              ),
               const Text('Edit Profile',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 24),
-              // Avatar initial
-              CircleAvatar(
-                radius: 36,
-                backgroundColor: const Color(0xFF667eea).withOpacity(0.15),
-                child: Text(
-                  (_name.isNotEmpty ? _name[0] : 'U').toUpperCase(),
-                  style: const TextStyle(
-                      fontSize: 28, color: Color(0xFF667eea),
-                      fontWeight: FontWeight.bold),
-                ),
+              const SizedBox(height: 20),
+              // Avatar
+              GestureDetector(
+                onTap: () { Navigator.pop(ctx); _showPhotoOptions(); },
+                child: Stack(children: [
+                  _buildAvatar(radius: 40),
+                  Positioned(
+                    bottom: 0, right: 0,
+                    child: Container(
+                      width: 28, height: 28,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF667eea),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                      ),
+                      child: const Icon(Icons.camera_alt_rounded,
+                          color: Colors.white, size: 14),
+                    ),
+                  ),
+                ]),
               ),
+              const SizedBox(height: 6),
+              Text('Tap to change photo',
+                  style: TextStyle(fontSize: 11, color: Colors.grey[500])),
               const SizedBox(height: 20),
               TextField(
                 controller: nameCtrl,
@@ -92,7 +271,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Text(error!, style: const TextStyle(color: Colors.red, fontSize: 12)),
               ],
               const SizedBox(height: 12),
-              // Email (read-only)
               TextField(
                 enabled: false,
                 controller: TextEditingController(text: _email),
@@ -106,8 +284,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const SizedBox(height: 20),
               SizedBox(
-                width: double.infinity,
-                height: 48,
+                width: double.infinity, height: 48,
                 child: ElevatedButton(
                   onPressed: saving ? null : () async {
                     final newName = nameCtrl.text.trim();
@@ -121,15 +298,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       if (mounted) {
                         setState(() => _name = newName);
                         Navigator.pop(ctx);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Profile updated ✅'),
-                              backgroundColor: Colors.green));
+                        _snack('Profile updated ✅', true);
                       }
                     } catch (e) {
-                      setSheetState(() {
-                        saving = false;
-                        error  = 'Failed to update: $e';
-                      });
+                      setSheetState(() { saving = false; error = 'Failed: $e'; });
                     }
                   },
                   style: ElevatedButton.styleFrom(
@@ -150,6 +322,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         );
       }),
+    );
+  }
+
+  // ── Avatar widget (shared) ────────────────────────────────────────────────
+  Widget _buildAvatar({double radius = 28}) {
+    if (_photoLoading) {
+      return CircleAvatar(
+        radius: radius,
+        backgroundColor: const Color(0xFF667eea).withOpacity(0.15),
+        child: SizedBox(
+          width: radius, height: radius,
+          child: const CircularProgressIndicator(
+              strokeWidth: 2, color: Color(0xFF667eea)),
+        ),
+      );
+    }
+    if (_photoBytes != null) {
+      return CircleAvatar(
+        radius: radius,
+        backgroundImage: MemoryImage(_photoBytes!),
+      );
+    }
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: const Color(0xFF667eea).withOpacity(0.15),
+      child: Text(
+        (_name.isNotEmpty ? _name[0] : 'U').toUpperCase(),
+        style: TextStyle(
+            fontSize: radius * 0.7,
+            color: const Color(0xFF667eea),
+            fontWeight: FontWeight.bold),
+      ),
     );
   }
 
@@ -174,17 +378,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         html.window.location.reload();
       } else {
         Navigator.of(context).popUntil((route) => route.isFirst);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Logout failed: $e'),
-          backgroundColor: Colors.red,
-        ));
+        _snack('Logout failed: $e', false);
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final themeProvider = Provider.of<ThemeProvider>(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
@@ -199,7 +399,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ? const Center(child: CircularProgressIndicator())
           : ListView(children: [
 
-              // ── Profile card ──────────────────────────────────────────
+              // ── Profile card ────────────────────────────────────────
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                 child: Container(
@@ -212,15 +412,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         blurRadius: 10, offset: const Offset(0, 4))],
                   ),
                   child: Row(children: [
-                    CircleAvatar(
-                      radius: 28,
-                      backgroundColor: const Color(0xFF667eea).withOpacity(0.15),
-                      child: Text(
-                        (_name.isNotEmpty ? _name[0] : 'U').toUpperCase(),
-                        style: const TextStyle(
-                            fontSize: 22, color: Color(0xFF667eea),
-                            fontWeight: FontWeight.bold),
-                      ),
+                    // Avatar with tap-to-change
+                    GestureDetector(
+                      onTap: _showPhotoOptions,
+                      child: Stack(children: [
+                        _buildAvatar(radius: 28),
+                        Positioned(
+                          bottom: 0, right: 0,
+                          child: Container(
+                            width: 18, height: 18,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF667eea),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 1.5),
+                            ),
+                            child: const Icon(Icons.camera_alt_rounded,
+                                color: Colors.white, size: 10),
+                          ),
+                        ),
+                      ]),
                     ),
                     const SizedBox(width: 14),
                     Expanded(child: Column(
@@ -233,7 +443,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             color: Colors.grey[500], fontSize: 12)),
                       ],
                     )),
-                    // Edit profile button
                     IconButton(
                       onPressed: _showEditProfile,
                       icon: const Icon(Icons.edit_outlined,
@@ -244,7 +453,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
 
-              // ── Logout ────────────────────────────────────────────────
+              // ── Logout ──────────────────────────────────────────────
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                 child: Container(
@@ -276,17 +485,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         context: context,
                         builder: (_) => AlertDialog(
                           title: const Text('Logout'),
-                          content: const Text('Are you sure you want to logout?'),
+                          content: const Text(
+                              'Are you sure you want to logout?'),
                           actions: [
                             TextButton(
-                              onPressed: () => Navigator.pop(context, false),
-                              child: const Text('Cancel')),
+                                onPressed: () => Navigator.pop(context, false),
+                                child: const Text('Cancel')),
                             ElevatedButton(
-                              onPressed: () => Navigator.pop(context, true),
-                              style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red,
-                                  foregroundColor: Colors.white),
-                              child: const Text('Logout')),
+                                onPressed: () => Navigator.pop(context, true),
+                                style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.red,
+                                    foregroundColor: Colors.white),
+                                child: const Text('Logout')),
                           ],
                         ),
                       );
@@ -311,7 +521,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   isDark: isDark,
                 ),
                 Divider(height: 1, indent: 60,
-                    color: isDark ? Colors.white.withOpacity(0.06) : Colors.grey.shade100),
+                    color: isDark
+                        ? Colors.white.withOpacity(0.06)
+                        : Colors.grey.shade100),
                 _aboutTile(
                   icon: Icons.new_releases_outlined,
                   iconColor: Colors.green,
@@ -320,7 +532,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   isDark: isDark,
                 ),
                 Divider(height: 1, indent: 60,
-                    color: isDark ? Colors.white.withOpacity(0.06) : Colors.grey.shade100),
+                    color: isDark
+                        ? Colors.white.withOpacity(0.06)
+                        : Colors.grey.shade100),
                 _aboutTile(
                   icon: Icons.person_rounded,
                   iconColor: Colors.orange,
@@ -329,7 +543,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   isDark: isDark,
                 ),
                 Divider(height: 1, indent: 60,
-                    color: isDark ? Colors.white.withOpacity(0.06) : Colors.grey.shade100),
+                    color: isDark
+                        ? Colors.white.withOpacity(0.06)
+                        : Colors.grey.shade100),
                 _aboutTile(
                   icon: Icons.privacy_tip_outlined,
                   iconColor: Colors.blue,
@@ -388,4 +604,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             style: TextStyle(fontSize: 11,
                 color: isDark ? Colors.white54 : Colors.grey[500])),
       );
+
+  void _snack(String msg, bool ok) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: ok ? Colors.green : Colors.red,
+      behavior: SnackBarBehavior.floating,
+    ));
+  }
 }

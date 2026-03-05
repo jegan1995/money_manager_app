@@ -15,6 +15,7 @@ class TransactionsScreen extends StatefulWidget {
 class _TransactionsScreenState extends State<TransactionsScreen> {
   final _txnSvc    = TransactionService();
   String _filter   = 'all';
+  String? _selectedTag;  // null = no tag filter
 
   // ── Copy transaction ────────────────────────────────────────────────────────
   Future<void> _copyTransaction(TransactionModel txn) async {
@@ -176,17 +177,88 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           if (_filter != 'all') {
             txns = txns.where((t) => t.type == _filter).toList();
           }
+          if (_selectedTag != null) {
+            txns = txns.where((t) =>
+                t.tags != null && t.tags!.contains(_selectedTag)).toList();
+          }
           if (txns.isEmpty) return _emptyState();
 
+          // Collect all unique tags from ALL transactions
+          final allTags = <String>{};
+          for (final t in snap.data!) {
+            if (t.tags != null) allTags.addAll(t.tags!);
+          }
+
           final grouped = _groupByDate(txns);
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: grouped.length,
-            itemBuilder: (_, i) {
-              final date = grouped.keys.elementAt(i);
-              return _dateGroup(date, grouped[date]!, isDark);
-            },
-          );
+          return Column(children: [
+            // ── Tag filter chips ──────────────────────────────
+            if (allTags.isNotEmpty)
+              SizedBox(
+                height: 42,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 6),
+                  children: [
+                    // "All" chip
+                    GestureDetector(
+                      onTap: () => setState(() => _selectedTag = null),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        margin: const EdgeInsets.only(right: 6),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _selectedTag == null
+                              ? const Color(0xFF667eea)
+                              : const Color(0xFF667eea).withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text('All',
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: _selectedTag == null
+                                    ? Colors.white
+                                    : const Color(0xFF667eea))),
+                      ),
+                    ),
+                    ...allTags.map((tag) => GestureDetector(
+                      onTap: () => setState(() =>
+                          _selectedTag = _selectedTag == tag ? null : tag),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        margin: const EdgeInsets.only(right: 6),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _selectedTag == tag
+                              ? const Color(0xFF667eea)
+                              : const Color(0xFF667eea).withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(tag,
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: _selectedTag == tag
+                                    ? Colors.white
+                                    : const Color(0xFF667eea))),
+                      ),
+                    )),
+                  ],
+                ),
+              ),
+            // ── Transaction list ──────────────────────────────
+            Expanded(child: ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: grouped.length,
+              itemBuilder: (_, i) {
+                final date = grouped.keys.elementAt(i);
+                return _dateGroup(date, grouped[date]!, isDark);
+              },
+            )),
+          ]);
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -278,6 +350,22 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 style: TextStyle(
                     color: Colors.grey[500], fontSize: 11),
                 maxLines: 1, overflow: TextOverflow.ellipsis),
+          if (txn.tags != null && txn.tags!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: Wrap(spacing: 4, runSpacing: 2,
+                children: txn.tags!.map((tag) => Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 6, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF667eea).withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(tag, style: const TextStyle(
+                      fontSize: 9, color: Color(0xFF667eea),
+                      fontWeight: FontWeight.w600)),
+                )).toList()),
+            ),
           Text(DateFormat('h:mm a').format(txn.date),
               style: TextStyle(
                   color: Colors.grey[400], fontSize: 11)),

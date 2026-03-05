@@ -24,39 +24,31 @@ class _AccountDetailScreenState extends State<AccountDetailScreen>
   String _period = 'Monthly';
   DateTime _date = DateTime.now();
 
-  // Credit card statement settings
-  int _statementDay = 1;   // billing cycle start day
-  int _dueDateDay   = 15;  // payment due day each month
+  bool get _isCreditCard => widget.account.type == 'credit_card';
+  int get _billDay => widget.account.billDate ?? 1;
 
-  bool get _isCreditCard =>
-      widget.account.type == 'credit_card' || widget.account.type == 'card';
-
-  // Current statement date range
-  DateTime get _stmtStart {
-    final now = DateTime.now();
-    if (now.day >= _statementDay) {
-      return DateTime(now.year, now.month, _statementDay);
+  (DateTime, DateTime) get _billingCycle {
+    final now = _date;
+    final bd = _billDay;
+    final prevMonth = now.month == 1 ? 12 : now.month - 1;
+    final prevYear  = now.month == 1 ? now.year - 1 : now.year;
+    if (now.day >= bd) {
+      final cycleStart = DateTime(prevYear, prevMonth, bd);
+      final cycleEnd   = DateTime(now.year, now.month, bd).subtract(const Duration(days: 1));
+      return (cycleStart, cycleEnd);
     } else {
-      return DateTime(now.year, now.month - 1, _statementDay);
+      final ppMonth  = prevMonth == 1 ? 12 : prevMonth - 1;
+      final ppYear   = prevMonth == 1 ? prevYear - 1 : prevYear;
+      final cycleStart = DateTime(ppYear, ppMonth, bd);
+      final cycleEnd   = DateTime(prevYear, prevMonth, bd).subtract(const Duration(days: 1));
+      return (cycleStart, cycleEnd);
     }
-  }
-
-  DateTime get _stmtEnd =>
-      DateTime(_stmtStart.year, _stmtStart.month + 1, _statementDay)
-          .subtract(const Duration(days: 1));
-
-  DateTime get _dueDate {
-    final end = _stmtEnd;
-    return DateTime(end.year, end.month + 1, _dueDateDay);
   }
 
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(
-        length: _isCreditCard ? 4 : 3,
-        vsync: this,
-        initialIndex: _isCreditCard ? 0 : 1);
+    _tabs = TabController(length: 3, vsync: this, initialIndex: 1);
   }
 
   @override
@@ -97,6 +89,11 @@ class _AccountDetailScreenState extends State<AccountDetailScreen>
   }
 
   bool _inPeriod(DateTime d) {
+    if (_isCreditCard && widget.account.billDate != null) {
+      final cycle = _billingCycle;
+      return !d.isBefore(cycle.$1) &&
+             !d.isAfter(cycle.$2.copyWith(hour: 23, minute: 59, second: 59));
+    }
     final now = _date;
     switch (_period) {
       case 'Daily':
@@ -115,6 +112,11 @@ class _AccountDetailScreenState extends State<AccountDetailScreen>
   }
 
   String _dateLabel() {
+    if (_isCreditCard && widget.account.billDate != null) {
+      final cycle = _billingCycle;
+      final fmt = DateFormat('d MMM');
+      return '\${fmt.format(cycle.\$1)} – \${fmt.format(cycle.\$2)}';
+    }
     switch (_period) {
       case 'Daily':   return DateFormat('dd MMM yyyy').format(_date);
       case 'Monthly': return DateFormat('MMMM yyyy').format(_date);
@@ -124,6 +126,10 @@ class _AccountDetailScreenState extends State<AccountDetailScreen>
   }
 
   void _prev() => setState(() {
+    if (_isCreditCard && widget.account.billDate != null) {
+      _date = DateTime(_date.year, _date.month - 1, _date.day);
+      return;
+    }
     switch (_period) {
       case 'Daily':    _date = _date.subtract(const Duration(days: 1)); break;
       case 'Monthly':  _date = DateTime(_date.year, _date.month - 1); break;
@@ -132,6 +138,10 @@ class _AccountDetailScreenState extends State<AccountDetailScreen>
   });
 
   void _next() => setState(() {
+    if (_isCreditCard && widget.account.billDate != null) {
+      _date = DateTime(_date.year, _date.month + 1, _date.day);
+      return;
+    }
     switch (_period) {
       case 'Daily':    _date = _date.add(const Duration(days: 1)); break;
       case 'Monthly':  _date = DateTime(_date.year, _date.month + 1); break;
@@ -277,21 +287,13 @@ class _AccountDetailScreenState extends State<AccountDetailScreen>
                   indicatorColor: Colors.white,
                   labelColor: Colors.white,
                   unselectedLabelColor: Colors.white60,
-                  tabs: [
-                    if (_isCreditCard)
-                      const Tab(icon: Icon(Icons.credit_card, size: 14),
-                          text: 'Statement'),
-                    const Tab(text: 'Daily'),
-                    const Tab(text: 'Monthly'),
-                    const Tab(text: 'Annually'),
+                  tabs: const [
+                    Tab(text: 'Daily'),
+                    Tab(text: 'Monthly'),
+                    Tab(text: 'Annually'),
                   ],
                   onTap: (i) => setState(() {
-                    if (_isCreditCard) {
-                      if (i == 0) { _period = 'Statement'; return; }
-                      _period = ['Daily', 'Monthly', 'Annually'][i - 1];
-                    } else {
-                      _period = ['Daily', 'Monthly', 'Annually'][i];
-                    }
+                    _period = ['Daily', 'Monthly', 'Annually'][i];
                     _date = DateTime.now();
                   }),
                 ),
@@ -301,19 +303,6 @@ class _AccountDetailScreenState extends State<AccountDetailScreen>
               stream: _txnSvc.getTransactions(),
               builder: (ctx, txnSnap) {
                 final all = txnSnap.data ?? [];
-
-                // ── Credit card: show statement view ───────────────────
-                if (_isCreditCard && _period == 'Statement') {
-                  final stmtTxns = all
-                      .where((t) => _belongsToAccount(t) &&
-                          !t.date.isBefore(_stmtStart) &&
-                          !t.date.isAfter(_stmtEnd))
-                      .toList()
-                    ..sort((a, b) => b.date.compareTo(a.date));
-                  return _buildStatementView(
-                      stmtTxns, liveAcc, card, isDark);
-                }
-
                 final filtered = all
                     .where((t) => _belongsToAccount(t) && _inPeriod(t.date))
                     .toList()
@@ -338,6 +327,33 @@ class _AccountDetailScreenState extends State<AccountDetailScreen>
                   Container(
                     color: isDark ? const Color(0xFF1A1F2B) : Colors.white,
                     child: Column(children: [
+                      // CC billing info
+                      if (_isCreditCard && widget.account.billDate != null) ...[
+                        Container(
+                          margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.purple.withOpacity(0.07),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                                color: Colors.purple.withOpacity(0.2)),
+                          ),
+                          child: Row(children: [
+                            const Icon(Icons.credit_card_rounded,
+                                color: Colors.purple, size: 14),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Statement: ${widget.account.billDate}th'
+                              '${widget.account.dueDate != null ? '   Due: ${widget.account.dueDate}th' : ''}',
+                              style: TextStyle(
+                                  fontSize: 11, fontWeight: FontWeight.w600,
+                                  color: isDark ? Colors.purple[200] : Colors.purple[700]),
+                            ),
+                          ]),
+                        ),
+                        const SizedBox(height: 4),
+                      ],
                       // Date navigation
                       Padding(
                         padding: const EdgeInsets.symmetric(
@@ -423,267 +439,6 @@ class _AccountDetailScreenState extends State<AccountDetailScreen>
         label: const Text('Add Transaction'),
         backgroundColor: grad[0],
         foregroundColor: Colors.white,
-      ),
-    );
-  }
-
-  // ── Credit card statement view ──────────────────────────────────────────────
-  Widget _buildStatementView(List<TransactionModel> txns,
-      AccountModel acc, Color card, bool isDark) {
-    // Calculate total spent this cycle
-    final totalSpent = txns
-        .where((t) => t.type == 'expense' && t.fromAccount == acc.id)
-        .fold(0.0, (s, t) => s + t.amount);
-    final totalPaid = txns
-        .where((t) => t.type == 'income' && t.toAccount == acc.id)
-        .fold(0.0, (s, t) => s + t.amount);
-    final outstanding = acc.balance.abs();
-    final minDue = (outstanding * 0.05).clamp(0.0, outstanding);
-
-    return Column(children: [
-      // ── Statement header card ────────────────────────────────────────
-      Container(
-        color: isDark ? const Color(0xFF1A1F2B) : Colors.white,
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // Billing cycle dates
-          Row(children: [
-            _infoChip('📅 Billing Cycle',
-                '${DateFormat('d MMM').format(_stmtStart)} – ${DateFormat('d MMM yyyy').format(_stmtEnd)}',
-                const Color(0xFF667eea), isDark),
-            const SizedBox(width: 10),
-            _infoChip('⏰ Due Date',
-                DateFormat('d MMM yyyy').format(_dueDate),
-                const Color(0xFFe53935), isDark),
-          ]),
-          const SizedBox(height: 14),
-
-          // Statement amount summary
-          Row(children: [
-            Expanded(child: _stmtStat(
-                'Total Spent', totalSpent, const Color(0xFFe53935))),
-            Expanded(child: _stmtStat(
-                'Paid This Cycle', totalPaid, const Color(0xFF43b89c))),
-            Expanded(child: _stmtStat(
-                'Outstanding', outstanding, const Color(0xFF667eea))),
-          ]),
-          const SizedBox(height: 12),
-
-          // Min due warning
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(colors: [
-                const Color(0xFFe53935).withOpacity(0.08),
-                const Color(0xFFf77062).withOpacity(0.08),
-              ]),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                  color: const Color(0xFFe53935).withOpacity(0.2)),
-            ),
-            child: Row(children: [
-              const Text('💳', style: TextStyle(fontSize: 18)),
-              const SizedBox(width: 10),
-              Expanded(child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Minimum Payment Due',
-                      style: TextStyle(fontSize: 11, color: Colors.grey)),
-                  Text(_fmt(minDue),
-                      style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFFe53935))),
-                ],
-              )),
-              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                const Text('Full Payment',
-                    style: TextStyle(fontSize: 10, color: Colors.grey)),
-                Text(_fmt(outstanding),
-                    style: const TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.bold)),
-              ]),
-            ]),
-          ),
-          const SizedBox(height: 10),
-
-          // Statement day settings
-          Row(children: [
-            Expanded(child: _settingChip(
-              label: 'Statement date',
-              value: '$_statementDay',
-              suffix: _ordinal(_statementDay),
-              onEdit: () => _editDayDialog(
-                  'Statement Date',
-                  'Day your billing cycle starts',
-                  _statementDay,
-                  (v) => setState(() => _statementDay = v)),
-              isDark: isDark,
-            )),
-            const SizedBox(width: 10),
-            Expanded(child: _settingChip(
-              label: 'Due date',
-              value: '$_dueDateDay',
-              suffix: _ordinal(_dueDateDay),
-              onEdit: () => _editDayDialog(
-                  'Due Date',
-                  'Day payment is due each month',
-                  _dueDateDay,
-                  (v) => setState(() => _dueDateDay = v)),
-              isDark: isDark,
-            )),
-          ]),
-        ]),
-      ),
-      const Divider(height: 1),
-
-      // ── Transactions list ──────────────────────────────────────────
-      Expanded(child: txns.isEmpty
-          ? _empty(isDark)
-          : ListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 80),
-              itemCount: _groupByDate(txns).length,
-              itemBuilder: (ctx, i) {
-                final groups = _groupByDate(txns);
-                final date = groups.keys.elementAt(i);
-                return _dateGroup(date, groups[date]!, card, isDark);
-              },
-            )),
-    ]);
-  }
-
-  Widget _infoChip(String label, String value, Color color, bool isDark) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.2)),
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(label,
-            style: TextStyle(fontSize: 9, color: Colors.grey[500])),
-        const SizedBox(height: 2),
-        Text(value,
-            style: TextStyle(
-                fontSize: 11, fontWeight: FontWeight.bold, color: color)),
-      ]),
-    );
-  }
-
-  Widget _stmtStat(String label, double amount, Color color) {
-    return Column(children: [
-      Text(_fmt(amount),
-          style: TextStyle(
-              fontSize: 15, fontWeight: FontWeight.bold, color: color)),
-      const SizedBox(height: 2),
-      Text(label,
-          style: TextStyle(fontSize: 10, color: Colors.grey[500]),
-          textAlign: TextAlign.center),
-    ]);
-  }
-
-  Widget _settingChip({
-    required String label,
-    required String value,
-    required String suffix,
-    required VoidCallback onEdit,
-    required bool isDark,
-  }) {
-    return GestureDetector(
-      onTap: onEdit,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade50,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-              color: isDark ? Colors.white12 : Colors.grey.shade200),
-        ),
-        child: Row(children: [
-          Expanded(child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label,
-                  style: TextStyle(fontSize: 9, color: Colors.grey[500])),
-              Text('$value$suffix of every month',
-                  style: const TextStyle(
-                      fontSize: 11, fontWeight: FontWeight.w600)),
-            ],
-          )),
-          Icon(Icons.edit_rounded, size: 13, color: Colors.grey[400]),
-        ]),
-      ),
-    );
-  }
-
-  String _ordinal(int n) {
-    if (n >= 11 && n <= 13) return 'th';
-    switch (n % 10) {
-      case 1: return 'st';
-      case 2: return 'nd';
-      case 3: return 'rd';
-      default: return 'th';
-    }
-  }
-
-  void _editDayDialog(String title, String subtitle, int current,
-      void Function(int) onSave) {
-    int temp = current;
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(title,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-        content: StatefulBuilder(builder: (ctx, setS) => Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(subtitle,
-                style: TextStyle(fontSize: 12, color: Colors.grey[500])),
-            const SizedBox(height: 16),
-            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              IconButton(
-                icon: const Icon(Icons.remove_circle_outline),
-                onPressed: temp > 1
-                    ? () => setS(() => temp--)
-                    : null,
-              ),
-              Container(
-                width: 56, height: 56,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF667eea).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Center(child: Text('$temp',
-                    style: const TextStyle(
-                        fontSize: 24, fontWeight: FontWeight.bold,
-                        color: Color(0xFF667eea)))),
-              ),
-              IconButton(
-                icon: const Icon(Icons.add_circle_outline),
-                onPressed: temp < 28
-                    ? () => setS(() => temp++)
-                    : null,
-              ),
-            ]),
-          ],
-        )),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () { Navigator.pop(ctx); onSave(temp); },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF667eea),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
-            ),
-            child: const Text('Save'),
-          ),
-        ],
       ),
     );
   }

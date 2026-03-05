@@ -19,6 +19,8 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   final _accountService = AccountService();
   String  _type    = 'cash';
   String? _color;   // hex e.g. '#667eea'
+  int?    _billDate;
+  int?    _dueDate;
   bool    _loading = false;
 
   // Preset color palette
@@ -58,6 +60,8 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       _namCtrl.text  = widget.account!.name;
       _type          = widget.account!.type;
       _color         = widget.account!.color;
+      _billDate      = widget.account!.billDate;
+      _dueDate       = widget.account!.dueDate;
       _noteCtrl.text = widget.account!.note ?? '';
       // Format balance display
       final rawBal = widget.account!.balance.abs();
@@ -409,6 +413,64 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                         ]),
                       ),
                     ],
+                    // ── Credit card billing dates ─────────────────────
+                    if (_type == 'credit_card') ...[
+                      const SizedBox(height: 20),
+                      _sectionLabel('Billing Cycle', isDark),
+                      const SizedBox(height: 8),
+                      Container(
+                        decoration: BoxDecoration(
+                            color: card,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [BoxShadow(
+                                color: Colors.black.withOpacity(0.05),
+                                blurRadius: 8)]),
+                        child: Column(children: [
+                          _dayPickerTile(
+                            label: 'Statement Date',
+                            hint: 'Day bill is generated (e.g. 20)',
+                            icon: Icons.receipt_long_rounded,
+                            value: _billDate,
+                            isDark: isDark,
+                            onChanged: (v) => setState(() => _billDate = v),
+                          ),
+                          Divider(height: 1, indent: 16,
+                              color: isDark
+                                  ? Colors.white.withOpacity(0.06)
+                                  : Colors.grey.shade100),
+                          _dayPickerTile(
+                            label: 'Payment Due Date',
+                            hint: 'Day payment is due (e.g. 5)',
+                            icon: Icons.payment_rounded,
+                            value: _dueDate,
+                            isDark: isDark,
+                            onChanged: (v) => setState(() => _dueDate = v),
+                          ),
+                        ]),
+                      ),
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.purple.withOpacity(0.06),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                              color: Colors.purple.withOpacity(0.2)),
+                        ),
+                        child: Row(children: [
+                          const Icon(Icons.info_outline,
+                              color: Colors.purple, size: 16),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(
+                            'Transactions will be grouped by billing cycle '
+                            'in the account details view.',
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.purple[700]),
+                          )),
+                        ]),
+                      ),
+                    ],
 
                     const SizedBox(height: 24),
 
@@ -481,6 +543,118 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         ),
       );
 
+
+  // ── Day picker tile ──────────────────────────────────────────────────────
+  Widget _dayPickerTile({
+    required String label,
+    required String hint,
+    required IconData icon,
+    required int? value,
+    required bool isDark,
+    required void Function(int?) onChanged,
+  }) {
+    return InkWell(
+      onTap: () async {
+        // Show a simple day picker (1-31)
+        final picked = await showDialog<int>(
+          context: context,
+          builder: (ctx) {
+            int selected = value ?? 1;
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              title: Text(label,
+                  style: const TextStyle(fontSize: 15,
+                      fontWeight: FontWeight.bold)),
+              content: SizedBox(
+                width: 280,
+                child: StatefulBuilder(builder: (ctx, setDs) {
+                  return Wrap(
+                    spacing: 6, runSpacing: 6,
+                    children: List.generate(31, (i) {
+                      final day = i + 1;
+                      final sel = selected == day;
+                      return GestureDetector(
+                        onTap: () => setDs(() => selected = day),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 100),
+                          width: 44, height: 36,
+                          decoration: BoxDecoration(
+                            color: sel
+                                ? const Color(0xFF667eea)
+                                : const Color(0xFF667eea).withOpacity(0.07),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text('$day',
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: sel ? Colors.white
+                                      : const Color(0xFF667eea))),
+                        ),
+                      );
+                    }),
+                  );
+                }),
+              ),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Cancel')),
+                ElevatedButton(
+                    onPressed: () => Navigator.pop(ctx, selected),
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF667eea),
+                        foregroundColor: Colors.white),
+                    child: const Text('Set')),
+              ],
+            );
+          },
+        );
+        if (picked != null) onChanged(picked);
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(children: [
+          Icon(icon, size: 18, color: Colors.grey[400]),
+          const SizedBox(width: 12),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: TextStyle(
+                  fontSize: 12, color: Colors.grey[500])),
+              const SizedBox(height: 2),
+              Text(value != null ? 'Day $value of every month' : hint,
+                  style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: value != null
+                          ? FontWeight.w600 : FontWeight.normal,
+                      color: value != null ? null : Colors.grey[400])),
+            ],
+          )),
+          if (value != null) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF667eea).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text('$value',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF667eea))),
+            ),
+          ] else
+            Icon(Icons.chevron_right,
+                size: 16, color: Colors.grey[400]),
+        ]),
+      ),
+    );
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     HapticFeedback.mediumImpact();
@@ -500,8 +674,10 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         name:    _namCtrl.text.trim(),
         type:    _type,
         balance: balance,
-        color:   _color,
-        note:    _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
+        color:    _color,
+        billDate: _type == 'credit_card' ? _billDate : null,
+        dueDate:  _type == 'credit_card' ? _dueDate : null,
+        note:     _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
       );
 
       if (widget.account != null) {

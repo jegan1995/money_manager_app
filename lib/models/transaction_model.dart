@@ -16,6 +16,7 @@ class TransactionModel {
   final bool isRecurring;
   final String? recurringFrequency;
   final String? imageUrl;
+  final List<String>? tags;
   final DateTime createdAt;
 
   TransactionModel({
@@ -34,6 +35,7 @@ class TransactionModel {
     this.isRecurring = false,
     this.recurringFrequency,
     this.imageUrl,
+    this.tags,
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
@@ -53,6 +55,7 @@ class TransactionModel {
       'isRecurring': isRecurring,
       'recurringFrequency': recurringFrequency,
       'imageUrl': imageUrl,
+      'tags': tags,
       'createdAt': Timestamp.fromDate(createdAt),
     };
   }
@@ -75,6 +78,7 @@ class TransactionModel {
       isRecurring: data['isRecurring'] ?? false,
       recurringFrequency: data['recurringFrequency'],
       imageUrl: data['imageUrl'],
+      tags: data['tags'] != null ? List<String>.from(data['tags'] as List) : null,
       createdAt: data['createdAt'] != null
           ? (data['createdAt'] as Timestamp).toDate()
           : DateTime.now(),
@@ -97,6 +101,7 @@ class TransactionModel {
     bool? isRecurring,
     String? recurringFrequency,
     String? imageUrl,
+    List<String>? tags,
     DateTime? createdAt,
   }) {
     return TransactionModel(
@@ -115,6 +120,7 @@ class TransactionModel {
       isRecurring: isRecurring ?? this.isRecurring,
       recurringFrequency: recurringFrequency ?? this.recurringFrequency,
       imageUrl: imageUrl ?? this.imageUrl,
+      tags: tags ?? this.tags,
       createdAt: createdAt ?? this.createdAt,
     );
   }

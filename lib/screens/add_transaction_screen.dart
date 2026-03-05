@@ -5,6 +5,7 @@ import '../services/custom_category_service.dart';
 import 'custom_categories_screen.dart';
 import 'receipt_scanner_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../models/transaction_model.dart';
@@ -58,6 +59,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   DateTime _selectedDate = DateTime.now();
   bool _isLoading = false;
   bool _isRecurring = false;
+  List<String> _tags = [];
   String _recurringFrequency = 'monthly';
 
   List<AccountModel> _accounts = [];
@@ -90,6 +92,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       _noteController.text = widget.transaction!.note ?? '';
       _descriptionController.text = widget.transaction!.description ?? '';
       _receiptUrl = widget.transaction!.imageUrl;
+      _tags = List<String>.from(widget.transaction!.tags ?? []);
       _loadBookmark();
     }
   }
@@ -530,6 +533,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             ),
             const SizedBox(height: 18),
 
+
+            // ── Tags ──────────────────────────────────────────────────────
+            _buildTagsSection(isDark),
+            const SizedBox(height: 18),
             // ── Save button ───────────────────────────────────────────────
             SizedBox(
               height: 48,
@@ -925,6 +932,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         isRecurring: _isRecurring,
         recurringFrequency: _isRecurring ? _recurringFrequency : null,
         imageUrl: uploadedImageUrl ?? _receiptUrl,
+        tags: _tags.isEmpty ? null : List<String>.from(_tags),
         createdAt: DateTime.now(),
       );
 
@@ -959,6 +967,197 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           type: SnackBarType.error,
         );
       }
+    }
+  }
+
+
+  // ── Tags section ────────────────────────────────────────────────────────
+  static const _presetTags = [
+    '#business', '#personal', '#travel', '#food',
+    '#medical', '#tax', '#family', '#gift', '#shopping', '#fuel',
+  ];
+
+  Widget _buildTagsSection(bool isDark) {
+    final cardBg = isDark ? const Color(0xFF1E2530) : Colors.white;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Icon(Icons.label_rounded, size: 14, color: Colors.grey[400]),
+        const SizedBox(width: 6),
+        Text('Tags', style: TextStyle(
+            fontSize: 12, color: Colors.grey[500],
+            fontWeight: FontWeight.w600)),
+        const Spacer(),
+        if (_tags.isNotEmpty)
+          GestureDetector(
+            onTap: () => setState(() => _tags.clear()),
+            child: Text('Clear all', style: TextStyle(
+                fontSize: 11, color: Colors.grey[400])),
+          ),
+      ]),
+      const SizedBox(height: 8),
+      Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: _tags.isNotEmpty
+                ? const Color(0xFF667eea).withOpacity(0.3)
+                : Colors.transparent,
+          ),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // Selected tags
+          if (_tags.isNotEmpty) ...[
+            Wrap(spacing: 6, runSpacing: 6,
+              children: _tags.map((tag) => GestureDetector(
+                onTap: () => setState(() => _tags.remove(tag)),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF667eea),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Text(tag, style: const TextStyle(
+                        color: Colors.white, fontSize: 11,
+                        fontWeight: FontWeight.w600)),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.close_rounded,
+                        color: Colors.white, size: 12),
+                  ]),
+                ),
+              )).toList(),
+            ),
+            const SizedBox(height: 10),
+            Divider(height: 1,
+                color: isDark ? Colors.white12 : Colors.grey[100]),
+            const SizedBox(height: 10),
+          ],
+          // Preset tags
+          Wrap(spacing: 6, runSpacing: 6,
+            children: [
+              ..._presetTags
+                  .where((t) => !_tags.contains(t))
+                  .map((tag) => GestureDetector(
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      setState(() => _tags.add(tag));
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF667eea).withOpacity(0.07),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                            color: const Color(0xFF667eea).withOpacity(0.2)),
+                      ),
+                      child: Text(tag, style: const TextStyle(
+                          fontSize: 11, color: Color(0xFF667eea),
+                          fontWeight: FontWeight.w600)),
+                    ),
+                  )),
+              // Custom tag button
+              GestureDetector(
+                onTap: () => _showCustomTagInput(),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withOpacity(0.07),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                        color: Colors.grey.withOpacity(0.3),
+                        style: BorderStyle.solid),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.add_rounded,
+                        size: 12, color: Colors.grey[500]),
+                    const SizedBox(width: 3),
+                    Text('Custom', style: TextStyle(
+                        fontSize: 11, color: Colors.grey[500],
+                        fontWeight: FontWeight.w600)),
+                  ]),
+                ),
+              ),
+            ],
+          ),
+        ]),
+      ),
+    ]);
+  }
+
+  void _showCustomTagInput() {
+    final ctrl = TextEditingController();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return Padding(
+          padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1E2530) : Colors.white,
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Text('Add Custom Tag',
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 15)),
+              const SizedBox(height: 16),
+              TextField(
+                controller: ctrl,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'e.g. #vacation, #client',
+                  prefixText: ctrl.text.startsWith('#') ? '' : '#',
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  filled: true,
+                ),
+                onSubmitted: (v) {
+                  _addCustomTag(v);
+                  Navigator.pop(ctx);
+                },
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity, height: 46,
+                child: ElevatedButton(
+                  onPressed: () {
+                    _addCustomTag(ctrl.text);
+                    Navigator.pop(ctx);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF667eea),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Add Tag'),
+                ),
+              ),
+            ]),
+          ),
+        );
+      },
+    );
+  }
+
+  void _addCustomTag(String raw) {
+    var tag = raw.trim();
+    if (tag.isEmpty) return;
+    if (!tag.startsWith('#')) tag = '#$tag';
+    tag = tag.toLowerCase().replaceAll(' ', '_');
+    if (!_tags.contains(tag)) {
+      setState(() => _tags.add(tag));
     }
   }
 

@@ -8,6 +8,8 @@ class AccountModel {
   final double balance;
   final String? icon;
   final String? color;  // hex string e.g. '#667eea'
+  final int? billDate;   // day of month statement is generated (e.g. 20)
+  final int? dueDate;    // day of month payment is due (e.g. 5)
   final String? note;
   final DateTime createdAt;
 
@@ -19,6 +21,8 @@ class AccountModel {
     required this.balance,
     this.icon,
     this.color,
+    this.billDate,
+    this.dueDate,
     this.note,
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
@@ -31,6 +35,8 @@ class AccountModel {
       'balance': balance,
       'icon': icon,
       'color': color,
+      'billDate': billDate,
+      'dueDate': dueDate,
       'note': note,
       'createdAt': Timestamp.fromDate(createdAt),
     };
@@ -45,6 +51,8 @@ class AccountModel {
       balance: (map['balance'] ?? 0).toDouble(),
       icon: map['icon'],
       color: map['color'],
+      billDate: map['billDate'] as int?,
+      dueDate: map['dueDate'] as int?,
       note: map['note'],
       createdAt: map['createdAt'] != null
           ? (map['createdAt'] as Timestamp).toDate()
@@ -65,6 +73,8 @@ class AccountModel {
     double? balance,
     String? icon,
     String? color,
+    int? billDate,
+    int? dueDate,
     String? note,
     DateTime? createdAt,
   }) {
@@ -76,6 +86,8 @@ class AccountModel {
       balance: balance ?? this.balance,
       icon: icon ?? this.icon,
       color: color ?? this.color,
+      billDate: billDate ?? this.billDate,
+      dueDate: dueDate ?? this.dueDate,
       note: note ?? this.note,
       createdAt: createdAt ?? this.createdAt,
     );

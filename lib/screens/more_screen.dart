@@ -30,7 +30,7 @@ import 'split_expense_screen.dart';
 import 'receipt_scanner_screen.dart';
 import 'currency_settings_screen.dart';
 import 'data_management_screen.dart';
-import 'import_transactions_screen.dart';
+import 'bank_sync_screen.dart';
 
 class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
@@ -121,14 +121,14 @@ class MoreScreen extends StatelessWidget {
           ),
           _buildMenuItem(
             context,
-            icon: Icons.file_upload,
-            title: 'Import Transactions',
-            subtitle: 'Import from Excel file',
-            color: Colors.indigo,
+            icon: Icons.sync_rounded,
+            title: 'Bank Sync',
+            subtitle: 'SMS auto-import & CSV import',
+            color: const Color(0xFF667eea),
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(
-                  builder: (context) => const ImportTransactionsScreen()),
+                  builder: (context) => const BankSyncScreen()),
             ),
           ),
 
